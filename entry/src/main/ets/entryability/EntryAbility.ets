@@ -17,10 +17,6 @@ import { ReaderProgressCheckpoint } from '../utils/ReaderProgressCheckpoint';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { ThemeIds } from '../theme/ThemeModels';
 import { ThemeTrialManager } from '../utils/ThemeTrialManager';
-import { AccountSessionStore } from '../account/AccountSessionStore';
-import { CloudSyncSettingsStore } from '../account/CloudSyncSettingsStore';
-import { CloudSyncCoordinator } from '../account/CloudSyncCoordinator';
-import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
 import { StartupCoverTextStore } from '../utils/StartupCoverTextStore';
 import { QuickJsDiagnostics } from '../core/script/QuickJsDiagnostics';
 import { TlsTrustStore } from '../core/http/TlsTrustStore';
@@ -34,7 +30,6 @@ export default class EntryAbility extends UIAbility {
   private modeDependentThemeKey: string = '';
   private themeBootstrapPromise: Promise<void> = Promise.resolve();
   private readerBootstrapPromise: Promise<void> = Promise.resolve();
-  private accountBootstrapPromise: Promise<void> = Promise.resolve();
   private deferredStartupScheduled: boolean = false;
   private mainWindowStage: window.WindowStage | null = null;
 
@@ -57,9 +52,6 @@ export default class EntryAbility extends UIAbility {
     AppStorage.setOrCreate('globalTtsTextBefore', '');
     AppStorage.setOrCreate('globalTtsCurrentText', '');
     AppStorage.setOrCreate('globalTtsTextAfter', '');
-    AccountSessionStore.initializeStorage();
-    CloudSyncSettingsStore.initializeStorage();
-    CloudSyncChangeTracker.initializeStorage();
     TlsTrustStore.load(this.context).catch((e: Error) => {
       hilog.warn(0x0000, 'testTag', 'Load TLS trust settings failed: %{public}s', JSON.stringify(e));
     });
@@ -191,12 +183,6 @@ export default class EntryAbility extends UIAbility {
     }).catch((e: Error) => {
       hilog.warn(0x0000, 'testTag', 'Sync tts settings failed: %{public}s', JSON.stringify(e));
     });
-    this.accountBootstrapPromise = AccountSessionStore.load(this.context).then(() => {
-      const userId = AccountSessionStore.isLoggedIn() ? AccountSessionStore.account().userId : '';
-      return CloudSyncSettingsStore.load(this.context, userId).then((): void => {});
-    }).catch((e: Error) => {
-      hilog.warn(0x0000, 'testTag', 'Load account session failed: %{public}s', JSON.stringify(e));
-    });
     const appThemePromise = AppThemeSettingsStore.load(this.context).then((settings) => {
       AppThemeSettingsStore.applyToStorage(settings);
       return StartupCoverTextStore.load(this.context);
@@ -301,19 +287,6 @@ export default class EntryAbility extends UIAbility {
     }
     ThemeTrialManager.stopIfExpired();
     this.syncSystemColorMode(this.context.config);
-    this.accountBootstrapPromise
-      .then(() => {})
-      .catch((e: Error) => {
-        hilog.warn(0x0000, 'testTag', 'Renew account session failed: %{public}s', JSON.stringify(e));
-      })
-      .finally(() => {
-        setTimeout(() => {
-          CloudSyncCoordinator.syncAutomatically(
-            this.context, CloudSyncCoordinator.TRIGGER_FOREGROUND).catch((e: Error) => {
-            hilog.warn(0x0000, 'testTag', 'Foreground cloud sync failed: %{public}s', JSON.stringify(e));
-          });
-        }, 1200);
-      });
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -349,12 +322,8 @@ export default class EntryAbility extends UIAbility {
     // Page.onPageShow is shared by real route returns and a simple Home/lock-screen resume. Publish a
     // background revision so retained pages do not treat the foreground transition as a settings change.
     AppStorage.setOrCreate<number>('appLifecycleBackgroundRevision', Date.now());
-    ReaderProgressCheckpoint.request('ability-background').then(() => {
-      // Keep the background upload behind the local checkpoint so it cannot publish a stale page number.
-      return CloudSyncCoordinator.syncAutomatically(
-        this.context, CloudSyncCoordinator.TRIGGER_BACKGROUND);
-    }).catch((e: Error) => {
-      hilog.warn(0x0000, 'testTag', 'Background cloud sync failed: %{public}s', JSON.stringify(e));
+    ReaderProgressCheckpoint.request('ability-background').catch((e: Error) => {
+      hilog.warn(0x0000, 'testTag', 'Background reader progress checkpoint failed: %{public}s', JSON.stringify(e));
     });
   }
 

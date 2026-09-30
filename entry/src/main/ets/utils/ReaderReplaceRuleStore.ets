@@ -1,7 +1,6 @@
 import { Context } from '@kit.AbilityKit';
 import preferences from '@ohos.data.preferences';
 import { Book } from '../model/data/Book';
-import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
 import { JavaRegexCompat } from '../core/rule/JavaRegexCompat';
 import { ImportedReplaceRule } from '../core/rule/ReplaceRuleImport';
 
@@ -56,7 +55,6 @@ export class ReaderReplaceRuleStore {
     await store.put(ReaderReplaceRuleStore.RULES_KEY, JSON.stringify(normalized));
     await store.flush();
     AppStorage.setOrCreate(ReaderReplaceRuleStore.UPDATE_TIME_KEY, Date.now());
-    CloudSyncChangeTracker.markPreferenceChanged();
   }
 
   static newRule(): ReaderReplaceRule {

@@ -1,7 +1,6 @@
 import { Context } from '@kit.AbilityKit';
 import preferences from '@ohos.data.preferences';
 import { ReaderThemeHelper } from './ReaderThemeHelper';
-import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
 
 export class ReaderSettings {
   fontSize: number = 20;
@@ -1072,7 +1071,6 @@ export class ReaderSettingsStore {
     settings: ReaderSettings): Promise<void> {
     await ReaderSettingsStore.persistThemeProfile(store, ReaderSettingsStore.activeThemeId(), settings);
     ReaderSettingsStore.cachedThemeId = ReaderSettingsStore.activeThemeId();
-    CloudSyncChangeTracker.markPreferenceChanged();
   }
 
   private static async persistThemeProfile(store: preferences.Preferences, themeId: string,

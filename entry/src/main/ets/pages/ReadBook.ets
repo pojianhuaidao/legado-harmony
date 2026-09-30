@@ -16,7 +16,6 @@ import Animator, { AnimatorResult } from '@ohos.animator';
 import { HdsTabs, HdsListItem, HdsSwipeActionOptions } from '@kit.UIDesignKit';
 import { ARView } from '@kit.AREngine';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
-import { CloudSyncCoordinator } from '../account/CloudSyncCoordinator';
 import { Book, BookChapter, Bookmark, BookSource, SearchBook, HttpTTS } from '../model/data/Book';
 import { AppDatabase } from '../model/data/AppDatabase';
 import { ReadBookEngine } from '../core/book/ReadBookEngine';
@@ -1023,10 +1022,7 @@ struct ReadBookPage {
       this.ttsReader.shutdown();
     }
     if (!this.readerExitProgressSaved) {
-      finalProgressSave.then(() => {
-        return CloudSyncCoordinator.syncAutomatically(
-          getContext(this), CloudSyncCoordinator.TRIGGER_CHANGE);
-      }).catch((error: Error) => {
+      finalProgressSave.catch((error: Error) => {
         console.error('离开阅读页保存进度失败:', error);
       });
     }
@@ -21383,10 +21379,7 @@ struct ReadBookPage {
     this.hideReaderPanels();
     if (this.openedFromShortcut) {
       this.readerExitProgressSaved = true;
-      this.saveReadingProgress(true).then(() => {
-        return CloudSyncCoordinator.syncAutomatically(
-          getContext(this), CloudSyncCoordinator.TRIGGER_CHANGE);
-      }).catch((error: Error) => {
+      this.saveReadingProgress(true).catch((error: Error) => {
         console.error('快捷入口返回时保存进度失败:', error);
       });
       try {
@@ -21403,10 +21396,6 @@ struct ReadBookPage {
     try {
       await this.saveReadingProgress(true);
       this.readerExitProgressSaved = true;
-      CloudSyncCoordinator.syncAutomatically(
-        getContext(this), CloudSyncCoordinator.TRIGGER_CHANGE).catch((error: Error) => {
-        console.warn('离开阅读页同步进度失败:', error);
-      });
     } catch (e) {
       console.error('返回阅读页时保存进度失败:', e);
     }

@@ -1,6 +1,5 @@
 import { Context } from '@kit.AbilityKit';
 import preferences from '@ohos.data.preferences';
-import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
 
 export class BookshelfDisplaySettings {
   showTags: boolean = true;
@@ -81,7 +80,6 @@ export class BookshelfDisplaySettingsStore {
       BookshelfDisplaySettingsStore.normalizeLastReadLeafMode(settings.lastReadLeafMode));
     await store.put(BookshelfDisplaySettingsStore.KEY_BOOK_OPEN_ANIMATION, settings.bookOpenAnimation !== false);
     await store.flush();
-    CloudSyncChangeTracker.markApplicationPreferenceChanged();
   }
 
   static applyToStorage(settings: BookshelfDisplaySettings): void {
