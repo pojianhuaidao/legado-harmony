@@ -5,7 +5,6 @@ import { ReaderSettings, ReaderSettingsStore } from '../utils/ReaderSettingsStor
 import { ReaderThemeHelper } from '../utils/ReaderThemeHelper';
 import { syncSystemBars } from '../utils/SystemBars';
 import { RecentReadCardUpdater } from '../utils/RecentReadCardUpdater';
-import { ThemeTrialManager } from '../utils/ThemeTrialManager';
 import { CustomThemeScheme, CustomThemeSchemeStore } from '../utils/CustomThemeSchemeStore';
 import { BuiltinThemeRegistry } from '../theme/BuiltinThemeRegistry';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
@@ -14,11 +13,7 @@ import { ReaderThemeBackground } from '../components/ReaderThemeBackground';
 import { ThemeAssetRegistry } from '../theme/ThemeAssetRegistry';
 import { ThemeIds, ThemePack, ThemeVariant } from '../theme/ThemeModels';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
-import { AccountCommerceConfig } from '../account/AccountCommerceConfig';
-import { AccountApiError, ThemeCatalogItem, ThemeCatalogResponse,
-  ThemeEntitlement } from '../account/AccountCommerceModels';
-import { AccountCommerceApi } from '../account/AccountCommerceApi';
-import { AccountSessionStore } from '../account/AccountSessionStore';
+import { ThemeCatalogItem } from '../account/AccountCommerceModels';
 import {
   ReaderRegexBubbleStyleResolver,
   ReaderRegexEmphasisContext,
@@ -70,11 +65,7 @@ struct ThemeSettingsPage {
   @StorageLink('appCustomDarkReaderContentTone') customDarkReaderContentTone: string = 'dark';
   @StorageLink('readerLightThemeIndex') readerLightThemeIndex: number = 0;
   @StorageLink('readerDarkThemeIndex') readerDarkThemeIndex: number = 0;
-  @StorageLink('accountLoggedIn') accountLoggedIn: boolean = false;
-  @StorageLink('accountPoints') accountPoints: number = 0;
   @StorageLink('accountEntitlementsRevision') accountEntitlementsRevision: number = 0;
-  @StorageLink('themeTrialThemeId') trialThemeId: string = '';
-  @StorageLink('themeTrialEndsAt') trialEndsAt: number = 0;
   @StorageLink('activeCustomThemeSchemeId') activeCustomSchemeId: string = '';
   @StorageLink('activeCustomThemeSchemeRevision') activeCustomSchemeRevision: number = 0;
   @StorageLink('customThemeSchemesRevision') @Watch('onCustomThemeSchemesRevisionChanged')
@@ -121,7 +112,6 @@ struct ThemeSettingsPage {
   }
 
   onPageShow(): void {
-    ThemeTrialManager.stopIfExpired();
     this.refreshCustomSchemes();
     this.syncBars();
   }
@@ -183,12 +173,7 @@ struct ThemeSettingsPage {
           }
         }, (scheme: CustomThemeScheme) => `${scheme.id}_${scheme.revision}`)
         ListItem() {
-          this.sectionTitle('已购主题')
-        }
-        if (this.purchasedThemes().length === 0) {
-          ListItem() {
-            this.purchasedThemesEmptyHint()
-          }
+          this.sectionTitle('全部主题')
         }
         ForEach(this.purchasedThemes(), (theme: ThemePack) => {
           ListItem() {
@@ -257,17 +242,10 @@ struct ThemeSettingsPage {
     }] };
   }
 
+  /** 二开改造：在线主题下载内置化并去除付费，全部内置主题免费上架，不再依赖远程商城。 */
   async refreshThemeCatalog(): Promise<void> {
-    if (!AccountCommerceConfig.isServerConfigured()) return;
-    try {
-      const response: ThemeCatalogResponse = await AccountCommerceApi.fetchThemeCatalog();
-      this.themeCatalog = response.themes || [];
-      this.themeCatalogLoaded = true;
-    } catch (e) {
-      // Keep the bundled 60-point/365-day offer when the device is offline or
-      // is temporarily talking to an older server during a rolling upgrade.
-      console.warn('同步主题目录失败，使用内置价格:', e);
-    }
+    this.themeCatalogLoaded = true;
+    this.themeCatalog = [];
   }
 
   async loadThemeSettings(): Promise<void> {
@@ -312,18 +290,6 @@ struct ThemeSettingsPage {
       CustomThemeSchemeStore.find(this.customSchemes, customSchemeId) : null;
     if (themeId === ThemeIds.CUSTOM && !customScheme) {
       return;
-    }
-    if (customScheme) {
-      const unavailableStartupTheme = this.unavailableCustomStartupTheme(customScheme.settings);
-      if (unavailableStartupTheme) {
-        promptAction.showToast({ message: `启动封面主题「${unavailableStartupTheme}」尚未获取或已过期` });
-        return;
-      }
-    }
-    if (ThemeTrialManager.isActive()) {
-      ThemeTrialManager.stop(getContext(this) as common.UIAbilityContext);
-      this.appThemeId = AppStorage.get<string>('appThemeId') || AppThemeSettingsStore.DEFAULT_THEME_ID;
-      this.themeBookCoverEnabled = AppStorage.get<boolean>('appThemeBookCoverEnabled') || false;
     }
     if (themeId === this.appThemeId && themeId !== ThemeIds.CUSTOM) {
       return;
@@ -430,57 +396,8 @@ struct ThemeSettingsPage {
   }
 
   async ensureThemeAccess(themeId: string): Promise<boolean> {
-    if (themeId === ThemeIds.CUSTOM || this.hasThemeAccess(themeId)) {
-      return true;
-    }
-    const offer = this.themeOffer(themeId);
-    if (this.themeCatalogLoaded && !offer) {
-      promptAction.showToast({ message: '该主题暂未上架' });
-      return false;
-    }
-    const pricePoints = offer?.pricePoints || AccountCommerceConfig.THEME_PRICE_POINTS;
-    const validDays = offer?.validDays || AccountCommerceConfig.THEME_VALID_DAYS;
-    if (!this.accountLoggedIn) {
-      promptAction.showToast({ message: '主题获取需要账号，登录功能已移除' });
-      return false;
-    }
-    const theme = BuiltinThemeRegistry.findById(themeId);
-    const confirm = await promptAction.showDialog({
-      title: `获取「${theme.name}」`,
-      message: `将扣除 ${pricePoints} 点，主题有效期为 ${validDays} 天。有效期内可在所有已登录终端使用。`,
-      buttons: [
-        { text: '取消', color: this.subTextColor() },
-        { text: `确认 · ${pricePoints} 点`, color: this.accentColor() }
-      ]
-    });
-    if (confirm.index !== 1) {
-      return false;
-    }
-    try {
-      promptAction.showToast({ message: '主题获取功能已停用' });
-      return false;
-    } catch (e) {
-      const error = e as AccountApiError;
-      if (error.errorCode === 'THEME_OFFER_CHANGED') {
-        await this.refreshThemeCatalog();
-        promptAction.showToast({ message: '主题价格或有效期已更新，请重新确认' });
-      } else if (error.errorCode === 'INSUFFICIENT_POINTS') {
-        promptAction.showToast({ message: `当前有 ${this.accountPoints} 点，获取该主题需要 ${pricePoints} 点。` });
-      } else {
-        promptAction.showToast({ message: error.message || '获取主题失败，请稍后重试' });
-      }
-      return false;
-    }
-  }
-
-  themeOffer(themeId: string): ThemeCatalogItem | null {
-    for (let index = 0; index < this.themeCatalog.length; index++) {
-      const offer = this.themeCatalog[index];
-      if (offer && offer.themeId === themeId && offer.pricePoints > 0 && offer.validDays > 0) {
-        return offer;
-      }
-    }
-    return null;
+    // 二开改造：全部主题免费，直接放行。
+    return true;
   }
 
   async setThemeBookCoverEnabled(enabled: boolean): Promise<void> {
@@ -627,22 +544,6 @@ struct ThemeSettingsPage {
     .onClick(() => this.openThemeStore())
   }
 
-  @Builder
-  purchasedThemesEmptyHint() {
-    Row({ space: 3 }) {
-      Text('暂无已购主题，去主题商店逛逛')
-        .fontSize(13)
-        .fontColor(this.subTextColor())
-      SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(12)
-        .fontColor([this.subTextColor()])
-    }
-    .width('100%')
-    .padding({ left: 2, top: 8, bottom: 4 })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => this.openThemeStore())
-  }
-
   /** Full-screen store: one themed showcase page per swipe. */
   @Builder
   themeStoreOverlay() {
@@ -678,14 +579,6 @@ struct ThemeSettingsPage {
         .fontColor(this.primaryTextColor())
         .layoutWeight(1)
         .margin({ left: 2 })
-      if (this.accountLoggedIn) {
-        Text(`${this.accountPoints} 点`)
-          .fontSize(12)
-          .fontColor(this.accentColor())
-          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-          .borderRadius(14)
-          .backgroundColor(ThemeRuntime.inputColor(this.appDarkMode))
-      }
     }
     .width('100%')
     .height(56 + this.statusBarHeight)
@@ -878,7 +771,7 @@ struct ThemeSettingsPage {
   storeThemeActions(theme: ThemePack) {
     if (this.isSelected(theme)) {
       Row() {
-        Text(this.isTrialTheme(theme.id) ? '试用中 · 5分钟后自动恢复' : '正在使用该主题')
+        Text('正在使用该主题')
           .fontSize(12)
           .fontColor(this.activeVariant(theme).colors.accentColor)
       }
@@ -887,7 +780,7 @@ struct ThemeSettingsPage {
       .justifyContent(FlexAlign.Center)
       .borderRadius(theme.radius.button)
       .backgroundColor(this.activeVariant(theme).colors.inputColor)
-    } else if (AccountSessionStore.hasValidEntitlement(theme.id)) {
+    } else {
       Button('应用主题', { type: ButtonType.Normal })
         .width('100%')
         .height(40)
@@ -897,71 +790,26 @@ struct ThemeSettingsPage {
         .onClick(() => {
           this.selectTheme(theme.id);
         })
-    } else {
-      Row({ space: 8 }) {
-        this.storeTrialButton(theme)
-        this.storeAcquireButton(theme)
-      }
-      .width('100%')
     }
   }
 
   @Builder
-  storeTrialButton(theme: ThemePack) {
-    Button(this.isTrialTheme(theme.id) ? '结束试用' : '试用5分钟', { type: ButtonType.Normal })
-      .height(40)
-      .fontSize(13)
-      .fontColor(this.activeVariant(theme).colors.accentColor)
-      .backgroundColor(this.activeVariant(theme).colors.inputColor)
-      .layoutWeight(1)
-      .onClick(() => {
-        if (this.isTrialTheme(theme.id)) {
-          this.stopThemeTrial();
-        } else {
-          this.startThemeTrial(theme);
-        }
-      })
-  }
-
-  @Builder
-  storeAcquireButton(theme: ThemePack) {
-    Button(this.themeCatalogLoaded && !this.themeOffer(theme.id) ? '暂未上架' :
-      `获取 · ${this.storeThemePricePoints(theme.id)}点`, { type: ButtonType.Normal })
-      .height(40)
-      .fontSize(13)
-      .fontColor('#FFFFFF')
-      .backgroundColor(this.activeVariant(theme).colors.buttonColor)
-      .layoutWeight(1)
-      .enabled(!this.themeCatalogLoaded || !!this.themeOffer(theme.id))
-      .onClick(() => {
-        this.acquireTheme(theme.id);
-      })
-  }
-
-  @Builder
   storeThemeStatusPill(theme: ThemePack) {
-    if (this.applyingThemeId === theme.id && !this.isSelected(theme) && !this.isTrialTheme(theme.id)) {
+    if (this.applyingThemeId === theme.id && !this.isSelected(theme)) {
       Text('应用中')
         .fontSize(10)
         .fontColor(this.activeVariant(theme).colors.accentColor)
-    } else if (this.isTrialTheme(theme.id) || this.isSelected(theme)) {
-      Text(this.isTrialTheme(theme.id) ? '试用中' : '使用中')
+    } else if (this.isSelected(theme)) {
+      Text('使用中')
         .fontSize(10)
         .fontColor('#FFFFFF')
         .padding({ left: 7, right: 7, top: 3, bottom: 3 })
         .borderRadius(10)
         .backgroundColor(this.activeVariant(theme).colors.accentColor)
-    } else if (BuiltinThemeRegistry.isFree(theme.id) || AccountSessionStore.hasValidEntitlement(theme.id)) {
-      Text(BuiltinThemeRegistry.isFree(theme.id) ? '免费' : '已购')
+    } else {
+      Text('免费')
         .fontSize(10)
         .fontColor(this.activeVariant(theme).colors.accentColor)
-        .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-        .borderRadius(10)
-        .backgroundColor(this.activeVariant(theme).colors.inputColor)
-    } else {
-      Text(`${this.storeThemePricePoints(theme.id)}点`)
-        .fontSize(10)
-        .fontColor(this.activeVariant(theme).colors.subTextColor)
         .padding({ left: 7, right: 7, top: 3, bottom: 3 })
         .borderRadius(10)
         .backgroundColor(this.activeVariant(theme).colors.inputColor)
@@ -1589,7 +1437,7 @@ struct ThemeSettingsPage {
 
       Toggle({ type: ToggleType.Switch, isOn: this.themeBookCoverEnabled })
         .selectedColor(this.accentColor())
-        .enabled(!this.isTrialTheme(theme.id))
+        .enabled(true)
         .onChange((enabled: boolean) => {
           this.setThemeBookCoverEnabled(enabled);
         })
@@ -1627,14 +1475,7 @@ struct ThemeSettingsPage {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        if (this.isTrialTheme(theme.id)) {
-          Text('试用中')
-            .fontSize(12)
-            .fontColor('#FFFFFF')
-            .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-            .borderRadius(12)
-            .backgroundColor(this.activeVariant(theme).colors.accentColor)
-        } else if (this.isSelected(theme, customSchemeId)) {
+        if (this.isSelected(theme, customSchemeId)) {
           Text('已启用')
             .fontSize(12)
             .fontColor('#FFFFFF')
@@ -1653,10 +1494,9 @@ struct ThemeSettingsPage {
             .borderRadius(12)
             .backgroundColor(this.activeVariant(theme).colors.inputColor)
         } else if (theme.id !== ThemeIds.CUSTOM) {
-          Text(this.themeAccessLabel(theme.id))
+          Text('免费')
             .fontSize(11)
-            .fontColor(this.hasThemeAccess(theme.id) ?
-              this.activeVariant(theme).colors.accentColor : this.activeVariant(theme).colors.subTextColor)
+            .fontColor(this.activeVariant(theme).colors.accentColor)
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
             .borderRadius(11)
             .backgroundColor(this.activeVariant(theme).colors.inputColor)
@@ -1723,35 +1563,6 @@ struct ThemeSettingsPage {
         }
         .width('100%')
       }
-      if (this.focusedThemeId === theme.id && this.isThemeTrialCandidate(theme.id)) {
-        Row({ space: 10 }) {
-          Button(this.isTrialTheme(theme.id) ? '结束试用' : '试用5分钟')
-            .height(34)
-            .fontSize(12)
-            .fontColor(this.activeVariant(theme).colors.accentColor)
-            .backgroundColor(this.activeVariant(theme).colors.inputColor)
-            .layoutWeight(1)
-            .onClick(() => {
-              if (this.isTrialTheme(theme.id)) {
-                this.stopThemeTrial();
-              } else {
-                this.startThemeTrial(theme);
-              }
-            })
-          Button(this.themeCatalogLoaded && !this.themeOffer(theme.id) ? '暂未上架' :
-            `获取主题 · ${this.themeOffer(theme.id)?.pricePoints || AccountCommerceConfig.THEME_PRICE_POINTS}点`)
-            .height(34)
-            .fontSize(12)
-            .fontColor('#FFFFFF')
-            .backgroundColor(this.activeVariant(theme).colors.buttonColor)
-            .layoutWeight(1)
-            .enabled(!this.themeCatalogLoaded || !!this.themeOffer(theme.id))
-            .onClick(() => {
-              this.acquireTheme(theme.id);
-            })
-        }
-        .width('100%')
-      }
     }
     .width('100%')
     .padding(14)
@@ -1775,36 +1586,6 @@ struct ThemeSettingsPage {
     })
   }
 
-  hasThemeAccess(themeId: string): boolean {
-    return BuiltinThemeRegistry.isFree(themeId) ||
-      (themeId === this.appThemeId && !this.isTrialTheme(themeId)) ||
-      AccountSessionStore.hasValidEntitlement(themeId);
-  }
-
-  unavailableCustomStartupTheme(settings: AppThemeSettings): string {
-    const lightThemeId = settings.customLightSources.startupThemeId;
-    if (!BuiltinThemeRegistry.isFree(lightThemeId) &&
-      !AccountSessionStore.hasValidEntitlement(lightThemeId)) {
-      return BuiltinThemeRegistry.findById(lightThemeId).name;
-    }
-    const darkThemeId = settings.customDarkSources.startupThemeId;
-    if (!BuiltinThemeRegistry.isFree(darkThemeId) &&
-      !AccountSessionStore.hasValidEntitlement(darkThemeId)) {
-      return BuiltinThemeRegistry.findById(darkThemeId).name;
-    }
-    return '';
-  }
-
-  isTrialTheme(themeId: string): boolean {
-    return this.trialThemeId === themeId && this.trialEndsAt > Date.now() &&
-      ThemeTrialManager.isActive(themeId);
-  }
-
-  isThemeTrialCandidate(themeId: string): boolean {
-    return themeId !== ThemeIds.CUSTOM && !BuiltinThemeRegistry.isFree(themeId) &&
-      !AccountSessionStore.hasValidEntitlement(themeId);
-  }
-
   isThemeCardHighlighted(theme: ThemePack, customSchemeId: string = ''): boolean {
     return this.isSelected(theme, customSchemeId) || this.focusedThemeId === (customSchemeId || theme.id);
   }
@@ -1815,57 +1596,13 @@ struct ThemeSettingsPage {
   }
 
   handleThemeCardClick(theme: ThemePack, customSchemeId: string = ''): void {
-    if (this.isThemeTrialCandidate(theme.id)) {
-      this.focusedThemeId = theme.id;
-      return;
-    }
     this.focusedThemeId = '';
     this.selectTheme(theme.id, customSchemeId);
   }
 
-  async startThemeTrial(theme: ThemePack): Promise<void> {
-    if (this.applyingThemeId) {
-      return;
-    }
-    this.applyingThemeId = theme.id;
-    try {
-      await ThemeTrialManager.start(getContext(this) as common.UIAbilityContext, theme.id);
-      this.appThemeId = theme.id;
-      this.themeBookCoverEnabled = !!theme.book.coverAssetId;
-      this.focusedThemeId = theme.id;
-      this.syncBars();
-      promptAction.showToast({ message: `「${theme.name}」已开始试用，5分钟后自动恢复` });
-    } catch (e) {
-      console.error('启动主题试用失败:', e);
-      promptAction.showToast({ message: '主题试用启动失败，请稍后重试' });
-    } finally {
-      this.applyingThemeId = '';
-    }
-  }
-
-  stopThemeTrial(): void {
-    ThemeTrialManager.stop(getContext(this) as common.UIAbilityContext);
-    this.appThemeId = AppStorage.get<string>('appThemeId') || AppThemeSettingsStore.DEFAULT_THEME_ID;
-    this.themeBookCoverEnabled = AppStorage.get<boolean>('appThemeBookCoverEnabled') || false;
-    this.syncBars();
-  }
-
-  async acquireTheme(themeId: string): Promise<void> {
-    if (ThemeTrialManager.isActive()) {
-      this.stopThemeTrial();
-    }
-    await this.selectTheme(themeId);
-  }
-
-  /** Only themes with a live (unexpired) purchase entitlement belong here. */
+  /** 二开改造：去除付费后全部内置主题免费展示。 */
   purchasedThemes(): ThemePack[] {
-    const themes: ThemePack[] = [];
-    for (const theme of BuiltinThemeRegistry.all()) {
-      if (AccountSessionStore.hasValidEntitlement(theme.id)) {
-        themes.push(theme);
-      }
-    }
-    return themes;
+    return BuiltinThemeRegistry.all();
   }
 
   openThemeStore(): void {
@@ -1879,13 +1616,13 @@ struct ThemeSettingsPage {
   }
 
   /**
-   * The store only merchandises paid themes; the free default theme lives on
-   * the main list and is never shown here. One theme per swipe page.
+   * 二开改造：主题商店内置化——展示全部内置免费主题，每个主题一页。
+   * 默认主题已在主列表展示，这里不重复列出。
    */
   storeThemes(): ThemePack[] {
     const themes: ThemePack[] = [];
     for (const theme of BuiltinThemeRegistry.all()) {
-      if (!BuiltinThemeRegistry.isFree(theme.id)) {
+      if (theme.id !== BuiltinThemeRegistry.DEFAULT_THEME_ID) {
         themes.push(theme);
       }
     }
@@ -1899,48 +1636,13 @@ struct ThemeSettingsPage {
       Math.min(STORE_COVER_MAX_HEIGHT, swiper - STORE_PAGE_FIXED_HEIGHT));
   }
 
-  storeThemePricePoints(themeId: string): number {
-    return this.themeOffer(themeId)?.pricePoints || AccountCommerceConfig.THEME_PRICE_POINTS;
-  }
-
-  storeThemeValidDays(themeId: string): number {
-    return this.themeOffer(themeId)?.validDays || AccountCommerceConfig.THEME_VALID_DAYS;
-  }
-
   storeThemeCaption(theme: ThemePack): string {
-    if (BuiltinThemeRegistry.isFree(theme.id)) {
-      return '免费使用';
-    }
-    const entitlement = AccountSessionStore.entitlement(theme.id);
-    if (entitlement && entitlement.expiresAt > Date.now()) {
-      return `有效至 ${this.formatDate(entitlement.expiresAt)}`;
-    }
-    if (this.themeCatalogLoaded && !this.themeOffer(theme.id)) {
-      return '暂未上架';
-    }
-    return `${this.storeThemePricePoints(theme.id)}点 · 有效期${this.storeThemeValidDays(theme.id)}天`;
+    // 二开改造：全部内置主题免费。
+    return '免费使用';
   }
 
   themeHasBookCover(theme: ThemePack): boolean {
     return !!theme.book.coverAssetId && this.themeCoverSet(theme).length > 0;
-  }
-
-  themeAccessLabel(themeId: string): string {
-    if (BuiltinThemeRegistry.isFree(themeId)) {
-      return '免费';
-    }
-    const entitlement: ThemeEntitlement | null = AccountSessionStore.entitlement(themeId);
-    if (entitlement && entitlement.expiresAt > Date.now()) {
-      return `有效至 ${this.formatDate(entitlement.expiresAt)}`;
-    }
-    return `${AccountCommerceConfig.THEME_PRICE_POINTS}点 / 1年`;
-  }
-
-  formatDate(timestamp: number): string {
-    const date = new Date(timestamp);
-    const month = `${date.getMonth() + 1}`.padStart(2, '0');
-    const day = `${date.getDate()}`.padStart(2, '0');
-    return `${date.getFullYear()}-${month}-${day}`;
   }
 
   @Builder
