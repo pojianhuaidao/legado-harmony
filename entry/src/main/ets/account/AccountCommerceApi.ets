@@ -4,13 +4,7 @@ import { AccountCommerceConfig } from './AccountCommerceConfig';
 import {
   AccountApiError,
   AccountSnapshot,
-  HuaweiLoginResponse,
-  IapCreditResponse,
-  SessionRenewResponse,
-  ThemeCatalogResponse,
-  TtsCatalogResponse,
-  TtsPackageRedeemResponse,
-  TtsWalletSnapshot
+  ThemeCatalogResponse
 } from './AccountCommerceModels';
 import {
   CloudSyncDeviceListResponse,
@@ -26,99 +20,9 @@ class ApiErrorBody {
 }
 
 export class AccountCommerceApi {
-  static async login(authorizationCode: string): Promise<HuaweiLoginResponse> {
-    const value = await AccountCommerceApi.request('/v1/auth/huawei', 'POST',
-      JSON.stringify({ authorizationCode: authorizationCode }), '');
-    const response = JSON.parse(value) as HuaweiLoginResponse;
-    response.account = AccountCommerceApi.normalizeAccount(response.account);
-    return response;
-  }
-
-  static async fetchAccount(sessionToken: string): Promise<AccountSnapshot> {
-    const value = await AccountCommerceApi.request('/v1/me', 'GET', '', sessionToken);
-    return AccountCommerceApi.normalizeAccount(JSON.parse(value) as AccountSnapshot);
-  }
-
-  static async renewSession(sessionToken: string): Promise<SessionRenewResponse> {
-    const value = await AccountCommerceApi.request('/v1/auth/renew', 'POST', '{}', sessionToken);
-    const raw = JSON.parse(value) as SessionRenewResponse;
-    const response = new SessionRenewResponse();
-    response.sessionToken = raw.sessionToken || '';
-    response.expiresAt = Math.max(0, Math.floor(Number(raw.expiresAt) || 0));
-    if (!response.sessionToken || response.expiresAt <= 0) {
-      throw new AccountApiError('账号续签响应格式异常', 502, 'INVALID_SESSION_RENEW_RESPONSE');
-    }
-    return response;
-  }
-
-  static async logout(sessionToken: string): Promise<void> {
-    await AccountCommerceApi.request('/v1/auth/logout', 'POST', '{}', sessionToken);
-  }
-
-  static async updateProfile(displayName: string, avatarBase64: string, removeAvatar: boolean,
-    sessionToken: string): Promise<AccountSnapshot> {
-    const value = await AccountCommerceApi.request('/v1/me/profile', 'POST',
-      JSON.stringify({
-        displayName: displayName,
-        avatarBase64: avatarBase64,
-        removeAvatar: removeAvatar
-      }), sessionToken);
-    return AccountCommerceApi.normalizeAccount(JSON.parse(value) as AccountSnapshot);
-  }
-
-  static async redeemTheme(themeId: string, requestId: string, expectedPricePoints: number,
-    expectedValidDays: number,
-    sessionToken: string): Promise<AccountSnapshot> {
-    const value = await AccountCommerceApi.request(`/v1/themes/${encodeURIComponent(themeId)}/redeem`,
-      'POST', JSON.stringify({
-        requestId: requestId,
-        expectedPricePoints: expectedPricePoints,
-        expectedValidDays: expectedValidDays
-      }), sessionToken);
-    return AccountCommerceApi.normalizeAccount(JSON.parse(value) as AccountSnapshot);
-  }
-
   static async fetchThemeCatalog(): Promise<ThemeCatalogResponse> {
     const value = await AccountCommerceApi.request('/v1/themes/catalog', 'GET', '', '');
     return JSON.parse(value) as ThemeCatalogResponse;
-  }
-
-  static async creditIapPurchase(purchaseData: string, sessionToken: string): Promise<IapCreditResponse> {
-    const value = await AccountCommerceApi.request('/v1/iap/credit', 'POST',
-      JSON.stringify({ purchaseData: purchaseData }), sessionToken);
-    const response = JSON.parse(value) as IapCreditResponse;
-    response.account = AccountCommerceApi.normalizeAccount(response.account);
-    return response;
-  }
-
-  static async fetchTtsCatalog(): Promise<TtsCatalogResponse> {
-    const value = await AccountCommerceApi.request('/v1/tts/catalog', 'GET', '', '');
-    return JSON.parse(value) as TtsCatalogResponse;
-  }
-
-  static async fetchTtsWallet(sessionToken: string): Promise<TtsWalletSnapshot> {
-    const value = await AccountCommerceApi.request(
-      `/v1/tts/wallet?refresh=${Date.now()}`,
-      'GET',
-      '',
-      sessionToken
-    );
-    return AccountCommerceApi.parseTtsWalletText(value);
-  }
-
-  static async redeemTtsPackage(sku: string, requestId: string,
-    sessionToken: string): Promise<TtsPackageRedeemResponse> {
-    const value = await AccountCommerceApi.request(
-      `/v1/tts/packages/${encodeURIComponent(sku)}/redeem`,
-      'POST',
-      JSON.stringify({ requestId: requestId }),
-      sessionToken
-    );
-    const raw = JSON.parse(value) as TtsPackageRedeemResponse;
-    const response = new TtsPackageRedeemResponse();
-    response.account = AccountCommerceApi.normalizeAccount(raw.account);
-    response.ttsWallet = AccountCommerceApi.normalizeTtsWallet(raw.ttsWallet);
-    return response;
   }
 
   static async exchangeSync(request: CloudSyncExchangeRequest,
@@ -222,34 +126,6 @@ export class AccountCommerceApi {
     return JSON.stringify(result);
   }
 
-  private static parseTtsWalletText(value: string): TtsWalletSnapshot {
-    const standardChars = AccountCommerceApi.jsonInteger(value, 'standardChars');
-    const premiumChars = AccountCommerceApi.jsonInteger(value, 'premiumChars');
-    if (standardChars === null || premiumChars === null) {
-      throw new AccountApiError('在线朗读额度响应格式异常', 502, 'INVALID_TTS_WALLET_RESPONSE');
-    }
-    const result = new TtsWalletSnapshot();
-    result.standardChars = standardChars;
-    result.premiumChars = premiumChars;
-    result.standardNextExpiry = AccountCommerceApi.jsonInteger(value, 'standardNextExpiry');
-    result.premiumNextExpiry = AccountCommerceApi.jsonInteger(value, 'premiumNextExpiry');
-    return result;
-  }
-
-  private static jsonInteger(value: string, field: string): number | null {
-    const expression = new RegExp(`"${field}"\\s*:\\s*(?:\"([0-9]+)\"|([0-9]+)|null)`);
-    const match = value.match(expression);
-    if (!match) {
-      return null;
-    }
-    const raw = match[1] || match[2] || '';
-    if (!raw) {
-      return null;
-    }
-    const parsed = Number(raw);
-    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
-  }
-
   private static parseError(value: string): ApiErrorBody {
     try {
       return JSON.parse(value) as ApiErrorBody;
@@ -258,32 +134,5 @@ export class AccountCommerceApi {
       result.message = value;
       return result;
     }
-  }
-
-  private static normalizeAccount(account: AccountSnapshot): AccountSnapshot {
-    const result = new AccountSnapshot();
-    result.userId = account?.userId || '';
-    result.displayName = account?.displayName || '华为用户';
-    result.avatarUrl = account?.avatarUrl || '';
-    result.points = Math.max(0, Math.floor(Number(account?.points) || 0));
-    result.paidPoints = Math.max(0, Math.floor(Number(account?.paidPoints) || 0));
-    result.promoPoints = Math.max(0, Math.floor(Number(account?.promoPoints) || 0));
-    result.iapDebtPoints = Math.max(0, Math.floor(Number(account?.iapDebtPoints) || 0));
-    result.welcomeGranted = account?.welcomeGranted === true;
-    result.entitlements = account?.entitlements || [];
-    return result;
-  }
-
-  private static normalizeTtsWallet(wallet: TtsWalletSnapshot): TtsWalletSnapshot {
-    const result = new TtsWalletSnapshot();
-    const standardChars = wallet?.standardChars;
-    const premiumChars = wallet?.premiumChars;
-    const standardNextExpiry = wallet?.standardNextExpiry;
-    const premiumNextExpiry = wallet?.premiumNextExpiry;
-    result.standardChars = Math.max(0, Math.floor(Number(standardChars) || 0));
-    result.premiumChars = Math.max(0, Math.floor(Number(premiumChars) || 0));
-    result.standardNextExpiry = standardNextExpiry ? Number(standardNextExpiry) : null;
-    result.premiumNextExpiry = premiumNextExpiry ? Number(premiumNextExpiry) : null;
-    return result;
   }
 }

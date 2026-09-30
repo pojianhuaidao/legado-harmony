@@ -10,7 +10,6 @@ export class TtsSettings {
   installedVoiceKeys: string = '';
   customVoiceId: string = '';
   customVoices: string = '';
-  cloudVoiceId: string = '';
 }
 
 export class TtsSettingsStore {
@@ -22,7 +21,6 @@ export class TtsSettingsStore {
   static readonly KEY_INSTALLED_VOICE_KEYS: string = 'ttsInstalledVoiceKeys';
   static readonly KEY_CUSTOM_VOICE_ID: string = 'ttsCustomVoiceId';
   static readonly KEY_CUSTOM_VOICES: string = 'ttsCustomVoices';
-  static readonly KEY_CLOUD_VOICE_ID: string = 'ttsCloudVoiceId';
   private static readonly STORE_NAME: string = 'tts_settings';
   private static cachedSettings: TtsSettings | null = null;
 
@@ -48,8 +46,6 @@ export class TtsSettingsStore {
       store, TtsSettingsStore.KEY_CUSTOM_VOICE_ID, storageSettings.customVoiceId);
     settings.customVoices = await TtsSettingsStore.getString(
       store, TtsSettingsStore.KEY_CUSTOM_VOICES, storageSettings.customVoices);
-    settings.cloudVoiceId = await TtsSettingsStore.getString(
-      store, TtsSettingsStore.KEY_CLOUD_VOICE_ID, storageSettings.cloudVoiceId);
     TtsSettingsStore.cachedSettings = TtsSettingsStore.clone(settings);
     return settings;
   }
@@ -67,7 +63,6 @@ export class TtsSettingsStore {
     await store.put(TtsSettingsStore.KEY_INSTALLED_VOICE_KEYS, normalized.installedVoiceKeys);
     await store.put(TtsSettingsStore.KEY_CUSTOM_VOICE_ID, normalized.customVoiceId);
     await store.put(TtsSettingsStore.KEY_CUSTOM_VOICES, normalized.customVoices);
-    await store.put(TtsSettingsStore.KEY_CLOUD_VOICE_ID, normalized.cloudVoiceId);
     await store.flush();
   }
 
@@ -82,7 +77,6 @@ export class TtsSettingsStore {
     AppStorage.setOrCreate(TtsSettingsStore.KEY_INSTALLED_VOICE_KEYS, normalized.installedVoiceKeys);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CUSTOM_VOICE_ID, normalized.customVoiceId);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CUSTOM_VOICES, normalized.customVoices);
-    AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_VOICE_ID, normalized.cloudVoiceId);
   }
 
   static fromStorage(): TtsSettings {
@@ -95,7 +89,6 @@ export class TtsSettingsStore {
     settings.installedVoiceKeys = AppStorage.get<string>(TtsSettingsStore.KEY_INSTALLED_VOICE_KEYS) || '';
     settings.customVoiceId = AppStorage.get<string>(TtsSettingsStore.KEY_CUSTOM_VOICE_ID) || '';
     settings.customVoices = AppStorage.get<string>(TtsSettingsStore.KEY_CUSTOM_VOICES) || '';
-    settings.cloudVoiceId = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_VOICE_ID) || '';
     return TtsSettingsStore.clone(settings);
   }
 
@@ -167,7 +160,6 @@ export class TtsSettingsStore {
     settings.installedVoiceKeys = source.installedVoiceKeys || '';
     settings.customVoiceId = source.customVoiceId || '';
     settings.customVoices = source.customVoices || '';
-    settings.cloudVoiceId = source.cloudVoiceId || '';
     return settings;
   }
 }

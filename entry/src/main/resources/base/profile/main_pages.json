@@ -25,7 +25,6 @@
     "pages/AppIconSettings",
     "pages/ThemeColorSettings",
     "pages/ThemeSettings",
-    "pages/AccountCenter",
     "pages/DataSync",
     "pages/SyncDevices",
     "pages/GlassSettings",

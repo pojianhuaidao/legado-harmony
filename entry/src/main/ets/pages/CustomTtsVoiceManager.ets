@@ -43,7 +43,6 @@ struct CustomTtsVoiceManagerPage {
   @StorageLink('ttsLanguage') ttsLanguage: string = 'zh-CN';
   @StorageLink('ttsSpeed') ttsSpeed: number = 1;
   @StorageLink('ttsInstalledVoiceKeys') ttsInstalledVoiceKeys: string = '';
-  @StorageLink('ttsCloudVoiceId') ttsCloudVoiceId: string = '';
   @StorageLink('appDarkMode') appDarkMode: boolean = false;
   @StorageLink('themeRevision') themeRevision: number = 0;
   @StorageLink('appLightAccentColor') appLightAccentColor: string = '#007DFF';
@@ -253,7 +252,6 @@ struct CustomTtsVoiceManagerPage {
       this.ttsLanguage = settings.language;
       this.ttsSpeed = settings.speed;
       this.ttsInstalledVoiceKeys = settings.installedVoiceKeys;
-      this.ttsCloudVoiceId = settings.cloudVoiceId;
       this.voices = SystemTtsReader.parseCustomVoices(settings.customVoices);
       this.pruneSelectedVoices();
     }).catch((error: Error) => {
@@ -273,7 +271,6 @@ struct CustomTtsVoiceManagerPage {
     settings.installedVoiceKeys = this.ttsInstalledVoiceKeys;
     settings.customVoiceId = this.ttsCustomVoiceId;
     settings.customVoices = this.ttsCustomVoices;
-    settings.cloudVoiceId = this.ttsCloudVoiceId;
     TtsSettingsStore.applyToStorage(settings);
     TtsSettingsStore.save(getContext(this), settings).catch((error: Error) => {
       console.warn('保存自定义音色失败:', error);

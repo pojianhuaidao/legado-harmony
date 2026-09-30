@@ -1,7 +1,5 @@
 import { textToSpeech } from '@kit.CoreSpeechKit';
-import { connection } from '@kit.NetworkKit';
 import deviceInfo from '@ohos.deviceInfo';
-import { CloudTtsAudio, CloudTtsClient, CloudTtsTiming } from '../account/CloudTtsClient';
 import { HttpTTS } from '../model/data/Book';
 import { HttpTtsAudio, HttpTtsReader } from './HttpTtsReader';
 import { TtsAudioSession } from './TtsAudioSession';
@@ -30,9 +28,6 @@ export interface TtsReadOptions {
   style?: string;
   language?: string;
   speed?: number;
-  cloudVoiceId?: string;
-  cloudVoiceName?: string;
-  cloudVoiceTier?: string;
   focusBreakOffsets?: number[];
   keepAudioOutputOnFinish?: boolean;
 }
@@ -52,19 +47,6 @@ interface CustomTtsAudioJob {
   chunk: TtsChunk;
   text: string;
   promise: Promise<CustomTtsAudioResult>;
-}
-
-interface CloudTtsAudioResult {
-  audio?: CloudTtsAudio;
-  error?: Error;
-}
-
-interface CloudTtsAudioJob {
-  index: number;
-  chunk: TtsChunk;
-  text: string;
-  sourceToSpeechOffsets: number[];
-  promise: Promise<CloudTtsAudioResult>;
 }
 
 interface NormalizedSpeechText {
@@ -99,19 +81,6 @@ export class SystemTtsReader {
   private static readonly OFFLINE_MODE: number = 1;
   private static readonly CUSTOM_TTS_PREFETCH_WINDOW: number = 3;
   private static readonly CUSTOM_TTS_HIDDEN_GAP_LENGTH: number = 8;
-  private static readonly CLOUD_TTS_WIFI_PREFETCH_WINDOW: number = 2;
-  private static readonly CLOUD_TTS_MOBILE_PREFETCH_WINDOW: number = 1;
-  // Fallback highlight granularity only. Cloud highlight normally follows the server
-  // prosody timings (see buildCloudPlaybackCues); this window is used when a response
-  // carries no usable timing list. 10 characters produced visibly sub-sentence steps.
-  private static readonly CLOUD_TTS_FOCUS_CHUNK_LENGTH: number = 32;
-  private static readonly CLOUD_TTS_STANDARD_FIRST_CHUNK_LENGTH: number = 100;
-  private static readonly CLOUD_TTS_PREMIUM_FIRST_CHUNK_LENGTH: number = 50;
-  // The first chunk may look past its preferred length for a strong sentence end.
-  // Without this the search window collapsed to the preferred length and every start
-  // of playback fell back to a comma, which the synthesizer reads as a sentence end.
-  private static readonly CLOUD_TTS_FIRST_CHUNK_MAX_EXTEND: number = 60;
-  private static readonly CLOUD_TTS_PREMIUM_FIRST_CHUNK_MAX_EXTEND: number = 50;
   // How far a page boundary may move to land on a sentence boundary instead of
   // cutting mid-sentence (about half a Chinese sentence).
   private static readonly SYSTEM_PAGE_BREAK_SNAP_RADIUS: number = 20;
@@ -126,7 +95,6 @@ export class SystemTtsReader {
   private engine: textToSpeech.TextToSpeechEngine | null = null;
   private pcmPlayer: TtsPcmAudioPlayer = new TtsPcmAudioPlayer();
   private httpReader: HttpTtsReader = new HttpTtsReader();
-  private cloudReader: CloudTtsClient = new CloudTtsClient();
   private chunks: TtsChunk[] = [];
   // Normalized source text the current chunks were derived from. Used to tell a real
   // chunk boundary (keep the trailing comma so the engine hears "sentence continues")
@@ -173,9 +141,6 @@ export class SystemTtsReader {
   private optionStyle: string | null = null;
   private optionLanguage: string | null = null;
   private optionSpeed: number | null = null;
-  private optionCloudVoiceId: string = '';
-  private optionCloudVoiceName: string = '';
-  private optionCloudVoiceTier: string = 'STANDARD';
   private optionFocusBreakOffsets: number[] = [];
   private systemCurrentPcmBuffers: ArrayBuffer[] = [];
   private systemCurrentPcmSequences: number[] = [];
@@ -324,7 +289,7 @@ export class SystemTtsReader {
   }
 
   audioDebugState(): string {
-    return (this.getCurrentCustomVoice() || this.optionCloudVoiceId) ?
+    return this.getCurrentCustomVoice() ?
       this.httpReader.debugState() : this.pcmPlayer.debugState();
   }
 
@@ -434,16 +399,11 @@ export class SystemTtsReader {
     this.optionStyle = options?.style ?? null;
     this.optionLanguage = options?.language ?? null;
     this.optionSpeed = options?.speed ?? null;
-    this.optionCloudVoiceId = options?.cloudVoiceId || '';
-    this.optionCloudVoiceName = options?.cloudVoiceName || '';
-    this.optionCloudVoiceTier = (options?.cloudVoiceTier || '').toUpperCase() === 'PREMIUM' ?
-      'PREMIUM' : 'STANDARD';
     this.optionFocusBreakOffsets = this.normalizeFocusBreakOffsets(options?.focusBreakOffsets, cleanText.length);
     this.keepAudioOutputOnFinish = options?.keepAudioOutputOnFinish === true;
     const customVoice = this.getCurrentCustomVoice();
-    const splitChunks = this.optionCloudVoiceId ? this.splitCloudText(cleanText) :
-      (customVoice ? this.splitCustomText(cleanText, 64) :
-        this.splitSystemText(cleanText, this.optionFocusBreakOffsets));
+    const splitChunks = customVoice ? this.splitCustomText(cleanText, 64) :
+      this.splitSystemText(cleanText, this.optionFocusBreakOffsets);
     // A run of trailing punctuation (for example "......" or "……") can be split into a
     // punctuation-only chunk. Some Harmony TTS engines return no PCM/onStart for such a
     // chunk, which makes the reader believe the chapter tail was not spoken and retry/stop.
@@ -472,17 +432,6 @@ export class SystemTtsReader {
     }
     this.chunkIndex = 0;
     this.active = true;
-    if (this.optionCloudVoiceId) {
-      if (this.engine) {
-        try {
-          this.engine.shutdown();
-        } catch (_) {
-        }
-        this.engine = null;
-      }
-      this.speakCloudNext(generation, this.optionCloudVoiceId);
-      return;
-    }
     if (customVoice) {
       if (this.engine) {
         try {
@@ -676,9 +625,6 @@ export class SystemTtsReader {
     this.optionStyle = null;
     this.optionLanguage = null;
     this.optionSpeed = null;
-    this.optionCloudVoiceId = '';
-    this.optionCloudVoiceName = '';
-    this.optionCloudVoiceTier = 'STANDARD';
     this.optionFocusBreakOffsets = [];
     this.keepAudioOutputOnFinish = false;
     this.currentRequestId = '';
@@ -697,7 +643,6 @@ export class SystemTtsReader {
     this.resetSystemPcmPipeline();
     this.clearSpeakWatchdog();
     this.httpReader.stop();
-    this.cloudReader.stop();
     this.pcmPlayer.stop();
     this.releaseSystemAudioSession();
     try {
@@ -873,9 +818,6 @@ export class SystemTtsReader {
     }
     this.releaseSystemAudioSession();
     this.audioStarted = false;
-    this.optionCloudVoiceId = '';
-    this.optionCloudVoiceName = '';
-    this.optionCloudVoiceTier = 'STANDARD';
     this.optionFocusBreakOffsets = [];
     this.keepAudioOutputOnFinish = false;
     if (notify && this.onFinished) this.onFinished();
@@ -908,306 +850,6 @@ export class SystemTtsReader {
     if (owner) {
       TtsAudioSession.release(owner);
     }
-  }
-
-  private speakCloudNext(generation: number, voiceId: string): void {
-    this.playCloudQueue(generation, voiceId).catch((error: Error) => {
-      if (this.readGeneration !== generation || !this.active) {
-        return;
-      }
-      this.currentRequestId = '';
-      this.active = false;
-      const label = this.optionCloudVoiceName || '在线音色';
-      const message = `${label}朗读失败：${this.formatError(error)}`;
-      console.error('[TTS] cloud voice failed:', message);
-      if (this.onError) this.onError(message);
-    });
-  }
-
-  private async playCloudQueue(generation: number, voiceId: string): Promise<void> {
-    const jobs: CloudTtsAudioJob[] = [];
-    this.fillCloudAudioJobs(generation, voiceId, jobs);
-    while (this.readGeneration === generation && this.active) {
-      if (jobs.length === 0) {
-        await this.httpReader.drain();
-        if (this.readGeneration === generation && this.active) {
-          this.httpReader.stop();
-          this.finish(true);
-        }
-        return;
-      }
-      const job = jobs.shift() as CloudTtsAudioJob;
-      this.currentRequestId = this.createRequestId();
-      this.currentSpeakStartedAt = Date.now();
-      this.currentSpeakMinDuration = this.estimateSpeakDuration(job.text);
-      this.currentFocusChunk = job.chunk;
-      this.currentFocusChunkIndex = job.index;
-      this.currentFocusDuration = this.currentSpeakMinDuration;
-      this.currentFocusQueued = false;
-      this.currentFocusAudioReceived = false;
-      this.currentFocusAudioWritten = false;
-      const result = await job.promise;
-      if (this.readGeneration !== generation || !this.active) return;
-      if (result.error || !result.audio) {
-        throw result.error || new Error('在线音色合成失败');
-      }
-      this.fillCloudAudioJobs(generation, voiceId, jobs);
-      this.currentFocusAudioReceived = true;
-      const cues = this.buildCloudPlaybackCues(generation, job, result.audio);
-      await this.httpReader.writeTimedPcm(result.audio, cues);
-      if (this.readGeneration !== generation || !this.active) return;
-      this.currentFocusAudioWritten = true;
-      this.currentRequestId = '';
-      this.currentSpeakStartedAt = 0;
-      this.currentSpeakMinDuration = 0;
-      this.currentFocusChunk = null;
-      this.currentFocusChunkIndex = -1;
-      this.currentFocusDuration = 0;
-      this.currentFocusQueued = false;
-      this.currentFocusAudioReceived = false;
-      this.currentFocusAudioWritten = false;
-    }
-  }
-
-  private fillCloudAudioJobs(generation: number, voiceId: string, jobs: CloudTtsAudioJob[]): void {
-    const prefetchWindow = this.cloudTtsPrefetchWindow();
-    while (this.readGeneration === generation && this.active &&
-      jobs.length < prefetchWindow && this.chunkIndex < this.chunks.length) {
-      const index = this.chunkIndex;
-      const chunk = this.chunks[this.chunkIndex++];
-      const normalized = this.normalizeChunkForSpeechWithMap(chunk.text);
-      const speakText = normalized.text;
-      if (!speakText) continue;
-      const promise = this.cloudReader.synthesize(voiceId, speakText, this.getTtsSpeed())
-        .then((audio: CloudTtsAudio): CloudTtsAudioResult => {
-          if (this.readGeneration !== generation || !this.active) {
-            return { error: new Error('在线音色合成已停止') };
-          }
-          return { audio };
-        })
-        .catch((error: Error): CloudTtsAudioResult => ({ error }));
-      jobs.push({ index, chunk, text: speakText,
-        sourceToSpeechOffsets: normalized.sourceToSpeechOffsets, promise });
-    }
-  }
-
-  private cloudTtsPrefetchWindow(): number {
-    try {
-      const handle = connection.getDefaultNetSync();
-      const capabilities = connection.getNetCapabilitiesSync(handle);
-      if ((capabilities.bearerTypes || []).includes(connection.NetBearType.BEARER_WIFI)) {
-        return SystemTtsReader.CLOUD_TTS_WIFI_PREFETCH_WINDOW;
-      }
-    } catch (_) {
-    }
-    return SystemTtsReader.CLOUD_TTS_MOBILE_PREFETCH_WINDOW;
-  }
-
-  /**
-   * Build playback cues (reader highlight steps) for one cloud audio response.
-   *
-   * The synthesizer already returns a prosody timeline (`timings`) that was produced by the
-   * server's own splitter (28 characters preferred, 42 maximum, 10 minimum) and then aligned
-   * to quiet points in the PCM. Use it directly: it yields roughly one highlight per sentence
-   * and its timestamps cannot drift from the audio. The previous implementation ignored it and
-   * re-split the text into 10-character windows, which is why a highlight covered only a
-   * fraction of a sentence.
-   */
-  private buildCloudPlaybackCues(generation: number, job: CloudTtsAudioJob,
-    audio: CloudTtsAudio): PcmPlaybackCue[] {
-    const durationMs = audio.sampleRate > 0 ?
-      audio.pcm.byteLength * 1000 / (audio.sampleRate * 2) : 0;
-    const cues = this.buildProsodyCloudCues(generation, job, audio);
-    if (cues.length > 0) {
-      console.info(`[TTS] cloud timeline queued: mode=${audio.timingMode},` +
-        `timings=${audio.timings.length},focus=${cues.length},bytes=${audio.pcm.byteLength}`);
-      return cues;
-    }
-    return this.buildLegacyCloudFocusCues(generation, job, durationMs, audio);
-  }
-
-  private buildProsodyCloudCues(generation: number, job: CloudTtsAudioJob,
-    audio: CloudTtsAudio): PcmPlaybackCue[] {
-    const timings = audio.timings;
-    if (!timings || timings.length < 2) {
-      // A single range means silence alignment collapsed (very short audio, or no quiet
-      // boundary found). Fall back to the punctuation-aware window splitter.
-      return [];
-    }
-    const cues: PcmPlaybackCue[] = [];
-    const durationMs = audio.sampleRate > 0 ?
-      audio.pcm.byteLength * 1000 / (audio.sampleRate * 2) : 0;
-    let lastFrame = -1;
-    for (let index = 0; index < timings.length; index++) {
-      const timing = timings[index];
-      const speechStart = Math.max(0, Math.min(job.text.length, Math.round(timing.startOffset)));
-      const speechEnd = Math.max(speechStart, Math.min(job.text.length, Math.round(timing.endOffset)));
-      if (speechEnd <= speechStart) {
-        continue;
-      }
-      const focusChunk = this.cloudFocusChunkForSpeechRange(job, speechStart, speechEnd);
-      if (!focusChunk) {
-        continue;
-      }
-      const startTime = cues.length === 0 ? 0 :
-        Math.max(0, Math.min(durationMs, timing.startTime));
-      const frameOffset = Math.max(0, Math.round(startTime * audio.sampleRate / 1000));
-      if (frameOffset <= lastFrame) {
-        continue;
-      }
-      const capturedChunk = focusChunk;
-      cues.push({
-        frameOffset,
-        callback: () => {
-          if (this.readGeneration !== generation || !this.active) {
-            return;
-          }
-          if (this.onChunkStart) {
-            this.onChunkStart(capturedChunk, job.index);
-          }
-          this.notifyAudioStarted();
-        }
-      });
-      lastFrame = frameOffset;
-    }
-    return cues;
-  }
-
-  /**
-   * Map a range of the synthesized (speech) text back onto the reader's source range, so the
-   * highlight covers exactly the characters the timeline segment was spoken from.
-   */
-  private cloudFocusChunkForSpeechRange(job: CloudTtsAudioJob, speechStart: number,
-    speechEnd: number): TtsChunk | null {
-    const speechLength = job.chunk.text.length;
-    const map = job.sourceToSpeechOffsets;
-    let sourceStart = 0;
-    let sourceEnd = speechLength;
-    if (map.length === speechLength + 1) {
-      sourceStart = 0;
-      while (sourceStart + 1 <= speechLength && map[sourceStart + 1] <= speechStart) {
-        sourceStart++;
-      }
-      sourceEnd = sourceStart;
-      while (sourceEnd + 1 <= speechLength && map[sourceEnd + 1] <= speechEnd) {
-        sourceEnd++;
-      }
-    } else {
-      // Offset map unavailable (normalization changed length without a map). Approximate
-      // proportionally; the highlight is still confined to this chunk.
-      const safeSpeechLength = Math.max(1, job.text.length);
-      sourceStart = Math.floor(speechStart * speechLength / safeSpeechLength);
-      sourceEnd = Math.ceil(speechEnd * speechLength / safeSpeechLength);
-    }
-    sourceStart = Math.max(0, Math.min(speechLength, sourceStart));
-    sourceEnd = Math.max(sourceStart, Math.min(speechLength, sourceEnd));
-    if (sourceEnd <= sourceStart) {
-      return null;
-    }
-    const text = job.chunk.text.substring(sourceStart, sourceEnd);
-    if (!text.trim()) {
-      return null;
-    }
-    return {
-      text,
-      start: job.chunk.start + sourceStart,
-      end: job.chunk.start + sourceEnd
-    };
-  }
-
-  private buildLegacyCloudFocusCues(generation: number, job: CloudTtsAudioJob,
-    durationMs: number, audio: CloudTtsAudio): PcmPlaybackCue[] {
-    const focusChunks = this.splitCloudFocusChunks(job.chunk);
-    const cues: PcmPlaybackCue[] = [];
-    let lastFrame = -1;
-    for (let focusIndex = 0; focusIndex < focusChunks.length; focusIndex++) {
-      const focusChunk = focusChunks[focusIndex];
-      const sourceOffset = Math.max(0, focusChunk.start - job.chunk.start);
-      const speechOffset = this.cloudSpeechOffset(job.chunk.text, job.text, sourceOffset,
-        job.sourceToSpeechOffsets);
-      const startTime = focusIndex === 0 ? 0 :
-        this.cloudTimingAtOffset(audio.timings, speechOffset, durationMs, job.text.length);
-      const frameOffset = Math.max(0, Math.round(startTime * audio.sampleRate / 1000));
-      if (frameOffset === lastFrame) {
-        continue;
-      }
-      const capturedChunk = focusChunk;
-      cues.push({
-        frameOffset,
-        callback: () => {
-          if (this.readGeneration !== generation || !this.active) {
-            return;
-          }
-          if (this.onChunkStart) {
-            this.onChunkStart(capturedChunk, job.index);
-          }
-          this.notifyAudioStarted();
-        }
-      });
-      lastFrame = frameOffset;
-    }
-    if (cues.length === 0) {
-      cues.push({
-        frameOffset: 0,
-        callback: () => {
-          if (this.readGeneration !== generation || !this.active) {
-            return;
-          }
-          if (this.onChunkStart) {
-            this.onChunkStart(job.chunk, job.index);
-          }
-          this.notifyAudioStarted();
-        }
-      });
-    }
-    console.info(`[TTS] cloud timeline queued: mode=${audio.timingMode},` +
-      `timings=${audio.timings.length},focus=${cues.length},bytes=${audio.pcm.byteLength}`);
-    return cues;
-  }
-
-  private cloudSpeechOffset(sourceText: string, speechText: string, sourceOffset: number,
-    sourceToSpeechOffsets: number[] = []): number {
-    if (sourceToSpeechOffsets.length === sourceText.length + 1) {
-      const safeOffset = Math.max(0, Math.min(sourceText.length, Math.round(sourceOffset)));
-      return Math.max(0, Math.min(speechText.length, sourceToSpeechOffsets[safeOffset] || 0));
-    }
-    if (!sourceText || sourceText === speechText) {
-      return Math.max(0, Math.min(speechText.length, sourceOffset));
-    }
-    const safeOffset = Math.max(0, Math.min(sourceText.length, sourceOffset));
-    const prefix = this.normalizeChunkForSpeech(sourceText.substring(0, safeOffset));
-    if (prefix && speechText.startsWith(prefix)) {
-      return Math.min(speechText.length, prefix.length);
-    }
-    return Math.round(safeOffset * speechText.length / Math.max(1, sourceText.length));
-  }
-
-  private cloudTimingAtOffset(timings: CloudTtsTiming[], offset: number,
-    durationMs: number, textLength: number): number {
-    if (!timings || timings.length === 0) {
-      return durationMs * Math.max(0, Math.min(textLength, offset)) / Math.max(1, textLength);
-    }
-    for (let index = 0; index < timings.length; index++) {
-      const timing = timings[index];
-      if (offset < timing.startOffset) {
-        return timing.startTime;
-      }
-      if (offset >= timing.startOffset && offset < timing.endOffset) {
-        if (timing.endOffset <= timing.startOffset || timing.endTime <= timing.startTime) {
-          return timing.startTime;
-        }
-        const progress = (offset - timing.startOffset) / (timing.endOffset - timing.startOffset);
-        return timing.startTime + (timing.endTime - timing.startTime) * progress;
-      }
-    }
-    const lastTiming = timings[timings.length - 1];
-    if (textLength > lastTiming.endOffset && durationMs > lastTiming.endTime) {
-      const progress = (offset - lastTiming.endOffset) /
-        Math.max(1, textLength - lastTiming.endOffset);
-      return Math.max(0, Math.min(durationMs,
-        lastTiming.endTime + (durationMs - lastTiming.endTime) * progress));
-    }
-    return Math.max(0, Math.min(durationMs, lastTiming.endTime));
   }
 
   private speakCustomNext(generation: number, voice: HttpTTS): void {
@@ -1843,29 +1485,6 @@ export class SystemTtsReader {
       }
       this.finish(true);
     }, waitMs);
-  }
-
-  private splitCloudFocusChunks(chunk: TtsChunk): TtsChunk[] {
-    const sentenceChunks = this.splitText(
-      chunk.text, SystemTtsReader.CLOUD_TTS_FOCUS_CHUNK_LENGTH);
-    const result: TtsChunk[] = [];
-    for (const sentenceChunk of sentenceChunks) {
-      const absoluteStart = chunk.start + sentenceChunk.start;
-      const absoluteEnd = chunk.start + sentenceChunk.end;
-      let partStart = absoluteStart;
-      for (const breakOffset of this.optionFocusBreakOffsets) {
-        if (breakOffset <= partStart) {
-          continue;
-        }
-        if (breakOffset >= absoluteEnd) {
-          break;
-        }
-        this.appendFocusChunk(result, chunk, partStart, breakOffset);
-        partStart = breakOffset;
-      }
-      this.appendFocusChunk(result, chunk, partStart, absoluteEnd);
-    }
-    return result.length > 0 ? result : [chunk];
   }
 
   private appendFocusChunk(result: TtsChunk[], sourceChunk: TtsChunk, start: number, end: number): void {
@@ -2772,71 +2391,6 @@ export class SystemTtsReader {
       this.appendAbsoluteTextChunk(result, text, start, end);
       start = end;
     }
-  }
-
-  private splitCloudText(text: string): TtsChunk[] {
-    const chunks: TtsChunk[] = [];
-    let start = 0;
-    while (start < text.length) {
-      const firstChunk = chunks.length === 0;
-      const premium = this.optionCloudVoiceTier === 'PREMIUM';
-      const firstChunkLength = premium ?
-        SystemTtsReader.CLOUD_TTS_PREMIUM_FIRST_CHUNK_LENGTH :
-        SystemTtsReader.CLOUD_TTS_STANDARD_FIRST_CHUNK_LENGTH;
-      const firstChunkExtend = premium ?
-        SystemTtsReader.CLOUD_TTS_PREMIUM_FIRST_CHUNK_MAX_EXTEND :
-        SystemTtsReader.CLOUD_TTS_FIRST_CHUNK_MAX_EXTEND;
-      const preferredLength = firstChunk ? firstChunkLength : 200;
-      const minimumStrongLength = firstChunk ? Math.ceil(firstChunkLength * 0.8) : 80;
-      const minimumWeakLength = firstChunk ? Math.ceil(firstChunkLength * 0.8) : 140;
-      // The first chunk used to cap `maximumLength` at `preferredLength`, which made the
-      // "look forward for a strong break" step unreachable (its guard required
-      // `preferredEnd < limit`). The first chunk therefore always fell through to a comma and
-      // the cloud voice closed a half sentence with falling pitch. Allow the window to extend
-      // past the preferred length before downgrading to weak punctuation.
-      const maximumLength = firstChunk ? firstChunkLength + firstChunkExtend : 450;
-      const limit = Math.min(text.length, start + maximumLength);
-      const preferredEnd = Math.min(limit, start + preferredLength);
-      let breakPath = 'strong-last';
-      let end = this.findLastCloudBreak(text, start + minimumStrongLength, preferredEnd, true);
-      if (end <= start) {
-        breakPath = 'strong-first';
-        end = this.findFirstCloudBreak(text, preferredEnd, limit, true);
-      }
-      if (end <= start) {
-        breakPath = 'weak';
-        end = this.findLastCloudBreak(text, start + minimumWeakLength, limit, false);
-      }
-      if (end <= start) {
-        breakPath = 'hard';
-        end = this.safeHardCutIndex(text, limit);
-      }
-      end = this.extendCloudBreak(text, end, limit);
-      if (breakPath === 'weak' || breakPath === 'hard') {
-        // Only the two degraded paths are worth surfacing: a comma-ended chunk and a hard cut
-        // are exactly the cases that sound unnatural, and logging every chunk drowns hilog.
-        console.info(`[TTS] cloud chunk break: path=${breakPath}, first=${firstChunk},` +
-          ` tier=${premium ? 'PREMIUM' : 'STANDARD'}, start=${start}, end=${end}`);
-      }
-      let chunkStart = start;
-      let chunkEnd = end;
-      while (chunkStart < chunkEnd && this.isTrimChar(text.charAt(chunkStart))) {
-        chunkStart++;
-      }
-      while (chunkEnd > chunkStart && this.isTrimChar(text.charAt(chunkEnd - 1))) {
-        chunkEnd--;
-      }
-      const chunk = text.substring(chunkStart, chunkEnd);
-      if (chunk) {
-        chunks.push({
-          text: chunk,
-          start: chunkStart,
-          end: chunkEnd
-        });
-      }
-      start = end;
-    }
-    return chunks;
   }
 
   private findLastCloudBreak(text: string, from: number, to: number, strong: boolean): number {

@@ -220,7 +220,7 @@ struct DataSyncPage {
           .height(42)
           .backgroundColor(this.accentColor())
           .onClick(() => {
-            router.pushUrl({ url: 'pages/AccountCenter' });
+            promptAction.showToast({ message: '登录功能已移除，云同步暂不可用' });
           })
       } else {
         Text(this.lastSyncDescription())
@@ -331,8 +331,7 @@ struct DataSyncPage {
 
   async setCloudSyncEnabled(value: boolean): Promise<void> {
     if (value && !this.accountLoggedIn) {
-      promptAction.showToast({ message: '请先登录华为账号' });
-      router.pushUrl({ url: 'pages/AccountCenter' });
+      promptAction.showToast({ message: '登录功能已移除，云同步暂不可用' });
       return;
     }
     this.cloudSyncEnabled = value;
@@ -440,7 +439,7 @@ struct DataSyncPage {
 
   async syncNow(conflictPolicy: string = 'cloud'): Promise<void> {
     if (!this.accountLoggedIn) {
-      router.pushUrl({ url: 'pages/AccountCenter' });
+      promptAction.showToast({ message: '登录功能已移除，云同步暂不可用' });
       return;
     }
     if (!this.cloudSyncEnabled) {

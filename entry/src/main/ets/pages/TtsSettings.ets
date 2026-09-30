@@ -3,14 +3,6 @@ import { common } from '@kit.AbilityKit';
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
 import { util } from '@kit.ArkTS';
-import { AccountCommerceApi } from '../account/AccountCommerceApi';
-import { AccountSessionStore } from '../account/AccountSessionStore';
-import {
-  TtsCatalogResponse,
-  TtsPackageInfo,
-  TtsVoiceInfo,
-  TtsWalletSnapshot
-} from '../account/AccountCommerceModels';
 import { HttpTTS } from '../model/data/Book';
 import { HttpClient } from '../core/http/HttpClient';
 import { syncSystemBars } from '../utils/SystemBars';
@@ -34,10 +26,6 @@ struct TtsSettingsPage {
   @StorageLink('ttsInstalledVoiceKeys') ttsInstalledVoiceKeys: string = '';
   @StorageLink('ttsCustomVoiceId') @Watch('onCustomVoiceSelectionChanged') ttsCustomVoiceId: string = '';
   @StorageLink('ttsCustomVoices') @Watch('onCustomVoicesStorageChanged') ttsCustomVoices: string = '';
-  @StorageLink('ttsCloudVoiceId') ttsCloudVoiceId: string = '';
-  @StorageLink('accountLoggedIn') accountLoggedIn: boolean = false;
-  @StorageLink('accountPaidPoints') paidPoints: number = 0;
-  @StorageLink('accountPromoPoints') promoPoints: number = 0;
   @StorageLink('appDarkMode') appDarkMode: boolean = false;
   @StorageLink('themeRevision') themeRevision: number = 0;
   @StorageLink('appLightAccentColor') appLightAccentColor: string = '#007DFF';
@@ -48,16 +36,6 @@ struct TtsSettingsPage {
   @StorageProp('navBarHeight') navBarHeight: number = 0;
 
   @State voices: TtsVoiceOption[] = [TtsSettingsPage.defaultVoice()];
-  @State cloudVoices: TtsVoiceInfo[] = [];
-  @State ttsCatalog: TtsCatalogResponse = new TtsCatalogResponse();
-  @State ttsStandardChars: number = 0;
-  @State ttsPremiumChars: number = 0;
-  @State ttsStandardNextExpiry: number | null = null;
-  @State ttsPremiumNextExpiry: number | null = null;
-  @State ttsWalletLoaded: boolean = false;
-  @State ttsWalletError: string = '';
-  @State ttsCommerceLoading: boolean = false;
-  @State redeemingTtsSku: string = '';
   @State selectedVoiceKey: string = '';
   private previewText: string = '这是一段朗读试听文字。点击试听后，会按照当前音色和倍速播放。';
   private previewReader: SystemTtsReader = new SystemTtsReader();
@@ -75,13 +53,11 @@ struct TtsSettingsPage {
   aboutToAppear(): void {
     this.syncBars();
     this.loadSettingsAndVoices();
-    this.loadTtsCommerce();
   }
 
   onPageShow(): void {
     this.syncBars();
     this.loadSettingsAndVoices();
-    this.loadTtsCommerce();
   }
 
   aboutToDisappear(): void {
@@ -203,8 +179,6 @@ struct TtsSettingsPage {
           .clip(true)
           .backgroundColor(this.cardColor())
 
-          this.sectionTitle('在线朗读字数')
-          this.ttsCommerceSection()
           }
           .width('100%')
           .padding({ top: 56 + this.statusBarHeight, bottom: this.navBarHeight + 32 })
@@ -276,10 +250,6 @@ struct TtsSettingsPage {
   }
 
   selectedVoiceTitle(): string {
-    const cloudVoice = this.findCurrentCloudVoice();
-    if (cloudVoice) {
-      return this.cloudVoiceTitle(cloudVoice);
-    }
     const customVoice = this.findCurrentCustomVoice();
     if (customVoice && customVoice.enabled !== false) {
       return this.customVoiceTitle(customVoice);
@@ -330,12 +300,6 @@ struct TtsSettingsPage {
       Column() {
         Scroll() {
           Column() {
-            if (this.cloudVoices.length > 0) {
-              this.voiceDropdownSectionTitle('云端音色')
-              ForEach(this.cloudVoices, (voice: TtsVoiceInfo) => {
-                this.cloudVoiceDropdownOption(voice)
-              }, (voice: TtsVoiceInfo) => `cloud_${voice.id}`)
-            }
             if (this.enabledCustomVoices().length > 0) {
               this.voiceDropdownSectionTitle('自定义音色')
               ForEach(this.enabledCustomVoices(), (voice: HttpTTS) => {
@@ -453,30 +417,6 @@ struct TtsSettingsPage {
     })
   }
 
-  @Builder
-  cloudVoiceDropdownOption(voice: TtsVoiceInfo) {
-    Row() {
-      Text(this.cloudVoiceTitle(voice))
-        .fontSize(15)
-        .fontColor(this.primaryTextColor())
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      if (this.ttsCloudVoiceId === voice.id) {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(18)
-          .fontColor([this.accentColor()])
-      }
-    }
-    .width('100%')
-    .height(46)
-    .padding({ left: 14, right: 14 })
-    .onClick(() => {
-      this.showVoiceDropdown = false;
-      this.applyCloudVoice(voice);
-    })
-  }
-
   normalizeDefaultOnlineVoice(): void {
     if (this.ttsOnline === 0 && this.ttsPerson === 0 && !this.ttsStyle &&
       this.sameLanguage(this.ttsLanguage || 'zh-CN', 'zh-CN')) {
@@ -497,96 +437,6 @@ struct TtsSettingsPage {
     this.loadVoices();
   }
 
-  async loadTtsCommerce(): Promise<void> {
-    if (this.ttsCommerceLoading) {
-      return;
-    }
-    this.ttsCommerceLoading = true;
-    this.ttsWalletError = '';
-    try {
-      const catalog = await AccountCommerceApi.fetchTtsCatalog();
-      this.ttsCatalog = catalog;
-      if (!AccountSessionStore.isLoggedIn()) {
-        this.ttsWalletLoaded = false;
-        return;
-      }
-      this.applyTtsWallet(await AccountCommerceApi.fetchTtsWallet(AccountSessionStore.token()));
-    } catch (e) {
-      console.warn('加载在线朗读字数包失败:', e);
-      this.ttsWalletError = this.commerceErrorMessage(e as Object, '额度同步失败');
-    } finally {
-      this.ttsCommerceLoading = false;
-    }
-  }
-
-  async redeemTtsPackage(item: TtsPackageInfo): Promise<void> {
-    if (this.redeemingTtsSku) {
-      return;
-    }
-    if (!AccountSessionStore.isLoggedIn()) {
-      promptAction.showToast({ message: '请先在“我的-账号与点数”登录' });
-      return;
-    }
-    if (this.paidPoints < item.points) {
-      promptAction.showToast({ message: '充值点不足，请先充值点数' });
-      return;
-    }
-    const tierName = item.tier === 'PREMIUM' ? '精品音色' : '标准音色';
-    const result = await promptAction.showDialog({
-      title: '兑换在线朗读字数',
-      message: `使用 ${item.points} 充值点兑换 ${tierName} ${this.formatTtsChars(item.chars)}，有效期 ${item.validDays} 天。赠送点不能兑换。`,
-      buttons: [
-        { text: '取消', color: this.subTextColor() },
-        { text: '确认兑换', color: this.accentColor() }
-      ]
-    });
-    if (result.index !== 1) {
-      return;
-    }
-    this.redeemingTtsSku = item.sku;
-    try {
-      const response = await AccountCommerceApi.redeemTtsPackage(
-        item.sku,
-        util.generateRandomUUID(),
-        AccountSessionStore.token()
-      );
-      await AccountSessionStore.updateSnapshot(this.context, response.account);
-      this.applyTtsWallet(response.ttsWallet);
-      try {
-        this.applyTtsWallet(await AccountCommerceApi.fetchTtsWallet(AccountSessionStore.token()));
-      } catch (refreshError) {
-        console.warn('兑换后刷新在线朗读字数失败:', refreshError);
-      }
-      promptAction.showToast({ message: `已到账 ${this.formatTtsChars(item.chars)}` });
-    } catch (e) {
-      promptAction.showToast({ message: this.commerceErrorMessage(e as Object, '兑换失败') });
-    } finally {
-      this.redeemingTtsSku = '';
-    }
-  }
-
-  applyTtsWallet(wallet: TtsWalletSnapshot): void {
-    this.ttsStandardChars = wallet.standardChars;
-    this.ttsPremiumChars = wallet.premiumChars;
-    this.ttsStandardNextExpiry = wallet.standardNextExpiry;
-    this.ttsPremiumNextExpiry = wallet.premiumNextExpiry;
-    this.ttsWalletLoaded = true;
-    this.ttsWalletError = '';
-  }
-
-  formatTtsChars(chars: number): string {
-    if (chars >= 10000) {
-      const wan = chars / 10000;
-      return `${Number.isInteger(wan) ? wan.toFixed(0) : wan.toFixed(1)} 万字`;
-    }
-    return `${chars} 字`;
-  }
-
-  commerceErrorMessage(error: Object, fallback: string): string {
-    const message = this.shortErrorMessage(error);
-    return message && message !== '未知错误' ? message : fallback;
-  }
-
   applySettings(settings: TtsSettings): void {
     this.ttsPerson = settings.person;
     this.ttsOnline = settings.online;
@@ -596,7 +446,6 @@ struct TtsSettingsPage {
     this.ttsInstalledVoiceKeys = settings.installedVoiceKeys;
     this.ttsCustomVoiceId = settings.customVoiceId;
     this.ttsCustomVoices = settings.customVoices;
-    this.ttsCloudVoiceId = settings.cloudVoiceId;
     this.customVoices = SystemTtsReader.parseCustomVoices(settings.customVoices);
   }
 
@@ -610,7 +459,6 @@ struct TtsSettingsPage {
     settings.installedVoiceKeys = this.ttsInstalledVoiceKeys;
     settings.customVoiceId = this.ttsCustomVoiceId;
     settings.customVoices = this.ttsCustomVoices;
-    settings.cloudVoiceId = this.ttsCloudVoiceId;
     return settings;
   }
 
@@ -638,33 +486,8 @@ struct TtsSettingsPage {
     }
     this.isLoadingVoices = true;
     try {
-      const results = await Promise.all([
-        SystemTtsReader.listAvailableVoices(),
-        AccountCommerceApi.fetchTtsCatalog().catch(() => null)
-      ]);
-      const voices = results[0] as TtsVoiceOption[];
-      const catalog = results[1];
-      this.cloudVoices = catalog ? catalog.voices : [];
-      if (catalog && this.ttsCloudVoiceId && !this.findCurrentCloudVoice()) {
-        const previousVoiceId = this.ttsCloudVoiceId;
-        const fallbackVoice = this.cloudVoices.find((voice: TtsVoiceInfo) => voice.id === 'xiaoyan') ||
-          this.cloudVoices[0];
-        this.ttsCloudVoiceId = fallbackVoice ? fallbackVoice.id : '';
-        console.warn(`[TTS] unsupported cloud voice migrated: ${previousVoiceId} -> ${this.ttsCloudVoiceId}`);
-        this.saveSettings();
-      }
-      if (!catalog && this.ttsCloudVoiceId) {
-        const fallbackCloudVoice = new TtsVoiceInfo();
-        fallbackCloudVoice.id = this.ttsCloudVoiceId;
-        fallbackCloudVoice.name = '云端音色';
-        this.cloudVoices = [fallbackCloudVoice];
-      }
+      const voices = await SystemTtsReader.listAvailableVoices();
       this.voices = this.applyInstalledOverrides(this.mergeWithDefaultVoice(voices));
-      const currentCloudVoice = this.findCurrentCloudVoice();
-      if (currentCloudVoice) {
-        this.selectedVoiceKey = `cloud_${currentCloudVoice.id}`;
-        return;
-      }
       const currentCustomVoice = this.findCurrentCustomVoice();
       if (currentCustomVoice) {
         this.selectedVoiceKey = this.customVoiceKey(currentCustomVoice);
@@ -768,7 +591,6 @@ struct TtsSettingsPage {
     this.ttsStyle = voice.style;
     this.ttsLanguage = voice.language;
     this.ttsCustomVoiceId = '';
-    this.ttsCloudVoiceId = '';
     this.selectedVoiceKey = this.voiceKey(voice);
     this.saveSettings();
   }
@@ -783,40 +605,9 @@ struct TtsSettingsPage {
       this.isPreviewing = false;
     }
     this.ttsCustomVoiceId = String(voice.id);
-    this.ttsCloudVoiceId = '';
     this.selectedVoiceKey = this.customVoiceKey(voice);
     this.saveSettings();
     promptAction.showToast({ message: `已启用 ${voice.name}` });
-  }
-
-  applyCloudVoice(voice: TtsVoiceInfo): void {
-    if (!AccountSessionStore.isLoggedIn()) {
-      promptAction.showToast({ message: '请先登录华为账号后使用云端音色' });
-      return;
-    }
-    if (this.isPreviewing) {
-      this.previewReader.stop();
-      this.isPreviewing = false;
-    }
-    this.ttsCloudVoiceId = voice.id;
-    this.ttsCustomVoiceId = '';
-    this.selectedVoiceKey = `cloud_${voice.id}`;
-    this.saveSettings();
-    promptAction.showToast({ message: `已启用 ${voice.name}` });
-  }
-
-  findCurrentCloudVoice(): TtsVoiceInfo | undefined {
-    const id = (this.ttsCloudVoiceId || '').trim();
-    if (!id) return undefined;
-    return this.cloudVoices.find((voice: TtsVoiceInfo) => voice.id === id);
-  }
-
-  cloudVoiceTitle(voice: TtsVoiceInfo): string {
-    const tier = voice.tier === 'PREMIUM' ? '精品' : '标准';
-    const description = (voice.description || '').trim();
-    return description
-      ? `${voice.name} · ${description} · 云端${tier}`
-      : `${voice.name} · 云端${tier}`;
   }
 
   async downloadAndSelectVoice(voice: TtsVoiceOption): Promise<void> {
@@ -952,9 +743,6 @@ struct TtsSettingsPage {
   }
 
   currentVoiceKey(): string {
-    if (this.ttsCloudVoiceId) {
-      return `cloud_${this.ttsCloudVoiceId}`;
-    }
     const customVoice = this.findCurrentCustomVoice();
     if (customVoice) {
       return this.customVoiceKey(customVoice);
@@ -969,7 +757,7 @@ struct TtsSettingsPage {
   }
 
   isCurrentVoice(voice: TtsVoiceOption): boolean {
-    if (this.ttsCustomVoiceId || this.ttsCloudVoiceId) {
+    if (this.ttsCustomVoiceId) {
       return false;
     }
     return voice.id === this.ttsPerson && voice.online === this.ttsOnline &&
@@ -1201,129 +989,6 @@ struct TtsSettingsPage {
       .padding({ left: 16, right: 16, top: 20, bottom: 8 })
   }
 
-  @Builder
-  ttsCommerceSection() {
-    Column({ space: 12 }) {
-      Row() {
-        Text(this.accountLoggedIn ? '当前额度' : '登录后可查看额度并兑换')
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.primaryTextColor())
-          .layoutWeight(1)
-        if (this.ttsCommerceLoading) {
-          LoadingProgress()
-            .width(18)
-            .height(18)
-            .color(this.accentColor())
-        } else {
-          Text('刷新')
-            .fontSize(13)
-            .fontColor(this.accentColor())
-            .padding({ left: 10, right: 2, top: 6, bottom: 6 })
-            .onClick(() => {
-              this.loadTtsCommerce();
-            })
-        }
-      }
-      .width('100%')
-
-      if (this.accountLoggedIn) {
-        Row({ space: 10 }) {
-          this.ttsBalanceCard('标准音色', false)
-          this.ttsBalanceCard('精品音色', true)
-        }
-        .width('100%')
-
-        if (this.ttsWalletError) {
-          Text(`${this.ttsWalletError}，请点击刷新`)
-            .fontSize(11)
-            .fontColor('#E5484D')
-            .width('100%')
-        }
-
-        Text(`可用于兑换：${this.paidPoints} 充值点 · 赠送点 ${this.promoPoints} 仅可兑换主题`)
-          .fontSize(12)
-          .fontColor(this.subTextColor())
-          .width('100%')
-      } else {
-        Text('请先在“我的-账号与点数”登录华为账号，再返回这里兑换在线朗读字数。')
-          .fontSize(12)
-          .lineHeight(18)
-          .fontColor(this.subTextColor())
-          .width('100%')
-      }
-
-      ForEach(this.ttsCatalog.packages, (item: TtsPackageInfo) => {
-        Row({ space: 10 }) {
-          Column({ space: 4 }) {
-            Text(`${item.tier === 'PREMIUM' ? '精品' : '标准'} · ${this.formatTtsChars(item.chars)}`)
-              .fontSize(15)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.primaryTextColor())
-            Text(`${item.validDays} 天有效`)
-              .fontSize(11)
-              .fontColor(this.subTextColor())
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-
-          Button(this.redeemingTtsSku === item.sku ? '兑换中' : `${item.points} 点`)
-            .height(34)
-            .fontSize(13)
-            .enabled(!this.redeemingTtsSku && this.accountLoggedIn && this.paidPoints >= item.points)
-            .fontColor('#FFFFFF')
-            .backgroundColor(this.accentColor())
-            .onClick(() => {
-              this.redeemTtsPackage(item);
-            })
-        }
-        .width('100%')
-        .padding({ left: 12, right: 10, top: 10, bottom: 10 })
-        .borderRadius(12)
-        .backgroundColor(this.inputColor())
-      }, (item: TtsPackageInfo) => item.sku)
-
-      Text('标准音色每次按 100 字向上取整，精品音色每次按 50 字向上取整；相同音色、文字和倍速会优先使用本地缓存。')
-        .fontSize(11)
-        .lineHeight(17)
-        .fontColor(this.subTextColor())
-        .width('100%')
-    }
-    .width('calc(100% - 24vp)')
-    .padding(16)
-    .margin({ left: 12, right: 12, bottom: 24 })
-    .borderRadius(16)
-    .backgroundColor(this.cardColor())
-  }
-
-  @Builder
-  ttsBalanceCard(title: string, premium: boolean) {
-    Column({ space: 4 }) {
-      Text(title)
-        .fontSize(12)
-        .fontColor(this.subTextColor())
-      Text(this.ttsWalletLoaded
-        ? this.formatTtsChars(premium ? this.ttsPremiumChars : this.ttsStandardChars)
-        : '--')
-        .fontSize(19)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.primaryTextColor())
-      Text(this.ttsWalletLoaded
-        ? ((premium ? this.ttsPremiumNextExpiry : this.ttsStandardNextExpiry)
-          ? `${new Date((premium ? this.ttsPremiumNextExpiry : this.ttsStandardNextExpiry) as number)
-            .toLocaleDateString()} 到期`
-          : '暂无额度')
-        : (this.ttsWalletError ? '同步失败' : '正在同步'))
-        .fontSize(10)
-        .fontColor(this.subTextColor())
-    }
-    .alignItems(HorizontalAlign.Start)
-    .layoutWeight(1)
-    .padding(12)
-    .borderRadius(12)
-    .backgroundColor(this.inputColor())
-  }
-
   async togglePreview(): Promise<void> {
     if (this.isPreviewing) {
       this.previewReader.stop();
@@ -1333,9 +998,6 @@ struct TtsSettingsPage {
     try {
       this.isPreviewing = true;
       await this.previewReader.start(this.getPreviewText(), {
-        cloudVoiceId: this.findCurrentCloudVoice()?.id || '',
-        cloudVoiceName: this.findCurrentCloudVoice()?.name || '',
-        cloudVoiceTier: this.findCurrentCloudVoice()?.tier || 'STANDARD',
         person: this.ttsPerson,
         online: this.ttsOnline,
         style: this.ttsStyle,

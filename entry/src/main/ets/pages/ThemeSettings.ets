@@ -19,7 +19,6 @@ import { AccountApiError, ThemeCatalogItem, ThemeCatalogResponse,
   ThemeEntitlement } from '../account/AccountCommerceModels';
 import { AccountCommerceApi } from '../account/AccountCommerceApi';
 import { AccountSessionStore } from '../account/AccountSessionStore';
-import { HuaweiAccountService } from '../account/HuaweiAccountService';
 import {
   ReaderRegexBubbleStyleResolver,
   ReaderRegexEmphasisContext,
@@ -117,7 +116,6 @@ struct ThemeSettingsPage {
   aboutToAppear(): void {
     this.loadThemeSettings();
     this.refreshCustomSchemes();
-    this.initializeAccount();
     this.refreshThemeCatalog();
     this.syncBars();
   }
@@ -257,17 +255,6 @@ struct ThemeSettingsPage {
       iconOptions: { accessibilityText: '删除主题' },
       onAction: () => this.deleteCustomThemeFromSwipe(scheme)
     }] };
-  }
-
-  async initializeAccount(): Promise<void> {
-    try {
-      await HuaweiAccountService.initialize(getContext(this));
-      if (AccountSessionStore.isLoggedIn() && AccountCommerceConfig.isServerConfigured()) {
-        await HuaweiAccountService.refresh(getContext(this));
-      }
-    } catch (e) {
-      console.warn('同步主题权益失败:', e);
-    }
   }
 
   async refreshThemeCatalog(): Promise<void> {
@@ -454,17 +441,7 @@ struct ThemeSettingsPage {
     const pricePoints = offer?.pricePoints || AccountCommerceConfig.THEME_PRICE_POINTS;
     const validDays = offer?.validDays || AccountCommerceConfig.THEME_VALID_DAYS;
     if (!this.accountLoggedIn) {
-      const loginDialog = await promptAction.showDialog({
-        title: '登录后获取主题',
-        message: `该主题需要 ${pricePoints} 点，获取后有效 ${validDays} 天。首次登录免费送 300 点。`,
-        buttons: [
-          { text: '取消', color: this.subTextColor() },
-          { text: '去登录', color: this.accentColor() }
-        ]
-      });
-      if (loginDialog.index === 1) {
-        router.pushUrl({ url: 'pages/AccountCenter' });
-      }
+      promptAction.showToast({ message: '主题获取需要账号，登录功能已移除' });
       return false;
     }
     const theme = BuiltinThemeRegistry.findById(themeId);
@@ -480,26 +457,15 @@ struct ThemeSettingsPage {
       return false;
     }
     try {
-      await HuaweiAccountService.redeemTheme(getContext(this), themeId, pricePoints, validDays);
-      promptAction.showToast({ message: `已获取「${theme.name}」，有效期 ${validDays} 天` });
-      return true;
+      promptAction.showToast({ message: '主题获取功能已停用' });
+      return false;
     } catch (e) {
       const error = e as AccountApiError;
       if (error.errorCode === 'THEME_OFFER_CHANGED') {
         await this.refreshThemeCatalog();
         promptAction.showToast({ message: '主题价格或有效期已更新，请重新确认' });
       } else if (error.errorCode === 'INSUFFICIENT_POINTS') {
-        const recharge = await promptAction.showDialog({
-          title: '点数不足',
-          message: `当前有 ${this.accountPoints} 点，获取该主题需要 ${pricePoints} 点。`,
-          buttons: [
-            { text: '取消', color: this.subTextColor() },
-            { text: '去充值', color: this.accentColor() }
-          ]
-        });
-        if (recharge.index === 1) {
-          router.pushUrl({ url: 'pages/AccountCenter' });
-        }
+        promptAction.showToast({ message: `当前有 ${this.accountPoints} 点，获取该主题需要 ${pricePoints} 点。` });
       } else {
         promptAction.showToast({ message: error.message || '获取主题失败，请稍后重试' });
       }

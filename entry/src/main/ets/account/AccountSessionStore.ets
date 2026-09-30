@@ -2,7 +2,6 @@ import { Context } from '@kit.AbilityKit';
 import preferences from '@ohos.data.preferences';
 import {
   AccountSnapshot,
-  HuaweiLoginResponse,
   ThemeEntitlement
 } from './AccountCommerceModels';
 
@@ -47,34 +46,11 @@ export class AccountSessionStore {
     AccountSessionStore.applyToStorage();
   }
 
-  static async saveLogin(context: Context, response: HuaweiLoginResponse): Promise<void> {
-    AccountSessionStore.sessionToken = response.sessionToken || '';
-    AccountSessionStore.snapshot = AccountSessionStore.normalizeSnapshot(response.account);
-    AccountSessionStore.loaded = true;
-    await AccountSessionStore.persist(context);
-    AccountSessionStore.applyToStorage();
-  }
-
   static async updateSnapshot(context: Context, snapshot: AccountSnapshot): Promise<void> {
     AccountSessionStore.snapshot = AccountSessionStore.normalizeSnapshot(snapshot);
     AccountSessionStore.loaded = true;
     await AccountSessionStore.persist(context);
     AccountSessionStore.applyToStorage();
-  }
-
-  static async updateSessionToken(context: Context, expectedToken: string, sessionToken: string): Promise<boolean> {
-    if (!sessionToken) {
-      throw new Error('续签接口未返回登录凭证');
-    }
-    if (!expectedToken || AccountSessionStore.sessionToken !== expectedToken) {
-      return false;
-    }
-    AccountSessionStore.sessionToken = sessionToken;
-    const store = await preferences.getPreferences(context, AccountSessionStore.STORE_NAME);
-    await store.put(AccountSessionStore.KEY_SESSION_TOKEN, sessionToken);
-    await store.flush();
-    AccountSessionStore.applyToStorage();
-    return true;
   }
 
   static async clear(context: Context): Promise<void> {

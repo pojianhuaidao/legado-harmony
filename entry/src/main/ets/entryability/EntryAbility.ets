@@ -18,7 +18,6 @@ import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { ThemeIds } from '../theme/ThemeModels';
 import { ThemeTrialManager } from '../utils/ThemeTrialManager';
 import { AccountSessionStore } from '../account/AccountSessionStore';
-import { HuaweiAccountService } from '../account/HuaweiAccountService';
 import { CloudSyncSettingsStore } from '../account/CloudSyncSettingsStore';
 import { CloudSyncCoordinator } from '../account/CloudSyncCoordinator';
 import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
@@ -116,7 +115,6 @@ export default class EntryAbility extends UIAbility {
     PersistentStorage.persistProp('ttsInstalledVoiceKeys', '');
     PersistentStorage.persistProp('ttsCustomVoiceId', '');
     PersistentStorage.persistProp('ttsCustomVoices', '');
-    PersistentStorage.persistProp('ttsCloudVoiceId', '');
     PersistentStorage.persistProp('ttsOfflineSdkModeMigrated', false);
     if (!AppStorage.get<boolean>('ttsOfflineSdkModeMigrated')) {
       if (AppStorage.get<number>('ttsOnline') === 0 &&
@@ -304,7 +302,7 @@ export default class EntryAbility extends UIAbility {
     ThemeTrialManager.stopIfExpired();
     this.syncSystemColorMode(this.context.config);
     this.accountBootstrapPromise
-      .then(() => HuaweiAccountService.renewSession(this.context))
+      .then(() => {})
       .catch((e: Error) => {
         hilog.warn(0x0000, 'testTag', 'Renew account session failed: %{public}s', JSON.stringify(e));
       })

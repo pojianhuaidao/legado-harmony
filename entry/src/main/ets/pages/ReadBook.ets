@@ -16,10 +16,7 @@ import Animator, { AnimatorResult } from '@ohos.animator';
 import { HdsTabs, HdsListItem, HdsSwipeActionOptions } from '@kit.UIDesignKit';
 import { ARView } from '@kit.AREngine';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
-import { AccountCommerceApi } from '../account/AccountCommerceApi';
-import { AccountSessionStore } from '../account/AccountSessionStore';
 import { CloudSyncCoordinator } from '../account/CloudSyncCoordinator';
-import { TtsVoiceInfo } from '../account/AccountCommerceModels';
 import { Book, BookChapter, Bookmark, BookSource, SearchBook, HttpTTS } from '../model/data/Book';
 import { AppDatabase } from '../model/data/AppDatabase';
 import { ReadBookEngine } from '../core/book/ReadBookEngine';
@@ -645,12 +642,10 @@ struct ReadBookPage {
   @StorageLink('ttsInstalledVoiceKeys') ttsInstalledVoiceKeys: string = '';
   @StorageLink('ttsCustomVoiceId') ttsCustomVoiceId: string = '';
   @StorageLink('ttsCustomVoices') @Watch('onTtsCustomVoicesChanged') ttsCustomVoices: string = '';
-  @StorageLink('ttsCloudVoiceId') ttsCloudVoiceId: string = '';
   @StorageLink('launchShortcutNonce') @Watch('onLaunchShortcutChanged') launchShortcutNonce: number = 0;
   @StorageLink('fullTextCacheCancelNonce') @Watch('onFullTextCacheCancelNonceChanged') fullTextCacheCancelNonce: number = 0;
   @State ttsVoices: TtsVoiceOption[] = [ReadBookPage.defaultTtsVoice()];
   @State ttsCustomVoiceOptions: HttpTTS[] = [];
-  @State ttsCloudVoices: TtsVoiceInfo[] = [];
   @State ttsSelectedVoiceKey: string = '';
   @State ttsVoicesLoading: boolean = false;
   @State showTtsVoiceDropdown: boolean = false;
@@ -7380,7 +7375,6 @@ struct ReadBookPage {
     this.ttsInstalledVoiceKeys = settings.installedVoiceKeys;
     this.ttsCustomVoiceId = settings.customVoiceId;
     this.ttsCustomVoices = settings.customVoices;
-    this.ttsCloudVoiceId = settings.cloudVoiceId;
     this.ttsCustomVoiceOptions = SystemTtsReader.parseCustomVoices(settings.customVoices);
   }
 
@@ -7407,7 +7401,6 @@ struct ReadBookPage {
     settings.installedVoiceKeys = this.ttsInstalledVoiceKeys;
     settings.customVoiceId = this.ttsCustomVoiceId;
     settings.customVoices = this.ttsCustomVoices;
-    settings.cloudVoiceId = this.ttsCloudVoiceId;
     return settings;
   }
 
@@ -7425,33 +7418,8 @@ struct ReadBookPage {
     }
     this.ttsVoicesLoading = true;
     try {
-      const voiceResults = await Promise.all([
-        SystemTtsReader.listAvailableVoices(),
-        AccountCommerceApi.fetchTtsCatalog().catch(() => null)
-      ]);
-      const voices = voiceResults[0] as TtsVoiceOption[];
-      const catalog = voiceResults[1];
-      this.ttsCloudVoices = catalog ? catalog.voices : [];
-      if (catalog && this.ttsCloudVoiceId && !this.findCurrentCloudTtsVoice()) {
-        const previousVoiceId = this.ttsCloudVoiceId;
-        const fallbackVoice = this.ttsCloudVoices.find((voice: TtsVoiceInfo) => voice.id === 'xiaoyan') ||
-          this.ttsCloudVoices[0];
-        this.ttsCloudVoiceId = fallbackVoice ? fallbackVoice.id : '';
-        console.warn(`[TTS] unsupported cloud voice migrated: ${previousVoiceId} -> ${this.ttsCloudVoiceId}`);
-        this.saveTtsSettings();
-      }
-      if (!catalog && this.ttsCloudVoiceId) {
-        const fallbackCloudVoice = new TtsVoiceInfo();
-        fallbackCloudVoice.id = this.ttsCloudVoiceId;
-        fallbackCloudVoice.name = '云端音色';
-        this.ttsCloudVoices = [fallbackCloudVoice];
-      }
+      const voices = await SystemTtsReader.listAvailableVoices();
       this.ttsVoices = this.applyInstalledTtsVoiceOverrides(this.mergeWithDefaultTtsVoice(voices));
-      const currentCloudVoice = this.findCurrentCloudTtsVoice();
-      if (currentCloudVoice) {
-        this.ttsSelectedVoiceKey = this.ttsCloudVoiceKey(currentCloudVoice);
-        return;
-      }
       const currentCustomVoice = this.findCurrentCustomTtsVoice();
       if (currentCustomVoice) {
         this.ttsSelectedVoiceKey = this.ttsCustomVoiceKey(currentCustomVoice);
@@ -7470,7 +7438,6 @@ struct ReadBookPage {
       this.ttsStyle = '';
       this.ttsLanguage = 'zh-CN';
       this.ttsCustomVoiceId = '';
-      this.ttsCloudVoiceId = '';
       this.saveTtsSettings();
       this.ttsSelectedVoiceKey = this.currentTtsVoiceKey();
       console.warn('加载朗读音色失败:', e);
@@ -7583,7 +7550,6 @@ struct ReadBookPage {
     this.ttsStyle = voice.style;
     this.ttsLanguage = voice.language;
     this.ttsCustomVoiceId = '';
-    this.ttsCloudVoiceId = '';
     this.ttsSelectedVoiceKey = this.ttsVoiceKey(voice);
     this.saveTtsSettings();
     if (shouldResume) {
@@ -7677,10 +7643,6 @@ struct ReadBookPage {
   }
 
   currentTtsVoiceKey(): string {
-    const cloudVoice = this.findCurrentCloudTtsVoice();
-    if (cloudVoice) {
-      return this.ttsCloudVoiceKey(cloudVoice);
-    }
     const customVoice = this.findCurrentCustomTtsVoice();
     if (customVoice) {
       return this.ttsCustomVoiceKey(customVoice);
@@ -7695,7 +7657,7 @@ struct ReadBookPage {
   }
 
   isCurrentTtsVoice(voice: TtsVoiceOption): boolean {
-    if (this.ttsCustomVoiceId || this.ttsCloudVoiceId) {
+    if (this.ttsCustomVoiceId) {
       return false;
     }
     return voice.id === this.ttsPerson && voice.online === this.ttsOnline &&
@@ -7713,7 +7675,6 @@ struct ReadBookPage {
       this.stopTtsReading();
     }
     this.ttsCustomVoiceId = String(voice.id);
-    this.ttsCloudVoiceId = '';
     this.ttsSelectedVoiceKey = this.ttsCustomVoiceKey(voice);
     this.saveTtsSettings();
     if (shouldResume) {
@@ -7808,48 +7769,6 @@ struct ReadBookPage {
     this.scrollTocToCurrentChapter(false);
   }
 
-  applyCloudTtsVoice(voice: TtsVoiceInfo, restartSpeaking: boolean): void {
-    if (!AccountSessionStore.isLoggedIn()) {
-      promptAction.showToast({ message: '请先登录华为账号后使用在线音色' });
-      return;
-    }
-    const shouldResume = restartSpeaking && (this.isTtsSpeaking || this.ttsReader.isSpeaking());
-    if (shouldResume) {
-      this.stopTtsReading();
-    }
-    this.ttsCloudVoiceId = voice.id;
-    this.ttsCustomVoiceId = '';
-    this.ttsSelectedVoiceKey = this.ttsCloudVoiceKey(voice);
-    this.saveTtsSettings();
-    if (shouldResume) {
-      this.startTtsReadingFromCurrentPosition(false).catch((e: Error) => {
-        console.warn('切换在线朗读音色后恢复失败:', e);
-      });
-    }
-  }
-
-  findCurrentCloudTtsVoice(): TtsVoiceInfo | undefined {
-    const selectedId = (this.ttsCloudVoiceId || '').trim();
-    if (!selectedId) return undefined;
-    return this.ttsCloudVoices.find((voice: TtsVoiceInfo) => voice.id === selectedId);
-  }
-
-  ttsCloudVoiceKey(voice: TtsVoiceInfo): string {
-    return `cloud_${voice.id}`;
-  }
-
-  isCurrentCloudTtsVoice(voice: TtsVoiceInfo): boolean {
-    return (this.ttsCloudVoiceId || '') === voice.id;
-  }
-
-  ttsCloudVoiceTitle(voice: TtsVoiceInfo): string {
-    const tier = voice.tier === 'PREMIUM' ? '精品' : '标准';
-    const description = (voice.description || '').trim();
-    return description
-      ? `${voice.name} · ${description} · 云端${tier}`
-      : `${voice.name} · 云端${tier}`;
-  }
-
   selectableCustomTtsVoices(): HttpTTS[] {
     return this.ttsCustomVoiceOptions.filter((voice: HttpTTS) => voice.enabled !== false);
   }
@@ -7859,10 +7778,6 @@ struct ReadBookPage {
   }
 
   selectedTtsVoiceTitle(): string {
-    const cloudVoice = this.findCurrentCloudTtsVoice();
-    if (cloudVoice) {
-      return this.ttsCloudVoiceTitle(cloudVoice);
-    }
     const customVoice = this.findCurrentCustomTtsVoice();
     if (customVoice && customVoice.enabled !== false) {
       return this.ttsCustomVoiceTitle(customVoice);
@@ -7872,9 +7787,6 @@ struct ReadBookPage {
       return this.ttsVoiceTitle(systemVoice);
     }
     const customVoices = this.selectableCustomTtsVoices();
-    if (this.ttsCloudVoices.length > 0) {
-      return this.ttsCloudVoiceTitle(this.ttsCloudVoices[0]);
-    }
     if (customVoices.length > 0) {
       return this.ttsCustomVoiceTitle(customVoices[0]);
     }
@@ -7884,9 +7796,6 @@ struct ReadBookPage {
 
   ttsQuickVoiceOptions(): SelectOption[] {
     const options: SelectOption[] = [];
-    for (const voice of this.ttsCloudVoices) {
-      options.push({ value: this.ttsCloudVoiceTitle(voice) });
-    }
     for (const voice of this.selectableCustomTtsVoices()) {
       options.push({ value: this.ttsCustomVoiceTitle(voice) });
     }
@@ -7904,32 +7813,24 @@ struct ReadBookPage {
   }
 
   ttsQuickVoiceSelectedIndex(): number {
-    const cloudIndex = this.ttsCloudVoices.findIndex((voice: TtsVoiceInfo) =>
-      this.isCurrentCloudTtsVoice(voice));
-    if (cloudIndex >= 0) return cloudIndex;
     const customVoices = this.selectableCustomTtsVoices();
     const customIndex = customVoices.findIndex((voice: HttpTTS) => this.isCurrentCustomTtsVoice(voice));
-    if (customIndex >= 0) return this.ttsCloudVoices.length + customIndex;
+    if (customIndex >= 0) return customIndex;
     const systemVoices = this.selectableSystemTtsVoices();
     const systemIndex = systemVoices.findIndex((voice: TtsVoiceOption) => this.isCurrentTtsVoice(voice));
-    if (systemIndex >= 0) return this.ttsCloudVoices.length + customVoices.length + systemIndex;
+    if (systemIndex >= 0) return customVoices.length + systemIndex;
     return 0;
   }
 
   selectTtsQuickVoice(index: number): void {
     if (index < 0) return;
-    if (index < this.ttsCloudVoices.length) {
-      this.applyCloudTtsVoice(this.ttsCloudVoices[index], true);
-      return;
-    }
     const customVoices = this.selectableCustomTtsVoices();
-    const customIndex = index - this.ttsCloudVoices.length;
-    if (customIndex < customVoices.length) {
-      this.applyCustomTtsVoice(customVoices[customIndex], true);
+    if (index < customVoices.length) {
+      this.applyCustomTtsVoice(customVoices[index], true);
       return;
     }
     const systemVoices = this.selectableSystemTtsVoices();
-    const systemIndex = customIndex - customVoices.length;
+    const systemIndex = index - customVoices.length;
     if (systemIndex >= 0 && systemIndex < systemVoices.length) {
       this.applyTtsVoice(systemVoices[systemIndex], true);
     }
@@ -11929,17 +11830,6 @@ struct ReadBookPage {
 
         Scroll() {
           Column() {
-            if (this.ttsCloudVoices.length > 0) {
-              this.ttsVoiceDropdownSectionTitle('云端音色')
-              ForEach(this.ttsCloudVoices, (voice: TtsVoiceInfo) => {
-                this.ttsVoiceDropdownOption(this.ttsCloudVoiceTitle(voice),
-                  this.isCurrentCloudTtsVoice(voice), () => {
-                    this.showTtsVoiceDropdown = false;
-                    this.applyCloudTtsVoice(voice, true);
-                  })
-              }, (voice: TtsVoiceInfo) => this.ttsCloudVoiceKey(voice))
-            }
-
             if (this.selectableCustomTtsVoices().length > 0) {
               this.ttsVoiceDropdownSectionTitle('自定义音色')
               ForEach(this.selectableCustomTtsVoices(), (voice: HttpTTS) => {
@@ -13814,7 +13704,6 @@ struct ReadBookPage {
         return;
       }
       this.publishTtsFloatingSession();
-      const cloudVoice = this.findCurrentCloudTtsVoice();
       await this.ttsReader.start(text, {
         onFinished: () => {
           this.continueTtsReading(token).catch((e: Error) => {
@@ -13856,9 +13745,6 @@ struct ReadBookPage {
           }
           this.onTtsAudioStarted();
         },
-        cloudVoiceId: cloudVoice?.id || '',
-        cloudVoiceName: cloudVoice?.name || '',
-        cloudVoiceTier: cloudVoice?.tier || 'STANDARD',
         person: this.ttsPerson,
         online: this.ttsOnline,
         style: this.ttsStyle,
