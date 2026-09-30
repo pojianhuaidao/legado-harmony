@@ -80,7 +80,7 @@ struct SubscriptionImportPage {
           reject(new Error('HTTP ' + response.responseCode));
         }
         httpRequest.destroy();
-      }).catch((err) => {
+      }).catch((err: Error) => {
         httpRequest.destroy();
         reject(err);
       });

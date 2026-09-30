@@ -27,7 +27,7 @@ struct SubscriptionWebViewPage {
   private controller: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear(): void {
-    syncSystemBars();
+    syncSystemBars(getContext(this), this.appDarkMode);
     const params = router.getParams() as Record<string, string>;
     if (params) {
       this.sourceUrl = params['sourceUrl'] || '';
@@ -43,7 +43,7 @@ struct SubscriptionWebViewPage {
   }
 
   onPageShow(): void {
-    syncSystemBars();
+    syncSystemBars(getContext(this), this.appDarkMode);
   }
 
   onBackPress(): boolean {
@@ -157,8 +157,9 @@ struct SubscriptionWebViewPage {
             this.updateNavState();
           }
         })
-        .onErrorReceived((event?: OnErrorReceiveEvent) => {
-          if (event && event.request && event.request.getErrorCode() !== 200) {
+        .onErrorReceive((event?: OnErrorReceiveEvent) => {
+          const err = event ? event.getError() : undefined;
+          if (err && err.getErrorCode() !== 200) {
             promptAction.showToast({ message: '页面加载失败' });
           }
         })

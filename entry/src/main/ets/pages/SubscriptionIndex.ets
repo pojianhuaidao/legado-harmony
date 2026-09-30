@@ -16,7 +16,7 @@ struct SubscriptionIndexPage {
   @StorageProp('navBarHeight') navBarHeight: number = 0;
 
   onPageShow(): void {
-    syncSystemBars();
+    syncSystemBars(getContext(this), this.appDarkMode);
   }
 
   onBackPress(): boolean {

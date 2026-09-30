@@ -475,7 +475,7 @@ export struct SubscriptionTab {
           .layoutWeight(1)
 
         Row({ space: 2 }) {
-          SymbolGlyph($r('sys.symbol.clock_arrow_circlepath'))
+          SymbolGlyph($r('sys.symbol.timer'))
             .fontSize(21)
             .fontColor([this.primaryTextColor()])
             .width(40)
@@ -673,7 +673,7 @@ export struct SubscriptionTab {
       .justifyContent(FlexAlign.Center)
     } else if (this.visibleSources.length === 0) {
       Column({ space: 10 }) {
-        SymbolGlyph($r('sys.symbol.tray'))
+        SymbolGlyph($r('sys.symbol.bookshelf'))
           .fontSize(52)
           .fontColor([this.secondaryTextColor()])
         Text('暂无订阅源')
@@ -847,6 +847,7 @@ export struct SubscriptionTab {
         this.showNewGroupDialog = true;
       })
     }
+    .margin({ top: 132, right: 16 })
     .width(168)
     .padding(6)
     .borderRadius(ThemeRuntime.glassCornerRadius(14, 'menu'))
@@ -1087,7 +1088,6 @@ export struct SubscriptionTab {
               this.showAddMenu = false;
             })
           this.addMenu()
-            .margin({ top: 132, right: 16 })
         }
         .width('100%')
         .height('100%')
@@ -1119,11 +1119,11 @@ export struct SubscriptionTab {
         this.moveGroupTarget = '';
       }
     })
-    .bindDialog($$this.showNewGroupDialog, this.newGroupDialog(), {
-      backgroundColor: ThemeRuntime.dropdownPanelColor(this.appDarkMode, '', 'overlay'),
-      cornerRadius: 16,
-      autoCancel: true,
-      alignment: DialogAlignment.Center
+    .bindSheet($$this.showNewGroupDialog, this.newGroupDialog(), {
+      height: 300,
+      dragBar: false,
+      showClose: false,
+      backgroundColor: ThemeRuntime.dropdownPanelColor(this.appDarkMode, '', 'overlay')
     })
   }
 }
