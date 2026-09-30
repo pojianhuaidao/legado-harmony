@@ -1,4 +1,4 @@
-import { bundleManager, common } from '@kit.AbilityKit';
+import { bundleManager } from '@kit.AbilityKit';
 import { promptAction, router } from '@kit.ArkUI';
 import { syncSystemBars } from '../utils/SystemBars';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
@@ -38,7 +38,7 @@ struct AboutPage {
           .justifyContent(FlexAlign.Center)
           .margin({ top: 28, bottom: 14 })
 
-          Text('开源轻页')
+          Text('爱·阅读')
             .fontSize(22)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.primaryTextColor())
@@ -56,15 +56,10 @@ struct AboutPage {
           this.infoCard('使用提醒',
             '导入书源前，请自行确认书源来源、目标站点协议、内容授权和所在地法律法规要求。项目仅按用户配置的规则发起访问和解析，不以破解付费内容、绕过访问控制、规避反爬机制或批量抓取受保护内容为目标。')
 
-          this.feedbackCard()
-
           this.licenseCard()
 
           this.infoCard('致谢',
             '感谢 @南破万卷墙 @一个人吃二二 @jueyaocaptain @茶安安安 @相思界 @一程 @奔四老男人 为App开发提出的建议和支持。')
-
-          this.infoCard('APP 备案信息',
-            '备案编号：蜀ICP备2023018793号-2A')
 
           Column() {
             Text('请仅使用自有、授权或明确允许访问的内容与规则。')
@@ -130,49 +125,6 @@ struct AboutPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  @Builder
-  feedbackCard() {
-    Column() {
-      Text('问题反馈')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.primaryTextColor())
-        .width('100%')
-
-      this.feedbackRow('邮箱', 'i@icynol.com', () => {
-        this.openUri('mailto:i@icynol.com', '未找到可用的邮件应用');
-      })
-
-      this.feedbackRow('QQ群', '345769197', () => {
-        this.openUri('mqqapi://card/show_pslcard?src_type=internal&version=1&uin=345769197&card_type=group&source=qrcode',
-          '未找到 QQ 或无法打开群资料');
-      })
-    }
-    .width('100%')
-    .padding(16)
-    .backgroundColor(this.cardColor())
-    .borderRadius(10)
-    .margin({ left: 16, right: 16, bottom: 12 })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  feedbackRow(label: string, value: string, action: () => void) {
-    Row() {
-      Text(`${label}：`)
-        .fontSize(14)
-        .fontColor(this.secondaryTextColor())
-        .width(76)
-      Text(value)
-        .fontSize(14)
-        .fontColor(this.accentColor())
-    }
-    .width('100%')
-    .padding({ top: 12, bottom: 2 })
-    .justifyContent(FlexAlign.Start)
-    .onClick(action)
-  }
-
   pageColor(): string {
     return ThemeRuntime.pageColor(this.appDarkMode);
   }
@@ -230,25 +182,6 @@ struct AboutPage {
 
   accentColor(): string {
     return ThemeRuntime.accentColor(this.appDarkMode);
-  }
-
-  openUri(uri: string, fallbackMessage: string): void {
-    const context = getContext(this) as common.UIAbilityContext;
-    context.startAbility({
-      action: 'ohos.want.action.viewData',
-      uri: uri
-    }).catch((error: Error) => {
-      console.error('打开外部应用失败:', error);
-      this.showToastSafely(fallbackMessage);
-    });
-  }
-
-  showToastSafely(message: string): void {
-    try {
-      promptAction.showToast({ message: message });
-    } catch (error) {
-      console.error('显示关于页提示失败:', error);
-    }
   }
 
   syncBars(): void {

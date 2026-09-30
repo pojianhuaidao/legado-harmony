@@ -1,4 +1,4 @@
-{
+﻿{
   "shortcuts": [
     {
       "shortcutId": "recent_read",
@@ -6,7 +6,7 @@
       "icon": "$media:layered_image",
       "wants": [
         {
-          "bundleName": "io.legado.read",
+          "bundleName": "lagado.hm",
           "moduleName": "entry",
           "abilityName": "EntryAbility",
           "parameters": {

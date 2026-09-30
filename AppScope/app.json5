@@ -1,14 +1,14 @@
 {
   "app": {
-    "bundleName": "io.legado.read",
+    "bundleName": "lagado.hm",
     "vendor": "legado",
-    "versionCode": 390907,
-    "versionName": "3.9.907",
+    "versionCode": 1093001,
+    "versionName": "1.0930.01",
     "bundleType": "app",
     "debug": false,
     "icon": "$media:layered_image",
     "label": "$string:app_name",
-    "buildVersion": "390907",
+    "buildVersion": "1093001",
     "distributedNotificationEnabled": true,
     "keepAlive": false,
     "minAPIVersion": 12,
