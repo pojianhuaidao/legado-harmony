@@ -1386,6 +1386,10 @@ struct BookSourcePage {
           this.showAddDialog = false;
           this.importFromFile();
         }, false)
+        this.popupActionItem($r('sys.symbol.arrow_right_up_and_square'), '订阅管理', this.primaryTextColor(), () => {
+          this.showAddDialog = false;
+          router.pushUrl({ url: 'pages/SubscriptionIndex' });
+        })
       }
       .width(188)
       .padding({ left: 6, right: 6, top: 6, bottom: 6 })

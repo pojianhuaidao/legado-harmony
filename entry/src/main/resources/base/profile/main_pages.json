@@ -35,6 +35,9 @@
     "pages/CoverGalleryManager",
     "pages/About",
     "pages/OpenSourceLicenses",
-    "pages/VerifyWeb"
+    "pages/VerifyWeb",
+    "pages/SubscriptionIndex",
+    "pages/SubscriptionWebView",
+    "pages/SubscriptionImport"
   ]
 }

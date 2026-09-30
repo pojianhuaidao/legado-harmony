@@ -18,6 +18,7 @@ import { BookSourceStageWebRuntime } from '../core/book/BookSourceStageWebRuntim
 import { ReadBookEngine } from '../core/book/ReadBookEngine';
 import { SearchBookResultList } from '../components/book/SearchBookResultList';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
+import { SubscriptionTab } from '../components/SubscriptionTab';
 import { WebBookFetchRuntimeHost } from '../components/WebBookFetchRuntimeHost';
 import { syncSystemSafeAreas } from '../utils/SystemBars';
 import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
@@ -644,15 +645,16 @@ struct Index {
       .tabBar(this.bottomTabBar(this.navigationIcon('explore'), '发现'))
 
       TabContent() {
-        SearchPage({
+        SubscriptionTab({
           statusBarHeight: this.statusBarHeight,
           navBarHeight: this.navBarHeight,
-          isActive: this.currentIndex === 2
+          isActive: this.currentIndex === 2,
+          pageMode: false
         })
       }
       .height('100%')
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
-      .tabBar(this.bottomTabBar(this.navigationIcon('search'), '搜索'))
+      .tabBar(this.bottomTabBar(this.navigationIcon('search'), '订阅'))
 
       TabContent() {
         if (this.currentIndex === 3) {
@@ -733,15 +735,16 @@ struct Index {
       .tabBar(this.compatTabBar(this.navigationIcon('explore'), '发现', 1))
 
       TabContent() {
-        SearchPage({
+        SubscriptionTab({
           statusBarHeight: this.statusBarHeight,
           navBarHeight: this.navBarHeight,
-          isActive: this.currentIndex === 2
+          isActive: this.currentIndex === 2,
+          pageMode: false
         })
       }
       .height('100%')
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
-      .tabBar(this.compatTabBar(this.navigationIcon('search'), '搜索', 2))
+      .tabBar(this.compatTabBar(this.navigationIcon('search'), '订阅', 2))
 
       TabContent() {
         if (this.currentIndex === 3) {
@@ -2256,6 +2259,31 @@ struct BookshelfPage {
 
         if (this.isBookMultiSelect) {
           this.bookSelectionStatusBar()
+        }
+
+        if (!this.isBookMultiSelect) {
+          Row() {
+            SymbolGlyph($r('sys.symbol.magnifyingglass'))
+              .fontSize(16)
+              .fontColor([this.secondaryTextColor()])
+            Text('搜索本地书源')
+              .fontSize(15)
+              .fontColor(this.secondaryTextColor())
+              .margin({ left: 8 })
+            Blank()
+            SymbolGlyph($r('sys.symbol.arrow_right'))
+              .fontSize(14)
+              .fontColor([this.secondaryTextColor()])
+          }
+          .width('100%')
+          .height(40)
+          .margin({ left: 16, right: 16, top: 6, bottom: 2 })
+          .padding({ left: 12, right: 12 })
+          .borderRadius(20)
+          .backgroundColor(ThemeRuntime.glassPanelColor(this.appDarkMode, '', 'panel'))
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/SearchBookDetail' });
+          })
         }
 
         if (this.showShelfGroups && !this.isBookMultiSelect) {

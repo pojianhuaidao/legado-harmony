@@ -1,5 +1,6 @@
 import relationalStore from '@ohos.data.relationalStore';
 import { Book, BookChapter, BookSource, BookGroup, Bookmark, SearchKeyword, ExploreRule, TocRule, ContentRule } from './Book';
+import { rssSources, RssSourceGroup, rssSourcesHistory, rssSourceDb, ToRssSources, ToRssSourcesDb, rssSourcesTypeParams } from './RssSource';
 import { Context } from '@kit.AbilityKit';
 import { CloudSyncChangeTracker } from '../../account/CloudSyncChangeTracker';
 import { BookIdentity } from '../../utils/BookIdentity';
@@ -51,7 +52,7 @@ export class AppDatabase {
   private bookProgressWriteTasks: Map<string, Promise<void>> = new Map<string, Promise<void>>();
   private latestBookProgressWriteTimes: Map<string, number> = new Map<string, number>();
   private readonly DATABASE_NAME = 'legado.db';
-  private readonly SCHEMA_VERSION = 18;
+  private readonly SCHEMA_VERSION = 19;
 
   private constructor() {}
 
@@ -87,6 +88,7 @@ export class AppDatabase {
 
     this.store = await relationalStore.getRdbStore(context, config);
     await this.createTables();
+    await this.initDefaultRssSourceGroups();
     await this.initDefaultData();
     this.initialized = true;
   }
@@ -277,6 +279,69 @@ export class AppDatabase {
       )
     `);
 
+    // ===== 订阅源(RSS)表：从 legado-Harmony 移植，SCHEMA_VERSION 19 =====
+    await this.store.executeSql(`
+      CREATE TABLE IF NOT EXISTS rssSources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sourceType INTEGER DEFAULT 0,
+        sourceName TEXT DEFAULT '',
+        sourceUrl TEXT DEFAULT '',
+        sourceIcon TEXT DEFAULT '',
+        sourceIconIsUrl INTEGER DEFAULT 0,
+        sourceGroup TEXT DEFAULT '',
+        sourceComment TEXT DEFAULT '',
+        enabled INTEGER DEFAULT 1,
+        variableComment TEXT DEFAULT '',
+        jsLib TEXT DEFAULT '',
+        enabledCookieJar INTEGER DEFAULT 0,
+        concurrentRate TEXT DEFAULT '',
+        header TEXT DEFAULT '',
+        loginUrl TEXT DEFAULT '',
+        loginUi TEXT DEFAULT '',
+        loginCheckJs TEXT DEFAULT '',
+        coverDecodeJs TEXT DEFAULT '',
+        sortUrl TEXT DEFAULT '',
+        singleUrl INTEGER DEFAULT 1,
+        articleStyle TEXT DEFAULT '',
+        lastUpdateTime INTEGER DEFAULT 0,
+        customOrder INTEGER DEFAULT 0,
+        variable TEXT DEFAULT '',
+        showRecentIcon INTEGER DEFAULT 1,
+        autoComplete INTEGER DEFAULT 1,
+        customizeTitle TEXT DEFAULT '',
+        rssListRule TEXT DEFAULT '',
+        rssWebViewRule TEXT DEFAULT ''
+      )
+    `);
+
+    await this.store.executeSql(`
+      CREATE TABLE IF NOT EXISTS rss_source_group (
+        rssGroupId INTEGER PRIMARY KEY AUTOINCREMENT,
+        rssGroupName TEXT DEFAULT '',
+        groupSort INTEGER DEFAULT 0,
+        isTop INTEGER DEFAULT 0,
+        isDelete INTEGER DEFAULT 1
+      )
+    `);
+
+    await this.store.executeSql(`
+      CREATE TABLE IF NOT EXISTS rss_sources_history (
+        sourceType INTEGER DEFAULT 0,
+        sourceName TEXT DEFAULT '',
+        sourceUrl TEXT PRIMARY KEY,
+        sourceIcon TEXT DEFAULT '',
+        sourceIconIsUrl INTEGER DEFAULT 0,
+        sourceGroup TEXT DEFAULT '',
+        lastUpdateTime INTEGER DEFAULT 0,
+        showRecentIcon INTEGER DEFAULT 1,
+        customizeTitle TEXT DEFAULT ''
+      )
+    `);
+    await this.store.executeSql(`
+      CREATE INDEX IF NOT EXISTS index_rssSources_sourceUrl ON rssSources(sourceUrl)
+    `);
+    // ===== 订阅源(RSS)表结束 =====
+
     const schemaVersion = await this.getSchemaVersion();
     if (schemaVersion < this.SCHEMA_VERSION) {
       await this.migrateTables();
@@ -310,6 +375,10 @@ export class AppDatabase {
       'CREATE INDEX IF NOT EXISTS idx_book_sources_enabled_order ON book_sources(enabled, isPinned DESC, customOrder)');
     await this.store.executeSql(
       'CREATE INDEX IF NOT EXISTS idx_book_sources_explore_order ON book_sources(enabled, enabledExplore, isPinned DESC, customOrder)');
+    await this.store.executeSql(
+      'CREATE INDEX IF NOT EXISTS index_rssSources_sourceUrl ON rssSources(sourceUrl)');
+    await this.store.executeSql(
+      'CREATE INDEX IF NOT EXISTS index_rssSources_group_order ON rssSources(sourceGroup, customOrder)');
   }
 
   private async getSchemaVersion(): Promise<number> {
@@ -2257,6 +2326,492 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('search_keywords');
     predicates.equalTo('keyword', keyword);
     await this.store.delete(predicates);
+  }
+
+  // ==================== 订阅源(RSS) DAO：从 legado-Harmony 移植 ====================
+
+  private toRssSourcesBucket(dbRow: rssSourceDb): relationalStore.ValuesBucket {
+    const bucket: relationalStore.ValuesBucket = {
+      sourceType: dbRow.sourceType,
+      sourceName: dbRow.sourceName || '',
+      sourceUrl: dbRow.sourceUrl,
+      sourceIcon: dbRow.sourceIcon || '',
+      sourceIconIsUrl: dbRow.sourceIconIsUrl ? 1 : 0,
+      sourceGroup: dbRow.sourceGroup || '',
+      sourceComment: dbRow.sourceComment || '',
+      enabled: dbRow.enabled ? 1 : 0,
+      variableComment: dbRow.variableComment || '',
+      jsLib: dbRow.jsLib || '',
+      enabledCookieJar: dbRow.enabledCookieJar ? 1 : 0,
+      concurrentRate: dbRow.concurrentRate || '',
+      header: dbRow.header || '',
+      loginUrl: dbRow.loginUrl || '',
+      loginUi: dbRow.loginUi || '',
+      loginCheckJs: dbRow.loginCheckJs || '',
+      coverDecodeJs: dbRow.coverDecodeJs || '',
+      sortUrl: dbRow.sortUrl || '',
+      singleUrl: dbRow.singleUrl ? 1 : 0,
+      articleStyle: dbRow.articleStyle || '',
+      lastUpdateTime: dbRow.lastUpdateTime,
+      customOrder: dbRow.customOrder,
+      variable: dbRow.variable || '',
+      showRecentIcon: dbRow.showRecentIcon ? 1 : 0,
+      autoComplete: dbRow.autoComplete ? 1 : 0,
+      customizeTitle: dbRow.customizeTitle || '',
+      rssListRule: dbRow.rssListRule || '',
+      rssWebViewRule: dbRow.rssWebViewRule || ''
+    };
+    if (dbRow.id !== undefined && dbRow.id !== 0) {
+      bucket['id'] = dbRow.id;
+    }
+    return bucket;
+  }
+
+  private toRssSourcesHistoryBucket(history: rssSourcesHistory): relationalStore.ValuesBucket {
+    const bucket: relationalStore.ValuesBucket = {
+      sourceType: history.sourceType,
+      sourceName: history.sourceName || '',
+      sourceUrl: history.sourceUrl,
+      sourceIcon: history.sourceIcon || '',
+      sourceIconIsUrl: history.sourceIconIsUrl ? 1 : 0,
+      sourceGroup: history.sourceGroup || '',
+      lastUpdateTime: history.lastUpdateTime,
+      showRecentIcon: history.showRecentIcon ? 1 : 0,
+      customizeTitle: history.customizeTitle || ''
+    };
+    return bucket;
+  }
+
+  private resultSetToRssSources(resultSet: relationalStore.ResultSet): rssSources {
+    const dbRow: rssSourceDb = {
+      id: this.getLongColumn(resultSet, 'id'),
+      sourceType: this.getLongColumn(resultSet, 'sourceType'),
+      sourceName: this.getStringColumn(resultSet, 'sourceName'),
+      sourceUrl: this.getStringColumn(resultSet, 'sourceUrl'),
+      sourceIcon: this.getStringColumn(resultSet, 'sourceIcon'),
+      sourceIconIsUrl: this.getLongColumn(resultSet, 'sourceIconIsUrl') === 1,
+      sourceGroup: this.getStringColumn(resultSet, 'sourceGroup'),
+      sourceComment: this.getStringColumn(resultSet, 'sourceComment'),
+      enabled: this.getLongColumn(resultSet, 'enabled', 1) === 1,
+      variableComment: this.getStringColumn(resultSet, 'variableComment'),
+      jsLib: this.getStringColumn(resultSet, 'jsLib'),
+      enabledCookieJar: this.getLongColumn(resultSet, 'enabledCookieJar') === 1,
+      concurrentRate: this.getStringColumn(resultSet, 'concurrentRate'),
+      header: this.getStringColumn(resultSet, 'header'),
+      loginUrl: this.getStringColumn(resultSet, 'loginUrl'),
+      loginUi: this.getStringColumn(resultSet, 'loginUi'),
+      loginCheckJs: this.getStringColumn(resultSet, 'loginCheckJs'),
+      coverDecodeJs: this.getStringColumn(resultSet, 'coverDecodeJs'),
+      sortUrl: this.getStringColumn(resultSet, 'sortUrl'),
+      singleUrl: this.getLongColumn(resultSet, 'singleUrl', 1) === 1,
+      articleStyle: this.getStringColumn(resultSet, 'articleStyle'),
+      lastUpdateTime: this.getLongColumn(resultSet, 'lastUpdateTime'),
+      customOrder: this.getLongColumn(resultSet, 'customOrder'),
+      variable: this.getStringColumn(resultSet, 'variable'),
+      showRecentIcon: this.getLongColumn(resultSet, 'showRecentIcon', 1) === 1,
+      autoComplete: this.getLongColumn(resultSet, 'autoComplete', 1) === 1,
+      customizeTitle: this.getStringColumn(resultSet, 'customizeTitle'),
+      rssListRule: this.getStringColumn(resultSet, 'rssListRule'),
+      rssWebViewRule: this.getStringColumn(resultSet, 'rssWebViewRule')
+    };
+    return ToRssSources(dbRow);
+  }
+
+  private resultSetToRssSourceGroup(resultSet: relationalStore.ResultSet): RssSourceGroup {
+    const group = new RssSourceGroup();
+    group.rssGroupId = this.getLongColumn(resultSet, 'rssGroupId');
+    group.rssGroupName = this.getStringColumn(resultSet, 'rssGroupName');
+    group.groupSort = this.getLongColumn(resultSet, 'groupSort');
+    group.isTop = this.getLongColumn(resultSet, 'isTop') === 1;
+    group.isDelete = this.getLongColumn(resultSet, 'isDelete', 1) === 1;
+    return group;
+  }
+
+  private resultSetToRssSourcesHistory(resultSet: relationalStore.ResultSet): rssSourcesHistory {
+    const history = new rssSourcesHistory();
+    history.sourceType = this.getLongColumn(resultSet, 'sourceType');
+    history.sourceName = this.getStringColumn(resultSet, 'sourceName');
+    history.sourceUrl = this.getStringColumn(resultSet, 'sourceUrl');
+    history.sourceIcon = this.getStringColumn(resultSet, 'sourceIcon');
+    history.sourceIconIsUrl = this.getLongColumn(resultSet, 'sourceIconIsUrl') === 1;
+    history.sourceGroup = this.getStringColumn(resultSet, 'sourceGroup');
+    history.lastUpdateTime = this.getLongColumn(resultSet, 'lastUpdateTime');
+    history.showRecentIcon = this.getLongColumn(resultSet, 'showRecentIcon', 1) === 1;
+    history.customizeTitle = this.getStringColumn(resultSet, 'customizeTitle');
+    return history;
+  }
+
+  // 系统初始订阅源分组数据（对应源 rssSourceGroupDao.initGroupData）
+  async initDefaultRssSourceGroups(): Promise<void> {
+    if (!this.store) return;
+    try {
+      const groupList = await this.getRssSourceGroups();
+      if (groupList.length > 0) {
+        return;
+      }
+      const initGroup = ['小说', '漫画', '影视', '资讯', '收藏夹'];
+      for (let index = 0; index < initGroup.length; index++) {
+        const group = new RssSourceGroup();
+        group.rssGroupName = initGroup[index];
+        group.groupSort = index;
+        group.isTop = false;
+        group.isDelete = false;
+        const bucket: relationalStore.ValuesBucket = {
+          rssGroupName: group.rssGroupName,
+          groupSort: group.groupSort || 0,
+          isTop: group.isTop ? 1 : 0,
+          isDelete: group.isDelete ? 1 : 0
+        };
+        await this.store.insert('rss_source_group', bucket);
+      }
+    } catch (e) {
+      console.error('初始化订阅源分组失败', e);
+    }
+  }
+
+  // 查询订阅源分组（对应源 rssSourceGroupDao.search）
+  async getRssSourceGroups(): Promise<RssSourceGroup[]> {
+    if (!this.store) return [];
+    const groups: RssSourceGroup[] = [];
+    try {
+      const resultSet = await this.store.querySql('SELECT * FROM rss_source_group ORDER BY isTop DESC, groupSort ASC');
+      try {
+        while (resultSet.goToNextRow()) {
+          groups.push(this.resultSetToRssSourceGroup(resultSet));
+        }
+      } finally {
+        resultSet.close();
+      }
+    } catch (e) {
+      console.error('查询订阅源分组失败', e);
+    }
+    return groups;
+  }
+
+  // 新增订阅源分组（供 rssSourcesUtil.insertRssSourceGroup 使用）
+  async insertRssSourceGroup(rssGroupName: string): Promise<boolean> {
+    if (!this.store || !rssGroupName) return false;
+    const group = new RssSourceGroup();
+    group.rssGroupName = rssGroupName;
+    group.groupSort = 0;
+    group.isTop = false;
+    group.isDelete = true;
+    const bucket: relationalStore.ValuesBucket = {
+      rssGroupName: group.rssGroupName,
+      groupSort: group.groupSort,
+      isTop: group.isTop ? 1 : 0,
+      isDelete: group.isDelete ? 1 : 0
+    };
+    await this.store.insert('rss_source_group', bucket);
+    return true;
+  }
+
+  // 搜索订阅源（对应源 subscriptionDao.search）
+  async getRssSources(searchParams?: rssSourcesTypeParams): Promise<rssSources[]> {
+    if (!this.store) return [];
+    const searchKey = searchParams?.searchKey ?? '';
+    const enabled = searchParams?.enabled;
+    const whereClause: string[] = [];
+    if (enabled !== undefined) {
+      whereClause.push(`enabled = ${enabled ? 1 : 0}`);
+    }
+    if (searchKey && searchKey.length > 0) {
+      whereClause.push(`(sourceName LIKE '%${searchKey}%' OR sourceGroup LIKE '%${searchKey}%')`);
+    }
+    let sql = 'SELECT * FROM rssSources';
+    if (whereClause.length > 0) {
+      sql += ` WHERE ${whereClause.join(' AND ')}`;
+    }
+    sql += ' ORDER BY lastUpdateTime DESC, customOrder ASC';
+    const rssList: rssSources[] = [];
+    try {
+      const resultSet = await this.store.querySql(sql);
+      try {
+        while (resultSet.goToNextRow()) {
+          rssList.push(this.resultSetToRssSources(resultSet));
+        }
+      } finally {
+        resultSet.close();
+      }
+    } catch (e) {
+      console.error('查询订阅源失败', e);
+    }
+    return rssList;
+  }
+
+  // 按 sourceUrl 精确查询单个订阅源（对应源 subscriptionDao.getRssSources）
+  async getRssSourcesByUrl(key: string): Promise<rssSources | null> {
+    if (!this.store) return null;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rssSources');
+      predicates.equalTo('sourceUrl', key);
+      const resultSet = await this.store.query(predicates, []);
+      try {
+        if (resultSet.goToFirstRow()) {
+          return this.resultSetToRssSources(resultSet);
+        }
+      } finally {
+        resultSet.close();
+      }
+    } catch (e) {
+      console.error('查询订阅源失败', e);
+    }
+    return null;
+  }
+
+  // 校验 sourceUrl 是否已收藏（对应源 subscriptionDao.queryByUrl，LIKE 匹配）
+  async queryRssSourcesByUrl(url: string): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rssSources');
+      predicates.like('sourceUrl', url);
+      const resultSet = await this.store.query(predicates, []);
+      try {
+        return resultSet.rowCount > 0;
+      } finally {
+        resultSet.close();
+      }
+    } catch (e) {
+      console.error('校验订阅源收藏失败', e);
+      return false;
+    }
+  }
+
+  // 新增或更新订阅源（对应源 subscriptionDao.insert，upsert 语义）
+  async insertRssSource(rssSource: rssSources): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rssSources');
+      if (rssSource.id !== undefined && rssSource.id !== 0) {
+        predicates.equalTo('id', rssSource.id);
+      } else {
+        predicates.equalTo('sourceUrl', rssSource.sourceUrl);
+      }
+      const resultSet = await this.store.query(predicates, []);
+      let exists = false;
+      try {
+        exists = resultSet.goToFirstRow();
+      } finally {
+        resultSet.close();
+      }
+      if (exists) {
+        return await this.updateRssSource(rssSource);
+      }
+      const dbRow = ToRssSourcesDb(rssSource);
+      dbRow.lastUpdateTime = Date.now();
+      const bucket = this.toRssSourcesBucket(dbRow);
+      delete bucket['id'];
+      await this.store.insert('rssSources', bucket);
+      return true;
+    } catch (e) {
+      console.error('新增订阅源失败', e);
+      return false;
+    }
+  }
+
+  // 更新订阅源（对应源 subscriptionDao.update，含历史联动）
+  async updateRssSource(rssSource: rssSources): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rssSources');
+      if (rssSource.id !== undefined && rssSource.id !== 0) {
+        predicates.equalTo('id', rssSource.id);
+      } else {
+        predicates.equalTo('sourceUrl', rssSource.sourceUrl);
+      }
+      const resultSet = await this.store.query(predicates, []);
+      let exists = false;
+      try {
+        exists = resultSet.goToFirstRow();
+      } finally {
+        resultSet.close();
+      }
+      if (!exists) {
+        return await this.insertRssSource(rssSource);
+      }
+      const dbRow = ToRssSourcesDb(rssSource);
+      dbRow.lastUpdateTime = Date.now();
+      dbRow.showRecentIcon = true;
+      const bucket = this.toRssSourcesBucket(dbRow);
+      await this.store.update(bucket, predicates);
+      // 存在历史记录时联动刷新（对应源 update 中的 rssSourcesHistoryDao 联动）
+      const historyList = await this.getRssSourcesHistory(rssSource.sourceUrl);
+      if (historyList.length > 0) {
+        const history: rssSourcesHistory = new rssSourcesHistory();
+        history.sourceType = rssSource.sourceType;
+        history.sourceName = rssSource.sourceName;
+        history.sourceUrl = rssSource.sourceUrl;
+        history.sourceIcon = rssSource.sourceIcon;
+        history.sourceIconIsUrl = rssSource.sourceIconIsUrl;
+        history.sourceGroup = rssSource.sourceGroup;
+        history.lastUpdateTime = Date.now();
+        history.showRecentIcon = true;
+        history.customizeTitle = rssSource.customizeTitle;
+        await this.insertRssSourcesHistory(history);
+      }
+      return true;
+    } catch (e) {
+      console.error('更新订阅源失败', e);
+      return false;
+    }
+  }
+
+  // 更新订阅源最近图标标记（对应源 subscriptionDao.updateRecentIcon）
+  async updateRssSourceRecentIcon(rssSource: rssSources): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rssSources');
+      if (rssSource.id !== undefined && rssSource.id !== 0) {
+        predicates.equalTo('id', rssSource.id);
+      } else {
+        predicates.equalTo('sourceUrl', rssSource.sourceUrl);
+      }
+      const dbRow = ToRssSourcesDb(rssSource);
+      dbRow.showRecentIcon = false;
+      const bucket = this.toRssSourcesBucket(dbRow);
+      await this.store.update(bucket, predicates);
+      return true;
+    } catch (e) {
+      console.error('更新订阅源最近图标失败', e);
+      return false;
+    }
+  }
+
+  // 置顶订阅源（对应源 subscriptionDao.isTopRssSources）
+  async isTopRssSources(rssSource: rssSources): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rssSources');
+      if (rssSource.id !== undefined && rssSource.id !== 0) {
+        predicates.equalTo('id', rssSource.id);
+      } else {
+        predicates.equalTo('sourceUrl', rssSource.sourceUrl);
+      }
+      const dbRow = ToRssSourcesDb(rssSource);
+      dbRow.lastUpdateTime = Date.now();
+      dbRow.customOrder = 0;
+      const bucket = this.toRssSourcesBucket(dbRow);
+      await this.store.update(bucket, predicates);
+      return true;
+    } catch (e) {
+      console.error('置顶订阅源失败', e);
+      return false;
+    }
+  }
+
+  // 批量新增订阅源（对应源 subscriptionDao.batchInsert）
+  async batchInsertRssSources(list: rssSources[]): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      for (let index = 0; index < list.length; index++) {
+        await this.insertRssSource(list[index]);
+      }
+      return true;
+    } catch (e) {
+      console.error('批量导入订阅源失败', e);
+      return false;
+    }
+  }
+
+  // 删除订阅源（对应源 subscriptionDao.deleteRssSources）
+  async deleteRssSources(rssSource: rssSources): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rssSources');
+      if (rssSource.id !== undefined && rssSource.id !== 0) {
+        predicates.equalTo('id', rssSource.id);
+      } else {
+        predicates.equalTo('sourceUrl', rssSource.sourceUrl);
+      }
+      await this.store.delete(predicates);
+      await this.deleteRssSourcesHistory(rssSource.sourceUrl);
+      return true;
+    } catch (e) {
+      console.error('删除订阅源失败', e);
+      return false;
+    }
+  }
+
+  // 批量删除订阅源（对应源 subscriptionDao.deleteRssSourcesList）
+  async deleteRssSourcesList(list: rssSources[]): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      for (let index = 0; index < list.length; index++) {
+        await this.deleteRssSources(list[index]);
+      }
+      return true;
+    } catch (e) {
+      console.error('批量删除订阅源失败', e);
+      return false;
+    }
+  }
+
+  // 查询订阅源历史记录（对应源 rssSourcesHistoryDao.search）
+  async getRssSourcesHistory(sourceUrl?: string): Promise<rssSourcesHistory[]> {
+    if (!this.store) return [];
+    let sql = 'SELECT * FROM rss_sources_history';
+    if (sourceUrl && sourceUrl.length > 0) {
+      sql += ` WHERE sourceUrl LIKE '%${sourceUrl}%'`;
+    }
+    sql += ' ORDER BY lastUpdateTime DESC';
+    const historyList: rssSourcesHistory[] = [];
+    try {
+      const resultSet = await this.store.querySql(sql);
+      try {
+        while (resultSet.goToNextRow()) {
+          historyList.push(this.resultSetToRssSourcesHistory(resultSet));
+        }
+      } finally {
+        resultSet.close();
+      }
+    } catch (e) {
+      console.error('查询订阅源历史失败', e);
+    }
+    return historyList;
+  }
+
+  // 新增或更新订阅源历史（对应源 rssSourcesHistoryDao.insert/update，upsert 语义）
+  async insertRssSourcesHistory(history: rssSourcesHistory): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rss_sources_history');
+      predicates.equalTo('sourceUrl', history.sourceUrl);
+      const resultSet = await this.store.query(predicates, []);
+      let exists = false;
+      try {
+        exists = resultSet.goToFirstRow();
+      } finally {
+        resultSet.close();
+      }
+      if (exists) {
+        history.lastUpdateTime = Date.now();
+        history.showRecentIcon = true;
+        const bucket = this.toRssSourcesHistoryBucket(history);
+        await this.store.update(bucket, predicates);
+        return true;
+      }
+      history.lastUpdateTime = Date.now();
+      const insertBucket = this.toRssSourcesHistoryBucket(history);
+      await this.store.insert('rss_sources_history', insertBucket);
+      return true;
+    } catch (e) {
+      console.error('新增订阅源历史失败', e);
+      return false;
+    }
+  }
+
+  // 删除订阅源历史（对应源 rssSourcesHistoryDao.deleteRssSourcesHistory）
+  async deleteRssSourcesHistory(rssHistoryUrl: string): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rss_sources_history');
+      predicates.equalTo('sourceUrl', rssHistoryUrl);
+      await this.store.delete(predicates);
+      return true;
+    } catch (e) {
+      console.error('删除订阅源历史失败', e);
+      return false;
+    }
   }
 }
 
