@@ -1,10 +1,5 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
-import picker from '@ohos.file.picker';
-import fs from '@ohos.file.fs';
-import { util } from '@kit.ArkTS';
-import { HttpTTS } from '../model/data/Book';
-import { HttpClient } from '../core/http/HttpClient';
 import { syncSystemBars } from '../utils/SystemBars';
 import { SystemTtsReader, TtsVoiceOption } from '../utils/SystemTtsReader';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
@@ -12,8 +7,6 @@ import { AdaptiveIconButton } from '../components/AdaptiveIconButton';
 import { TtsSettings, TtsSettingsStore } from '../utils/TtsSettingsStore';
 import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
-
-const TTS_CUSTOM_VOICE_IMPORT_LIMIT_BYTES: number = 2 * 1024 * 1024;
 
 @Entry
 @Component
@@ -24,8 +17,6 @@ struct TtsSettingsPage {
   @StorageLink('ttsLanguage') ttsLanguage: string = 'zh-CN';
   @StorageLink('ttsSpeed') ttsSpeed: number = 1;
   @StorageLink('ttsInstalledVoiceKeys') ttsInstalledVoiceKeys: string = '';
-  @StorageLink('ttsCustomVoiceId') @Watch('onCustomVoiceSelectionChanged') ttsCustomVoiceId: string = '';
-  @StorageLink('ttsCustomVoices') @Watch('onCustomVoicesStorageChanged') ttsCustomVoices: string = '';
   @StorageLink('appDarkMode') appDarkMode: boolean = false;
   @StorageLink('themeRevision') themeRevision: number = 0;
   @StorageLink('appLightAccentColor') appLightAccentColor: string = '#007DFF';
@@ -43,10 +34,7 @@ struct TtsSettingsPage {
   @State isLoadingVoices: boolean = false;
   @State downloadingVoiceKey: string = '';
   @State downloadProgressText: string = '';
-  @State customVoices: HttpTTS[] = [];
   @State showVoiceDropdown: boolean = false;
-  @State customVoiceImportUrl: string = '';
-  @State isImportingCustomVoices: boolean = false;
   private speedSaveTimerId: number = -1;
   private context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
 
@@ -72,39 +60,6 @@ struct TtsSettingsPage {
           Column() {
             this.sectionTitle('朗读音色')
             this.voiceDropdownSelector()
-
-          this.sectionTitle('自定义音色')
-          Row() {
-            Column() {
-              Text(this.customVoiceSummary())
-                .fontSize(16)
-                .fontColor(this.primaryTextColor())
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text('导入、启用、禁用、删除自定义音色')
-                .fontSize(12)
-                .fontColor(this.subTextColor())
-                .margin({ top: 4 })
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-
-            Text('管理')
-              .fontSize(14)
-              .fontColor(this.accentColor())
-              .width(52)
-              .textAlign(TextAlign.Center)
-          }
-          .width('calc(100% - 24vp)')
-          .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-          .margin({ left: 12, right: 12 })
-          .borderRadius(16)
-          .clip(true)
-          .backgroundColor(this.cardColor())
-          .border({ width: { bottom: 0.5 }, color: this.appDarkMode ? '#24FFFFFF' : '#14000000' })
-          .onClick(() => {
-            router.pushUrl({ url: 'pages/CustomTtsVoiceManager' });
-          })
 
           this.sectionTitle('朗读倍速')
           Column() {
@@ -232,28 +187,7 @@ struct TtsSettingsPage {
     syncSystemBars(getContext(this), this.appDarkMode, this.pageColor());
   }
 
-  onCustomVoicesStorageChanged(): void {
-    this.customVoices = SystemTtsReader.parseCustomVoices(this.ttsCustomVoices);
-    this.selectedVoiceKey = this.currentVoiceKey();
-  }
-
-  onCustomVoiceSelectionChanged(): void {
-    this.selectedVoiceKey = this.currentVoiceKey();
-  }
-
-  enabledCustomVoices(): HttpTTS[] {
-    return this.customVoices.filter((voice: HttpTTS) => voice.enabled !== false);
-  }
-
-  disabledCustomVoices(): HttpTTS[] {
-    return this.customVoices.filter((voice: HttpTTS) => voice.enabled === false);
-  }
-
   selectedVoiceTitle(): string {
-    const customVoice = this.findCurrentCustomVoice();
-    if (customVoice && customVoice.enabled !== false) {
-      return this.customVoiceTitle(customVoice);
-    }
     const systemVoice = this.findCurrentVoice();
     if (systemVoice) {
       return this.voiceTitle(systemVoice);
@@ -300,24 +234,10 @@ struct TtsSettingsPage {
       Column() {
         Scroll() {
           Column() {
-            if (this.enabledCustomVoices().length > 0) {
-              this.voiceDropdownSectionTitle('自定义音色')
-              ForEach(this.enabledCustomVoices(), (voice: HttpTTS) => {
-                this.customVoiceDropdownOption(voice, false)
-              }, (voice: HttpTTS) => `${this.customVoiceKey(voice)}_enabled`)
-            }
-
             this.voiceDropdownSectionTitle('系统音色')
             ForEach(this.voices, (voice: TtsVoiceOption) => {
               this.systemVoiceDropdownOption(voice)
             }, (voice: TtsVoiceOption) => this.voiceKey(voice))
-
-            if (this.disabledCustomVoices().length > 0) {
-              this.voiceDropdownSectionTitle('已禁用')
-              ForEach(this.disabledCustomVoices(), (voice: HttpTTS) => {
-                this.customVoiceDropdownOption(voice, true)
-              }, (voice: HttpTTS) => `${this.customVoiceKey(voice)}_disabled`)
-            }
           }
           .width('100%')
         }
@@ -349,35 +269,6 @@ struct TtsSettingsPage {
       .fontColor(this.subTextColor())
       .width('100%')
       .padding({ left: 14, right: 14, top: 8, bottom: 5 })
-  }
-
-  @Builder
-  customVoiceDropdownOption(voice: HttpTTS, disabled: boolean) {
-    Row() {
-      Text(this.customVoiceTitle(voice))
-        .fontSize(15)
-        .fontColor(disabled ? this.subTextColor() : this.primaryTextColor())
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      if (!disabled && this.isCustomVoiceSelected(voice)) {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(18)
-          .fontColor([this.accentColor()])
-      }
-    }
-    .width('100%')
-    .height(46)
-    .padding({ left: 14, right: 14 })
-    .opacity(disabled ? 0.5 : 1)
-    .onClick(() => {
-      if (disabled) {
-        return;
-      }
-      this.showVoiceDropdown = false;
-      this.applyCustomVoice(voice);
-    })
   }
 
   @Builder
@@ -444,9 +335,6 @@ struct TtsSettingsPage {
     this.ttsLanguage = settings.language;
     this.ttsSpeed = settings.speed;
     this.ttsInstalledVoiceKeys = settings.installedVoiceKeys;
-    this.ttsCustomVoiceId = settings.customVoiceId;
-    this.ttsCustomVoices = settings.customVoices;
-    this.customVoices = SystemTtsReader.parseCustomVoices(settings.customVoices);
   }
 
   currentSettings(): TtsSettings {
@@ -457,8 +345,6 @@ struct TtsSettingsPage {
     settings.language = this.ttsLanguage;
     settings.speed = this.ttsSpeed;
     settings.installedVoiceKeys = this.ttsInstalledVoiceKeys;
-    settings.customVoiceId = this.ttsCustomVoiceId;
-    settings.customVoices = this.ttsCustomVoices;
     return settings;
   }
 
@@ -488,11 +374,6 @@ struct TtsSettingsPage {
     try {
       const voices = await SystemTtsReader.listAvailableVoices();
       this.voices = this.applyInstalledOverrides(this.mergeWithDefaultVoice(voices));
-      const currentCustomVoice = this.findCurrentCustomVoice();
-      if (currentCustomVoice) {
-        this.selectedVoiceKey = this.customVoiceKey(currentCustomVoice);
-        return;
-      }
       const currentVoice = this.findCurrentVoice();
       if (!currentVoice || !currentVoice.available) {
         const defaultVoice = this.firstAvailableVoice();
@@ -506,7 +387,6 @@ struct TtsSettingsPage {
       this.ttsOnline = 1;
       this.ttsStyle = '';
       this.ttsLanguage = 'zh-CN';
-      this.ttsCustomVoiceId = '';
       this.saveSettings();
       this.selectedVoiceKey = this.currentVoiceKey();
     } finally {
@@ -590,24 +470,8 @@ struct TtsSettingsPage {
     this.ttsOnline = voice.online;
     this.ttsStyle = voice.style;
     this.ttsLanguage = voice.language;
-    this.ttsCustomVoiceId = '';
     this.selectedVoiceKey = this.voiceKey(voice);
     this.saveSettings();
-  }
-
-  applyCustomVoice(voice: HttpTTS): void {
-    if (voice.enabled === false) {
-      promptAction.showToast({ message: '该自定义音色已禁用' });
-      return;
-    }
-    if (this.isPreviewing) {
-      this.previewReader.stop();
-      this.isPreviewing = false;
-    }
-    this.ttsCustomVoiceId = String(voice.id);
-    this.selectedVoiceKey = this.customVoiceKey(voice);
-    this.saveSettings();
-    promptAction.showToast({ message: `已启用 ${voice.name}` });
   }
 
   async downloadAndSelectVoice(voice: TtsVoiceOption): Promise<void> {
@@ -743,10 +607,6 @@ struct TtsSettingsPage {
   }
 
   currentVoiceKey(): string {
-    const customVoice = this.findCurrentCustomVoice();
-    if (customVoice) {
-      return this.customVoiceKey(customVoice);
-    }
     const matched = this.findCurrentVoice();
     return matched ? this.voiceKey(matched) :
       `${this.ttsPerson}_${this.ttsOnline}_${this.ttsLanguage || 'zh-CN'}_${this.ttsStyle || ''}_`;
@@ -757,149 +617,9 @@ struct TtsSettingsPage {
   }
 
   isCurrentVoice(voice: TtsVoiceOption): boolean {
-    if (this.ttsCustomVoiceId) {
-      return false;
-    }
     return voice.id === this.ttsPerson && voice.online === this.ttsOnline &&
       (voice.style || '') === (this.ttsStyle || '') &&
       this.sameLanguage(voice.language || 'zh-CN', this.ttsLanguage || 'zh-CN');
-  }
-
-  findCurrentCustomVoice(): HttpTTS | undefined {
-    const selectedId = (this.ttsCustomVoiceId || '').trim();
-    if (!selectedId) {
-      return undefined;
-    }
-    return this.customVoices.find((voice: HttpTTS) => String(voice.id) === selectedId);
-  }
-
-  customVoiceKey(voice: HttpTTS): string {
-    return `custom_${voice.id}_${voice.name || ''}`;
-  }
-
-  customVoiceTitle(voice: HttpTTS): string {
-    const state = voice.enabled === false ? ' · 已禁用' : '';
-    return `${voice.name || '未命名音色'} · 自定义${state}`;
-  }
-
-  isCustomVoiceSelected(voice: HttpTTS): boolean {
-    return (this.ttsCustomVoiceId || '') === String(voice.id);
-  }
-
-  customVoiceSummary(): string {
-    return this.customVoices.length > 0 ? `已导入 ${this.customVoices.length} 个自定义音色` : '暂无自定义音色';
-  }
-
-  async importCustomVoicesFromUrl(): Promise<void> {
-    const url = this.customVoiceImportUrl.trim();
-    if (!url) {
-      promptAction.showToast({ message: '请输入音色 JSON URL' });
-      return;
-    }
-    if (this.isImportingCustomVoices) {
-      return;
-    }
-    this.isImportingCustomVoices = true;
-    try {
-      const response = await new HttpClient(15000).execute({
-        url,
-        method: 'GET',
-        headers: {},
-        maxResponseBytes: TTS_CUSTOM_VOICE_IMPORT_LIMIT_BYTES
-      });
-      if (!response.success) {
-        throw new Error(response.error || `HTTP ${response.statusCode}`);
-      }
-      this.importCustomVoicesFromJson(response.body);
-    } catch (error) {
-      promptAction.showToast({ message: `导入失败：${this.shortErrorMessage(error as Object)}` });
-    } finally {
-      this.isImportingCustomVoices = false;
-    }
-  }
-
-  async importCustomVoicesFromFile(): Promise<void> {
-    if (this.isImportingCustomVoices) {
-      return;
-    }
-    try {
-      const options: picker.DocumentSelectOptions = new picker.DocumentSelectOptions();
-      options.maxSelectNumber = 1;
-      options.fileSuffixFilters = ['JSON|.json', '文本|.txt'];
-      const result: Array<string> = await new picker.DocumentViewPicker().select(options);
-      if (!result || result.length === 0) {
-        return;
-      }
-      this.isImportingCustomVoices = true;
-      const content = await this.readTextFile(result[0]);
-      this.importCustomVoicesFromJson(content);
-    } catch (error) {
-      promptAction.showToast({ message: `导入失败：${this.shortErrorMessage(error as Object)}` });
-    } finally {
-      this.isImportingCustomVoices = false;
-    }
-  }
-
-  importCustomVoicesFromJson(content: string): void {
-    const incoming = SystemTtsReader.parseCustomVoices(content);
-    if (incoming.length === 0) {
-      promptAction.showToast({ message: '未识别到有效自定义音色' });
-      return;
-    }
-    const merged: HttpTTS[] = this.customVoices.slice();
-    let changed = 0;
-    for (const voice of incoming) {
-      this.ensureUniqueCustomVoiceId(voice, merged);
-      const index = merged.findIndex((item: HttpTTS) => String(item.id) === String(voice.id) ||
-        ((item.name || '') === (voice.name || '') && (item.url || '') === (voice.url || '')));
-      if (index >= 0) {
-        merged[index] = voice;
-      } else {
-        merged.push(voice);
-      }
-      changed++;
-    }
-    this.customVoices = merged;
-    this.ttsCustomVoices = SystemTtsReader.serializeCustomVoices(merged);
-    if (!this.ttsCustomVoiceId && incoming.length > 0) {
-      this.ttsCustomVoiceId = String(incoming[0].id);
-      this.selectedVoiceKey = this.customVoiceKey(incoming[0]);
-    }
-    this.saveSettings();
-    promptAction.showToast({ message: `已导入 ${changed} 个自定义音色` });
-  }
-
-  ensureUniqueCustomVoiceId(voice: HttpTTS, existing: HttpTTS[]): void {
-    if (!existing.some((item: HttpTTS) => item.id === voice.id && (item.url || '') !== (voice.url || ''))) {
-      return;
-    }
-    let id = Date.now();
-    while (existing.some((item: HttpTTS) => item.id === id)) {
-      id++;
-    }
-    voice.id = id;
-  }
-
-  async readTextFile(filePath: string): Promise<string> {
-    let file: fs.File | null = null;
-    try {
-      const stat = await fs.stat(filePath);
-      if (stat.size <= 0) {
-        return '';
-      }
-      if (stat.size > TTS_CUSTOM_VOICE_IMPORT_LIMIT_BYTES) {
-        throw new Error('文件过大，请选择 2MB 以内的音色文件');
-      }
-      file = await fs.open(filePath, fs.OpenMode.READ_ONLY);
-      const buffer = new ArrayBuffer(stat.size);
-      await fs.read(file.fd, buffer, { offset: 0, length: stat.size });
-      return util.TextDecoder.create('utf-8').decodeWithStream(new Uint8Array(buffer), { stream: false })
-        .replace(/^\uFEFF/, '');
-    } finally {
-      if (file) {
-        await fs.close(file);
-      }
-    }
   }
 
   findMatchingVoice(target: TtsVoiceOption, availableOnly: boolean): TtsVoiceOption | undefined {

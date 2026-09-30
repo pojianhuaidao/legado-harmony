@@ -13,7 +13,6 @@
     "pages/Settings",
     "pages/CustomFontManager",
     "pages/TtsSettings",
-    "pages/CustomTtsVoiceManager",
     "pages/BookshelfSettings",
     "pages/LocalBookSettings",
     "pages/SearchExploreSettings",
