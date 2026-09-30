@@ -1,10 +1,12 @@
 /**
  * 订阅导入页 —— 从 legado-Harmony SubscriptionImport.ets 精简移植
- * 支持：1) 粘贴订阅源 JSON 文本；2) 输入 URL 网络获取后解析。
+ * 支持：1) 粘贴订阅源 JSON 文本；2) 输入 URL 网络获取后解析；3) 选择本地文件导入。
  * 复用 RssSourcesUtils.parseRssSourcesFromJson / applyImport 与 AppDatabase 订阅 DAO。
  */
 import { router, promptAction } from '@kit.ArkUI';
 import http from '@ohos.net.http';
+import { picker, fileIo as fs } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { rssSources } from '../model/data/RssSource';
 import rssSourcesUtil from '../utils/RssSourcesUtils';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
@@ -31,6 +33,27 @@ struct SubscriptionImportPage {
   onBackPress(): boolean {
     router.back();
     return true;
+  }
+
+  async pickSubscriptionFile(): Promise<void> {
+    try {
+      const documentPicker = new picker.DocumentViewPicker();
+      const result = await documentPicker.select({ maxSelectNumber: 1 });
+      if (!result || result.length === 0) {
+        return;
+      }
+      const uri = result[0];
+      const file = fs.openSync(uri, fs.OpenMode.READ_ONLY);
+      const stat = fs.statSync(file.fd);
+      const buf = new ArrayBuffer(stat.size);
+      fs.readSync(file.fd, buf);
+      fs.closeSync(file);
+      const text = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf));
+      this.inputText = text;
+      this.applyParseResult(rssSourcesUtil.parseRssSourcesFromJson(text));
+    } catch (e) {
+      this.errorInfo = '读取文件失败，请确认文件为 UTF-8 编码的 JSON 订阅源';
+    }
   }
 
   async parseInput(): Promise<void> {
@@ -127,7 +150,7 @@ struct SubscriptionImportPage {
 
       Scroll() {
         Column({ space: 12 }) {
-          Text('粘贴订阅源 JSON，或输入订阅源 URL 后自动获取')
+          Text('粘贴订阅源 JSON、输入订阅源 URL 后自动获取，或从本地文件导入')
             .fontSize(13)
             .fontColor(ThemeRuntime.subTextColor(this.appDarkMode))
             .width('100%')
@@ -175,15 +198,24 @@ struct SubscriptionImportPage {
           }
 
           Row({ space: 12 }) {
-            Button('解析')
+            Button('选择文件')
               .width(120)
+              .height(40)
+              .fontSize(15)
+              .backgroundColor(ThemeRuntime.inputColor(this.appDarkMode))
+              .fontColor(ThemeRuntime.primaryTextColor(this.appDarkMode))
+              .onClick(() => {
+                this.pickSubscriptionFile();
+              })
+            Button('解析')
+              .width(100)
               .height(40)
               .fontSize(15)
               .onClick(() => {
                 this.parseInput();
               })
             Button('确认导入')
-              .width(140)
+              .width(120)
               .height(40)
               .fontSize(15)
               .backgroundColor('#007DFF')
