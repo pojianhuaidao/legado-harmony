@@ -190,8 +190,8 @@ export struct ThemeStartupCover {
   }
 
   coverTitle(): string {
-    if (this.explicitText) return this.titleOverride;
-    return StartupCoverTextStore.title(this.resolvedThemeId(), '开源轻页');
+    // 所有主题的主标题统一固定为软件名
+    return '爱·阅读';
   }
 
   coverSubtitle(): string {

@@ -29,8 +29,8 @@ export class StartupCoverTextStore {
   }
 
   static title(themeId: string, fallback: string): string {
-    const entry = StartupCoverTextStore.find(StartupCoverTextStore.entries(), themeId);
-    return entry ? entry.title : fallback;
+    // 所有主题的主标题统一固定为软件名
+    return '爱·阅读';
   }
 
   static subtitle(themeId: string, fallback: string): string {

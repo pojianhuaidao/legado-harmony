@@ -37,8 +37,8 @@ export class AppThemeSettings {
   customDarkReaderContentTone: string = 'dark';
   customLightStartupImagePath: string = '';
   customDarkStartupImagePath: string = '';
-  customLightStartupTitle: string = '开源轻页';
-  customDarkStartupTitle: string = '开源轻页';
+  customLightStartupTitle: string = '爱·阅读';
+  customDarkStartupTitle: string = '爱·阅读';
   customLightStartupSubtitle: string = '';
   customDarkStartupSubtitle: string = '';
 }
@@ -155,10 +155,10 @@ export class AppThemeSettingsStore {
       AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_DARK_STARTUP_IMAGE_PATH) || '');
     settings.customLightStartupTitle = await AppThemeSettingsStore.getString(
       store, AppThemeSettingsStore.KEY_CUSTOM_LIGHT_STARTUP_TITLE,
-      AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_LIGHT_STARTUP_TITLE) || '开源轻页');
+      AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_LIGHT_STARTUP_TITLE) || '爱·阅读');
     settings.customDarkStartupTitle = await AppThemeSettingsStore.getString(
       store, AppThemeSettingsStore.KEY_CUSTOM_DARK_STARTUP_TITLE,
-      AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_DARK_STARTUP_TITLE) || '开源轻页');
+      AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_DARK_STARTUP_TITLE) || '爱·阅读');
     settings.customLightStartupSubtitle = await AppThemeSettingsStore.getString(
       store, AppThemeSettingsStore.KEY_CUSTOM_LIGHT_STARTUP_SUBTITLE,
       AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_LIGHT_STARTUP_SUBTITLE) || '');
@@ -594,9 +594,9 @@ export class AppThemeSettingsStore {
     settings.customLightStartupImagePath = source.customLightStartupImagePath || '';
     settings.customDarkStartupImagePath = source.customDarkStartupImagePath || '';
     settings.customLightStartupTitle = source.customLightStartupTitle === undefined ?
-      '开源轻页' : source.customLightStartupTitle;
+      '爱·阅读' : source.customLightStartupTitle;
     settings.customDarkStartupTitle = source.customDarkStartupTitle === undefined ?
-      '开源轻页' : source.customDarkStartupTitle;
+      '爱·阅读' : source.customDarkStartupTitle;
     settings.customLightStartupSubtitle = source.customLightStartupSubtitle || '';
     settings.customDarkStartupSubtitle = source.customDarkStartupSubtitle || '';
     if (settings.themeId === ThemeIds.CUSTOM) {

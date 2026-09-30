@@ -17,8 +17,8 @@ struct StartupPage {
   @StorageLink('appThemeId') appThemeId: string = AppThemeSettingsStore.DEFAULT_THEME_ID;
   @StorageLink('appCustomLightStartupImagePath') customLightStartupImagePath: string = '';
   @StorageLink('appCustomDarkStartupImagePath') customDarkStartupImagePath: string = '';
-  @StorageLink('appCustomLightStartupTitle') customLightStartupTitle: string = '开源轻页';
-  @StorageLink('appCustomDarkStartupTitle') customDarkStartupTitle: string = '开源轻页';
+  @StorageLink('appCustomLightStartupTitle') customLightStartupTitle: string = '爱·阅读';
+  @StorageLink('appCustomDarkStartupTitle') customDarkStartupTitle: string = '爱·阅读';
   @StorageLink('appCustomLightStartupSubtitle') customLightStartupSubtitle: string = '';
   @StorageLink('appCustomDarkStartupSubtitle') customDarkStartupSubtitle: string = '';
   @StorageLink('pendingLocalBookImportNonce') @Watch('onPendingLocalBookImportChanged')
