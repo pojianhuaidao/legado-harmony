@@ -1,6 +1,6 @@
 {
   "app": {
-    "bundleName": "lagado.hm",
+    "bundleName": "lagado.hm.app",
     "vendor": "legado",
     "versionCode": 1093001,
     "versionName": "1.0930.01",

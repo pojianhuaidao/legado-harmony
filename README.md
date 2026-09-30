@@ -4,7 +4,7 @@
 
 | 项目 | 信息 |
 | --- | --- |
-| 应用包名 | `lagado.hm` |
+| 应用包名 | `lagado.hm.app` |
 | 当前版本 | `3.9.907`（以 `AppScope/app.json5` 为准） |
 | 支持设备 | `phone`、`tablet`、`2in1` |
 | 最低 API | HarmonyOS API 12 |
