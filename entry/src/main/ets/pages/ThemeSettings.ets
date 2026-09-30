@@ -1071,7 +1071,7 @@ struct ThemeSettingsPage {
             .fontSize(12)
             .fontColor(this.subTextColor())
             .width('100%')
-          TextInput({ placeholder: '可留空', text: this.startupTextTitle })
+          TextInput({ placeholder: '可留空', text: '爱·阅读' })
             .width('100%')
             .height(42)
             .maxLength(24)
@@ -1079,9 +1079,7 @@ struct ThemeSettingsPage {
             .placeholderColor(this.subTextColor())
             .backgroundColor(ThemeRuntime.inputColor(this.appDarkMode))
             .borderRadius(10)
-            .onChange((value: string) => {
-              this.startupTextTitle = value;
-            })
+            .enabled(false)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
@@ -1110,7 +1108,7 @@ struct ThemeSettingsPage {
           .fontColor(this.accentColor())
           .backgroundColor(ThemeRuntime.inputColor(this.appDarkMode))
           .onClick(() => {
-            this.startupTextTitle = '开源轻页';
+            this.startupTextTitle = '爱·阅读';
             this.startupTextSubtitle = StartupCoverTextStore.defaultSubtitle(this.startupTextThemeId);
           })
         Row({ space: 12 }) {
@@ -1242,7 +1240,7 @@ struct ThemeSettingsPage {
   openStartupTextDialog(themeId: string): void {
     if (themeId === ThemeIds.PLAIN_DEFAULT || themeId === ThemeIds.CUSTOM) return;
     this.startupTextThemeId = themeId;
-    this.startupTextTitle = StartupCoverTextStore.title(themeId, '开源轻页');
+    this.startupTextTitle = StartupCoverTextStore.title(themeId, '爱·阅读');
     this.startupTextSubtitle = StartupCoverTextStore.subtitle(
       themeId, StartupCoverTextStore.defaultSubtitle(themeId));
     this.showStartupTextDialog = true;

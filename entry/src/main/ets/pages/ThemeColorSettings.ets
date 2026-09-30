@@ -82,8 +82,8 @@ struct ThemeColorSettingsPage {
   @State darkSources: ThemeComponentSourceIds = new ThemeComponentSourceIds();
   @State lightStartupImagePath: string = '';
   @State darkStartupImagePath: string = '';
-  @State lightStartupTitle: string = '开源轻页';
-  @State darkStartupTitle: string = '开源轻页';
+  @State lightStartupTitle: string = '爱·阅读';
+  @State darkStartupTitle: string = '爱·阅读';
   @State lightStartupSubtitle: string = '';
   @State darkStartupSubtitle: string = '';
   @State availableThemes: ThemePack[] = [];
@@ -713,7 +713,7 @@ struct ThemeColorSettingsPage {
           .fontSize(12)
           .fontColor(this.subTextColor())
           .width('100%')
-        TextInput({ placeholder: '可留空', text: this.currentStartupTitle() })
+        TextInput({ placeholder: '可留空', text: '爱·阅读' })
           .width('100%')
           .height(42)
           .maxLength(24)
@@ -721,7 +721,7 @@ struct ThemeColorSettingsPage {
           .placeholderColor(this.subTextColor())
           .backgroundColor(this.inputColor())
           .borderRadius(10)
-          .onChange((value: string) => this.setCurrentStartupTitle(value))
+          .enabled(false)
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
