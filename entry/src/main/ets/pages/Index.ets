@@ -3804,6 +3804,10 @@ struct BookshelfPage {
 
   bookshelfTopOverlayHeight(): number {
     let height = this.statusBarHeight + 56;
+    if (!this.isBookMultiSelect) {
+      // 顶部搜索框：40 高度 + 6 上边距 + 2 下边距
+      height += 48;
+    }
     if (this.isBookMultiSelect) {
       height += 42;
     } else if (this.showShelfGroups) {
