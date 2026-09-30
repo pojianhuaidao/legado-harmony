@@ -25,7 +25,7 @@ struct SubscriptionImportPage {
   @State errorInfo: string = '';
 
   onPageShow(): void {
-    syncSystemBars();
+    syncSystemBars(getContext(this), this.appDarkMode);
   }
 
   onBackPress(): boolean {

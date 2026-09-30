@@ -157,11 +157,8 @@ struct SubscriptionWebViewPage {
             this.updateNavState();
           }
         })
-        .onErrorReceive((event?: OnErrorReceiveEvent) => {
-          const err = event ? event.getError() : undefined;
-          if (err && err.getErrorCode() !== 200) {
-            promptAction.showToast({ message: '页面加载失败' });
-          }
+        .onErrorReceive(() => {
+          promptAction.showToast({ message: '页面加载失败' });
         })
     }
     .width('100%')
