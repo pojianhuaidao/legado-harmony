@@ -7,7 +7,6 @@ import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { ThemeComponentSourceIds, ThemeIds, ThemePack, ThemeVariant } from '../theme/ThemeModels';
 import { BuiltinThemeRegistry } from '../theme/BuiltinThemeRegistry';
 import { ThemeAssetRegistry } from '../theme/ThemeAssetRegistry';
-import { AccountSessionStore } from '../account/AccountSessionStore';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { ThemeStartupCover } from '../components/ThemeStartupCover';
 import { ReaderThemeBackground } from '../components/ReaderThemeBackground';
@@ -434,8 +433,7 @@ struct ThemeColorSettingsPage {
     const trialThemeId = AppStorage.get<string>('themeTrialThemeId') || '';
     for (const theme of themes) {
       if (BuiltinThemeRegistry.isFree(theme.id) ||
-        (theme.id === this.appThemeId && theme.id !== trialThemeId) ||
-        AccountSessionStore.hasValidEntitlement(theme.id)) {
+        (theme.id === this.appThemeId && theme.id !== trialThemeId)) {
         available.push(theme);
       }
     }

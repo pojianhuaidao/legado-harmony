@@ -2,7 +2,6 @@ import { Context } from '@kit.AbilityKit';
 import preferences from '@ohos.data.preferences';
 import { ThemeIds } from '../theme/ThemeModels';
 import { AppThemeSettings, AppThemeSettingsStore } from './AppThemeSettingsStore';
-import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
 
 export class CustomThemeScheme {
   id: string = '';
@@ -181,7 +180,6 @@ export class CustomThemeSchemeStore {
     await store.flush();
     const revision = (AppStorage.get<number>(CustomThemeSchemeStore.STORAGE_REVISION) || 0) + 1;
     AppStorage.setOrCreate(CustomThemeSchemeStore.STORAGE_REVISION, revision);
-    CloudSyncChangeTracker.markApplicationPreferenceChanged();
     return true;
   }
 
@@ -209,7 +207,6 @@ export class CustomThemeSchemeStore {
     await store.flush();
     const revision = (AppStorage.get<number>(CustomThemeSchemeStore.STORAGE_REVISION) || 0) + 1;
     AppStorage.setOrCreate(CustomThemeSchemeStore.STORAGE_REVISION, revision);
-    CloudSyncChangeTracker.markApplicationPreferenceChanged();
   }
 
   static async replaceFromSync(

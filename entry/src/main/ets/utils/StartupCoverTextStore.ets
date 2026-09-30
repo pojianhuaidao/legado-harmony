@@ -1,6 +1,5 @@
 import { Context } from '@kit.AbilityKit';
 import preferences from '@ohos.data.preferences';
-import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
 import { ThemeIds } from '../theme/ThemeModels';
 
 export class StartupCoverTextEntry {
@@ -75,7 +74,6 @@ export class StartupCoverTextStore {
     AppStorage.setOrCreate(StartupCoverTextStore.STORAGE_RAW, raw);
     AppStorage.setOrCreate(StartupCoverTextStore.STORAGE_REVISION,
       (AppStorage.get<number>(StartupCoverTextStore.STORAGE_REVISION) || 0) + 1);
-    CloudSyncChangeTracker.markApplicationPreferenceChanged();
   }
 
   private static entries(): StartupCoverTextEntry[] {

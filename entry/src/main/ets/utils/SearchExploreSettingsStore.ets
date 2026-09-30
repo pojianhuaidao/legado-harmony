@@ -1,6 +1,5 @@
 import { Context } from '@kit.AbilityKit';
 import preferences from '@ohos.data.preferences';
-import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
 
 export class SearchExploreSettings {
   showResultCover: boolean = true;
@@ -107,7 +106,6 @@ export class SearchExploreSettingsStore {
     await store.put(SearchExploreSettingsStore.KEY_EXPLORE_PLATFORM, settings.explorePlatform);
     await store.flush();
     if (!previous || SearchExploreSettingsStore.syncFieldsChanged(previous, settings)) {
-      CloudSyncChangeTracker.markApplicationPreferenceChanged();
     }
   }
 

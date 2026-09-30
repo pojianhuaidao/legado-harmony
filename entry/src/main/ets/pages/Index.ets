@@ -39,8 +39,6 @@ import { AppThemeSettingsStore } from '../utils/AppThemeSettingsStore';
 import { ThemeAssetRegistry } from '../theme/ThemeAssetRegistry';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { LocalBookService } from '../core/book/LocalBookService';
-import { CloudSyncSettingsStore } from '../account/CloudSyncSettingsStore';
-import { CloudSyncCoordinator } from '../account/CloudSyncCoordinator';
 import { ReaderTtsFloatingSession } from '../utils/ReaderTtsFloatingSession';
 import { ReaderTtsPlayerPanel } from '../components/ReaderTtsPlayerPanel';
 import { TtsCatalogSheet, CatalogTitleDataSource } from '../components/TtsCatalogSheet';
@@ -86,7 +84,6 @@ struct Index {
   @State stageRuntimeMounted: boolean = true;
   private stageRuntimeResetScheduled: boolean = false;
   private shortcutRoutingActive: boolean = false;
-  private cloudSyncDebounceTimer: number = -1;
   @State currentIndex: number = 0;
   @State hdsMaterialRenderBranch: boolean = false;
   @State bookshelfMultiSelectActive: boolean = false;
@@ -101,14 +98,6 @@ struct Index {
   @StorageLink('singleSourceSearchNonce') @Watch('onSingleSourceSearchRequested') singleSourceSearchNonce: number = 0;
   @StorageLink('bookSourceExploreRefreshNonce') @Watch('onBookSourceExploreRefreshRequested')
   bookSourceExploreRefreshNonce: number = 0;
-  @StorageLink('cloudSyncDataChangeRevision') @Watch('onCloudSyncDataChanged')
-  cloudSyncDataRevision: number = 0;
-  @StorageLink('cloudSyncPreferenceChangeRevision') @Watch('onCloudSyncDataChanged')
-  cloudSyncPreferenceRevision: number = 0;
-  @StorageLink('cloudSyncApplicationPreferenceChangeRevision') @Watch('onCloudSyncDataChanged')
-  cloudSyncApplicationPreferenceRevision: number = 0;
-  @StorageLink('cloudSyncBookSourceChangeRevision') @Watch('onCloudSyncDataChanged')
-  cloudSyncBookSourceRevision: number = 0;
   @StorageLink('globalTtsActive') @Watch('onGlobalTtsActiveChanged') globalTtsActive: boolean = false;
   @StorageLink('globalTtsPaused') globalTtsPaused: boolean = false;
   @StorageLink('globalTtsBookName') globalTtsBookName: string = '';
@@ -209,18 +198,6 @@ struct Index {
     this.syncHomeSystemBars();
   }
 
-  onCloudSyncDataChanged(): void {
-    if (this.cloudSyncDebounceTimer >= 0) {
-      clearTimeout(this.cloudSyncDebounceTimer);
-    }
-    this.cloudSyncDebounceTimer = setTimeout(() => {
-      this.cloudSyncDebounceTimer = -1;
-      CloudSyncCoordinator.syncAutomatically(
-        getContext(this), CloudSyncCoordinator.TRIGGER_CHANGE).catch((error: Error) => {
-        console.warn('数据变更后自动同步失败:', error);
-      });
-    }, 15 * 1000);
-  }
 
   onGlobalTtsActiveChanged(): void {
     if (!this.globalTtsActive) {
@@ -11046,14 +11023,6 @@ struct SettingsPage {
   @Prop navBarHeight: number = 0;
   @StorageLink('appDarkMode') appDarkMode: boolean = false;
   @StorageLink('themeRevision') themeRevision: number = 0;
-  @StorageLink('accountLoggedIn') accountLoggedIn: boolean = false;
-  @StorageLink('accountDisplayName') accountDisplayName: string = '';
-  @StorageLink('accountAvatarUrl') accountAvatarUrl: string = '';
-  @StorageLink('accountPoints') accountPoints: number = 0;
-  @StorageLink('cloudSyncEnabled') cloudSyncEnabled: boolean = false;
-  @StorageLink('cloudSyncLastSuccessAt') cloudSyncLastSuccessAt: number = 0;
-  @StorageLink('cloudSyncPendingCount') cloudSyncPendingCount: number = 0;
-  @StorageLink('cloudSyncStatus') cloudSyncStatus: string = CloudSyncSettingsStore.STATUS_DISABLED;
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
@@ -11064,7 +11033,6 @@ struct SettingsPage {
             .height(56 + this.statusBarHeight)
 
           Column() {
-            this.syncMenuItem()
             this.menuItem($r('sys.symbol.externaldrive'), '书源管理', true, () => {
               router.pushUrl({ url: 'pages/BookSource' });
             })
@@ -11128,50 +11096,6 @@ struct SettingsPage {
     .height('100%')
     .backgroundColor(this.pageColor())
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-  }
-
-  @Builder
-  syncMenuItem() {
-    Column() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-          .fontSize(22)
-          .fontColor([this.subTextColor()])
-          .width(32)
-
-        Column({ space: 3 }) {
-          Text('数据同步')
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.primaryTextColor())
-          Text(CloudSyncSettingsStore.statusSummary(this.accountLoggedIn, this.cloudSyncEnabled,
-            this.cloudSyncStatus, this.cloudSyncPendingCount, this.cloudSyncLastSuccessAt))
-            .fontSize(12)
-            .fontColor(this.cloudSyncEnabled && this.accountLoggedIn ? this.accentColor() : this.subTextColor())
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: 12 })
-
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(18)
-          .fontColor([this.subTextColor()])
-      }
-      .width('100%')
-      .height(64)
-      .padding({ left: 16, right: 16 })
-      .alignItems(VerticalAlign.Center)
-
-      Divider()
-        .strokeWidth(0.5)
-        .color(this.dividerColor())
-        .width('calc(100% - 60vp)')
-        .margin({ left: 60 })
-    }
-    .width('100%')
-    .onClick(() => {
-      router.pushUrl({ url: 'pages/DataSync' });
-    })
   }
 
   @Builder

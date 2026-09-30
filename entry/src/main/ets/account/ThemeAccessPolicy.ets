@@ -1,4 +1,3 @@
-import { AccountSessionStore } from './AccountSessionStore';
 import { BuiltinThemeRegistry } from '../theme/BuiltinThemeRegistry';
 import { ThemeIds } from '../theme/ThemeModels';
 
@@ -12,11 +11,7 @@ export class ThemeAccessPolicy {
       return true;
     }
     const activeThemeId = AppStorage.get<string>('appThemeId') || '';
-    // The currently applied theme must retain its complete runtime appearance,
-    // including during a timed trial. Theme selection and component-source
-    // screens perform their own entitlement checks, so this does not grant
-    // ownership of the trial theme.
-    return activeThemeId === normalized || AccountSessionStore.hasValidEntitlement(normalized);
+    return activeThemeId === normalized;
   }
 
   static requiredThemeForBubbleStyle(styleId: string): string {

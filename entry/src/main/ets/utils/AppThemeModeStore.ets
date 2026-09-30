@@ -1,6 +1,5 @@
 import { Context } from '@kit.AbilityKit';
 import preferences from '@ohos.data.preferences';
-import { CloudSyncChangeTracker } from '../account/CloudSyncChangeTracker';
 
 export class AppThemeModeStore {
   static readonly KEY_THEME_MODE: string = 'appThemeMode';
@@ -26,7 +25,6 @@ export class AppThemeModeStore {
     const store = await preferences.getPreferences(context, AppThemeModeStore.STORE_NAME);
     await store.put(AppThemeModeStore.KEY_THEME_MODE, normalizedMode);
     await store.flush();
-    CloudSyncChangeTracker.markApplicationPreferenceChanged();
   }
 
   static applyToStorage(mode: string): void {

@@ -2,7 +2,6 @@ import relationalStore from '@ohos.data.relationalStore';
 import { Book, BookChapter, BookSource, BookGroup, Bookmark, SearchKeyword, ExploreRule, TocRule, ContentRule } from './Book';
 import { rssSources, RssSourceGroup, rssSourcesHistory, rssSourceDb, ToRssSources, ToRssSourcesDb, rssSourcesTypeParams } from './RssSource';
 import { Context } from '@kit.AbilityKit';
-import { CloudSyncChangeTracker } from '../../account/CloudSyncChangeTracker';
 import { BookIdentity } from '../../utils/BookIdentity';
 
 interface ColumnMigration {
@@ -674,7 +673,6 @@ export class AppDatabase {
     await this.store.insert('books', bucket);
     await this.recordBookMutation('insert', reason, book);
     if (book.origin && book.origin !== 'local') {
-      CloudSyncChangeTracker.markDataChanged();
     }
   }
 
@@ -730,7 +728,6 @@ export class AppDatabase {
     }
     await this.recordBookMutation('update', reason, book);
     if (syncRelevant && book.origin && book.origin !== 'local') {
-      CloudSyncChangeTracker.markDataChanged();
     }
   }
 
@@ -834,7 +831,6 @@ export class AppDatabase {
           chapterBuckets.slice(offset, offset + AppDatabase.BATCH_INSERT_CHUNK_SIZE));
       }
       await transaction.commit();
-      CloudSyncChangeTracker.markDataChanged();
     } catch (error) {
       await transaction.rollback();
       throw error;
@@ -897,7 +893,6 @@ export class AppDatabase {
       return;
     }
     if (syncRelevant) {
-      CloudSyncChangeTracker.markReadingProgressChanged();
     }
   }
 
@@ -916,7 +911,6 @@ export class AppDatabase {
     await this.deleteBookCachedContent(bookUrl);
     await this.deleteBookBookmarks(bookUrl);
     if (existing?.origin && existing.origin !== 'local') {
-      CloudSyncChangeTracker.markDataChanged();
     }
   }
 
@@ -958,7 +952,6 @@ export class AppDatabase {
       createTime: bookmark.createTime
     };
     const id = await this.store.insert('bookmarks', bucket);
-    CloudSyncChangeTracker.markDataChanged();
     return id;
   }
 
@@ -1014,7 +1007,6 @@ export class AppDatabase {
       content: bookmark.content,
       createTime: bookmark.createTime
     });
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   async getBookmarkAt(bookUrl: string, chapterIndex: number, pageIndex: number): Promise<Bookmark | null> {
@@ -1037,7 +1029,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('bookmarks');
     predicates.equalTo('id', id);
     await this.store.delete(predicates);
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   async deleteBookmarks(ids: number[]): Promise<void> {
@@ -1047,7 +1038,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('bookmarks');
     predicates.in('id', validIds);
     await this.store.delete(predicates);
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   async deleteBookBookmarks(bookUrl: string): Promise<void> {
@@ -1066,7 +1056,6 @@ export class AppDatabase {
       bookName: bookName,
       bookAuthor: bookAuthor
     }, predicates);
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   async updateBookBookmarkMetadata(bookUrl: string, bookName: string, bookAuthor: string): Promise<void> {
@@ -1077,7 +1066,6 @@ export class AppDatabase {
       bookName: bookName,
       bookAuthor: bookAuthor
     }, predicates);
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   private resultSetToBookmark(resultSet: relationalStore.ResultSet): Bookmark {
@@ -1136,7 +1124,6 @@ export class AppDatabase {
     if (affected <= 0) {
       throw new Error(`置顶书籍未命中数据库记录: ${bookUrl}`);
     }
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   async getBookByIdentityKey(identityKey: string): Promise<Book | null> {
@@ -1224,7 +1211,6 @@ export class AppDatabase {
     } else {
       await this.store.insert('book_groups', bucket);
     }
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   async addBookGroup(groupName: string): Promise<BookGroup | null> {
@@ -1250,7 +1236,6 @@ export class AppDatabase {
     await this.store.insert('book_groups', {
       groupId: group.groupId, groupName: group.groupName, groupOrder: group.order, show: 1, enableRefresh: 1
     });
-    CloudSyncChangeTracker.markDataChanged();
     return group;
   }
 
@@ -1266,7 +1251,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('book_groups');
     predicates.equalTo('groupId', groupId);
     await this.store.update({ groupName: name }, predicates);
-    CloudSyncChangeTracker.markDataChanged();
     return true;
   }
 
@@ -1275,7 +1259,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('books');
     predicates.in('bookUrl', bookUrls);
     await this.store.update({ groupId: groupId }, predicates);
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   async deleteBookGroup(groupId: number): Promise<void> {
@@ -1286,7 +1269,6 @@ export class AppDatabase {
     const groupPredicates = new relationalStore.RdbPredicates('book_groups');
     groupPredicates.equalTo('groupId', groupId);
     await this.store.delete(groupPredicates);
-    CloudSyncChangeTracker.markDataChanged();
   }
 
   private resultSetToBook(resultSet: relationalStore.ResultSet): Book {
@@ -1439,7 +1421,6 @@ export class AppDatabase {
       bucket['customOrder'] = source.customOrder;
       await this.store.insert('book_sources', bucket);
     }
-    CloudSyncChangeTracker.markBookSourceChanged();
     return true;
   }
 
@@ -1490,7 +1471,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('book_sources');
     predicates.equalTo('bookSourceUrl', lookupUrl);
     await this.store.update(bucket, predicates);
-    CloudSyncChangeTracker.markBookSourceChanged();
   }
 
   async deleteBookSource(bookSourceUrl: string): Promise<void> {
@@ -1499,7 +1479,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('book_sources');
     predicates.equalTo('bookSourceUrl', bookSourceUrl);
     await this.store.delete(predicates);
-    CloudSyncChangeTracker.markBookSourceChanged();
   }
 
   async deleteBookSourceForSync(bookSourceUrl: string): Promise<void> {
@@ -1507,7 +1486,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('book_sources');
     predicates.equalTo('bookSourceUrl', bookSourceUrl);
     await this.store.delete(predicates);
-    CloudSyncChangeTracker.markBookSourceChanged();
   }
 
   async getBookSource(bookSourceUrl: string): Promise<BookSource | null> {
@@ -1529,36 +1507,6 @@ export class AppDatabase {
     predicates.orderByDesc('isPinned');
     predicates.orderByAsc('customOrder');
     const resultSet = await this.store.query(predicates, []);
-    const sources: BookSource[] = [];
-    try {
-      while (resultSet.goToNextRow()) {
-        sources.push(this.resultSetToBookSource(resultSet));
-      }
-    } finally {
-      resultSet.close();
-    }
-    return sources;
-  }
-
-  /**
-   * 云同步只需要可执行的书源字段。排除 Android 备份带来的 rawSourceJson，避免在同步
-   * 大量书源时把仅供回导出的原始副本全部加载到内存。
-   */
-  async getBookSourcesForCloudSync(): Promise<BookSource[]> {
-    if (!this.store) return [];
-    const predicates = new relationalStore.RdbPredicates('book_sources');
-    predicates.orderByDesc('isPinned');
-    predicates.orderByAsc('customOrder');
-    const columns = [
-      'bookSourceUrl', 'bookSourceName', 'bookSourceType', 'bookSourceGroup', 'bookSourceComment',
-      'loginUrl', 'loginUi', 'loginCheckJs', 'loginHeader',
-      'bookUrlPattern', 'searchUrl', 'exploreUrl', 'jsLib', 'header',
-      'bookListRule', 'searchRule', 'exploreRule', 'bookInfoRule', 'tocRule', 'contentRule',
-      'variableComment', 'lastUpdateTime', 'respondTime', 'customOrder', 'customButton',
-      'eventListener', 'isPinned', 'enabled', 'enabledExplore', 'isLocked', 'validationStatus',
-      'weight', 'concurrentRate', 'enabledCookieJar'
-    ];
-    const resultSet = await this.store.query(predicates, columns);
     const sources: BookSource[] = [];
     try {
       while (resultSet.goToNextRow()) {
@@ -1621,7 +1569,6 @@ export class AppDatabase {
     } else {
       await this.store.insert('book_sources', bucket);
     }
-    CloudSyncChangeTracker.markBookSourceChanged();
   }
 
   /** 列表只读取轻量字段；规则详情在实际使用时再按主键加载。 */
@@ -1683,7 +1630,6 @@ export class AppDatabase {
       fields['enabled'] !== undefined ||
       fields['enabledExplore'] !== undefined ||
       fields['customOrder'] !== undefined) {
-      CloudSyncChangeTracker.markBookSourceChanged();
     }
   }
 
@@ -1704,7 +1650,6 @@ export class AppDatabase {
       await transaction.rollback();
       throw e;
     }
-    CloudSyncChangeTracker.markBookSourceChanged();
   }
 
   /** 置顶属于列表管理信息，不受书源规则锁定状态影响。 */
@@ -1713,7 +1658,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('book_sources');
     predicates.equalTo('bookSourceUrl', bookSourceUrl);
     await this.store.update({ isPinned: pinned ? 1 : 0 }, predicates);
-    CloudSyncChangeTracker.markBookSourceChanged();
   }
 
   /** 分组重命名或删除时更新归属；这类列表管理操作不改动书源规则内容。 */
@@ -1722,7 +1666,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('book_sources');
     predicates.equalTo('bookSourceUrl', bookSourceUrl);
     await this.store.update({ bookSourceGroup: groupName, lastUpdateTime: Date.now() }, predicates);
-    CloudSyncChangeTracker.markBookSourceChanged();
   }
 
   async setBookSourceLocked(bookSourceUrl: string, locked: boolean): Promise<void> {
@@ -1730,7 +1673,6 @@ export class AppDatabase {
     const predicates = new relationalStore.RdbPredicates('book_sources');
     predicates.equalTo('bookSourceUrl', bookSourceUrl);
     await this.store.update({ isLocked: locked ? 1 : 0 }, predicates);
-    CloudSyncChangeTracker.markBookSourceChanged();
   }
 
   /** 校验结果是运行状态，锁定书源也需要正常记录。 */
