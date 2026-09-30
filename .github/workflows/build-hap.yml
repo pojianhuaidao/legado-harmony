@@ -1,0 +1,92 @@
+name: Build HAP and Release (unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ErBWs/setup-ohos@v2 自动下载+缓存 HarmonyOS CLI tools（含 SDK/hvigorw/ohpm）
+      # 26.0.0.821 = API 26，与工程 targetSdkVersion 26 匹配
+      - name: Setup HarmonyOS CLI tools (API 26)
+        uses: ErBWs/setup-ohos@v2
+        with:
+          version: 26.0.0.821
+          cache: true
+
+      # 工程 signingConfigs 指向作者本机签名文件（绝对路径+密文），CI 不可用，剥离后产 unsigned HAP
+      - name: Strip local signing config
+        run: |
+          python3 - <<'EOF'
+          import re
+          p = 'build-profile.json5'
+          s = open(p, encoding='utf-8').read()
+          s = re.sub(r'"signingConfigs"\s*:\s*\[.*?\],', '"signingConfigs": [],', s, flags=re.S)
+          s = re.sub(r'\s*"signingConfig"\s*:\s*"[^"]*",?', '', s)
+          open(p, 'w', encoding='utf-8').write(s)
+          print('signingConfigs stripped')
+          EOF
+
+      - name: ohpm install
+        run: |
+          export DEVECO_SDK_HOME="$HOS_SDK_HOME"
+          export PATH="$HOS_SDK_HOME/../bin:$PATH"
+          ohpm config set registry https://ohpm.openharmony.cn/ohpm/
+          ohpm install --all
+
+      - name: Build debug HAP (unsigned)
+        run: |
+          export DEVECO_SDK_HOME="$HOS_SDK_HOME"
+          export PATH="$HOS_SDK_HOME/../bin:$PATH"
+          hvigorw --no-daemon assembleHap --mode module -p module=entry@default -p product=default -p buildMode=debug
+
+      - name: Collect HAP
+        id: collect
+        run: |
+          HAP=$(find entry/build -name '*.hap' | head -1)
+          if [ -z "$HAP" ]; then
+            echo "::error::No HAP found under entry/build"
+            exit 1
+          fi
+          echo "HAP=$HAP" >> "$GITHUB_ENV"
+          ls -lh "$HAP"
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: unsigned HAP build #${{ github.run_number }}
+          body: |
+            自动构建的 unsigned HAP（未签名，侧载用）。
+            - 提交: ${{ github.sha }}
+            - 构建号: ${{ github.run_number }}
+            - 触发: ${{ github.event_name }}
+          files: ${{ env.HAP }}
+          draft: false
+          prerelease: true
