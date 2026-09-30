@@ -1043,17 +1043,23 @@ struct TtsSettingsPage {
 
   @Builder
   speedStepButton(icon: Resource, accessibilityText: string, enabled: boolean, action: () => void) {
-    AdaptiveIconButton({
-      icon: icon,
-      accessibilityLabel: accessibilityText,
-      buttonEnabled: enabled,
-      buttonSize: 34,
-      iconSize: 16,
-      fillColor: this.inputColor(),
-      iconColor: this.primaryTextColor(),
-      disabledIconColor: this.subTextColor(),
-      action: action
-    })
+    Stack({ alignContent: Alignment.Center }) {
+      AdaptiveIconButton({
+        icon: icon,
+        accessibilityLabel: accessibilityText,
+        buttonEnabled: enabled,
+        buttonSize: 34,
+        iconSize: 16,
+        fillColor: this.inputColor(),
+        iconColor: this.primaryTextColor(),
+        disabledIconColor: this.subTextColor(),
+        action: action
+      })
+    }
+    .width(34)
+    .height(34)
+    .borderRadius(17)
+    .backgroundColor(this.inputColor())
   }
 
   applySpeed(value: number): void {
