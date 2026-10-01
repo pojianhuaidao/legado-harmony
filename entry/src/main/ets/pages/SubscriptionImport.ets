@@ -118,6 +118,7 @@ struct SubscriptionImportPage {
     const ok = await rssSourcesUtil.applyImport(this.parseResult, '订阅');
     if (ok) {
       promptAction.showToast({ message: `已导入 ${this.parseResult.length} 个订阅源` });
+      AppStorage.setOrCreate('rssSourcesVersion', (AppStorage.get<number>('rssSourcesVersion') ?? 0) + 1);
       this.parseResult = [];
       this.parseInfo = '';
       this.inputText = '';

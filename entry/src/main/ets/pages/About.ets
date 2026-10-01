@@ -48,7 +48,7 @@ struct AboutPage {
             .margin({ top: 6, bottom: 24 })
 
           this.infoCard('项目说明',
-            '开源轻页是一个本地阅读与书源规则兼容项目，用于验证用户自行提供且有合法使用权限的规则在移动端的导入、解析和阅读体验。')
+            '爱·阅读是一个本地阅读与书源规则兼容项目，用于验证用户自行提供且有合法使用权限的规则在移动端的导入、解析和阅读体验。')
 
           this.infoCard('合规说明',
             '本项目不内置、不托管、不分发任何小说正文、章节内容、封面图片或付费资源；不提供书源订阅服务，也不推荐、维护或背书任何第三方内容站点。')
@@ -138,7 +138,7 @@ struct AboutPage {
           .fontWeight(FontWeight.Medium)
           .fontColor(this.primaryTextColor())
           .width('100%')
-        Text('开源轻页采用 GPL-3.0 许可证，并包含适用 MIT、Apache-2.0 许可证的第三方组件。')
+        Text('爱·阅读采用 GPL-3.0 许可证，并包含适用 MIT、Apache-2.0 许可证的第三方组件。')
           .fontSize(14)
           .fontColor(this.secondaryTextColor())
           .lineHeight(22)
