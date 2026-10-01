@@ -162,6 +162,7 @@ export default class EntryAbility extends UIAbility {
     PersistentStorage.persistProp('appIconId', AppIconSettingsStore.DEFAULT_ICON_ID);
     PersistentStorage.persistProp('explorePlatform', '');
     PersistentStorage.persistProp('exploreSourceUrl', '');
+    PersistentStorage.persistProp('systemUa', 0);
     CoverGalleryStore.load(this.context).then((snapshot) => {
       CoverGalleryStore.applyToStorage(snapshot);
       return CoverGalleryStore.save(this.context, snapshot);
