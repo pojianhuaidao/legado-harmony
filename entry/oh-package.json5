@@ -1,7 +1,7 @@
 {
   "name": "entry",
   "version": "3.9.907",
-  "description": "开源轻页主模块",
+  "description": "爱·阅读主模块",
   "main": "Index.ets",
   "author": "李其健",
   "homepage": "https://github.com/wip3l/legado-harmony",

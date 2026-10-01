@@ -28,7 +28,7 @@ struct OpenSourceLicensesPage {
       Scroll() {
         Column() {
           Column() {
-            Text('开源轻页采用 GPL-3.0 许可证，并包含 ohos_quickjs、QuickJS 和部分 OpenHarmony/Huawei N-API 封装代码。以下源码信息、版权声明与完整许可文本随 HAP 一同分发。')
+            Text('爱·阅读采用 GPL-3.0 许可证，并包含 ohos_quickjs、QuickJS 和部分 OpenHarmony/Huawei N-API 封装代码。以下源码信息、版权声明与完整许可文本随 HAP 一同分发。')
               .fontSize(14)
               .fontColor(this.secondaryTextColor())
               .lineHeight(22)
@@ -96,7 +96,7 @@ struct OpenSourceLicensesPage {
         .getRawFileContent('licenses/THIRD_PARTY_LICENSES.txt');
       const projectNotice = 'OPEN SOURCE PROJECT INFORMATION\n' +
         '开源项目信息\n\n' +
-        'Project / 项目：开源轻页 / legado-harmony\n' +
+        'Project / 项目：爱·阅读 / legado-harmony\n' +
         'Copyright (c) 2026 李其健\n' +
         'Source / 源码：https://github.com/wip3l/legado-harmony\n' +
         'License / 许可证：GNU General Public License version 3 (GPL-3.0)\n\n';

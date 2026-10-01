@@ -1,5 +1,5 @@
 /**
- * 订阅源(RSS)Web 阅读页 —— 从 legado-Harmony rssWebView.ets 移植，按开源轻页风格重写
+ * 订阅源(RSS)Web 阅读页 —— 从 legado-Harmony rssWebView.ets 移植，按爱·阅读风格重写
  *
  * 通过 router 参数接收订阅源信息，加载其 sourceUrl；
  * 支持页面内前进/后退，返回键优先回退 Web 历史。

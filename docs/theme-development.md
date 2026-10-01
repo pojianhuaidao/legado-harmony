@@ -1,6 +1,6 @@
 # 主题开发指南
 
-开源轻页的主题由编译期 `ThemePack`、运行时 `ThemeRuntime` 和持久化兼容层组成。主题选择保存稳定的 `themeId`、主题封面开关与用户颜色覆盖值；`Resource`、背景图片、封面和图标由资源注册表解析，不进入 Preferences。
+爱·阅读的主题由编译期 `ThemePack`、运行时 `ThemeRuntime` 和持久化兼容层组成。主题选择保存稳定的 `themeId`、主题封面开关与用户颜色覆盖值；`Resource`、背景图片、封面和图标由资源注册表解析，不进入 Preferences。
 
 ## 目录与职责
 

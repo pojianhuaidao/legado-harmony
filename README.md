@@ -1,6 +1,6 @@
-﻿# 开源轻页
+﻿# 爱·阅读
 
-开源轻页是一款使用 ArkTS / ArkUI 开发的 HarmonyOS NEXT 本地阅读应用，面向手机、平板和 PC/2in1，提供书架、搜索、发现、书源管理、正文阅读、漫画、有声书、朗读与个性化设置等能力。
+爱·阅读是一款使用 ArkTS / ArkUI 开发的 HarmonyOS NEXT 本地阅读应用，面向手机、平板和 PC/2in1，提供书架、搜索、发现、书源管理、正文阅读、漫画、有声书、朗读与个性化设置等能力。
 
 | 项目 | 信息 |
 | --- | --- |
@@ -292,7 +292,7 @@ node --experimental-strip-types scripts/replace-rule-import-check.mjs
 
 本项目采用 [GPL-3.0](LICENSE) 许可证。
 
-- 项目名称：开源轻页 / legado-harmony
+- 项目名称：爱·阅读 / legado-harmony
 - 版权所有：Copyright © 2026 legado-harmony contributors
 - 源码地址：https://github.com/wip3l/legado-harmony
 

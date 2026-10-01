@@ -1,5 +1,5 @@
 /**
- * 订阅源(RSS)列表组件 —— 从 legado-Harmony 移植，按开源轻页风格重写
+ * 订阅源(RSS)列表组件 —— 从 legado-Harmony 移植，按爱·阅读风格重写
  *
  * 双模式：
  *  1) Tab 模式（pageMode=false）：主界面底部 Tab「订阅」直接内嵌，无返回按钮；
@@ -58,8 +58,13 @@ export struct SubscriptionTab {
   @State showDeleteDialog: boolean = false;
   @State showHistory: boolean = true;
   @State listVersion: number = 0;
+  @StorageLink('rssSourcesVersion') @Watch('onRssSourcesVersionChanged') rssSourcesVersion: number = 0;
 
   aboutToAppear(): void {
+    this.refresh();
+  }
+
+  onRssSourcesVersionChanged(): void {
     this.refresh();
   }
 
