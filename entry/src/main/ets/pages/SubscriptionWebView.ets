@@ -12,7 +12,7 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
 import pasteboard from '@ohos.pasteboard';
-import { common } from '@kit.AbilityKit';
+import { common, Want } from '@kit.AbilityKit';
 import { syncSystemBars } from '../utils/SystemBars';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
@@ -271,7 +271,7 @@ struct SubscriptionWebViewPage {
   openSystemBrowser(): void {
     const ctx = getContext(this) as common.UIAbilityContext;
     const url = this.currentUrl.length > 0 ? this.currentUrl : this.sourceUrl;
-    const want: common.Want = {
+    const want: Want = {
       action: 'ohos.want.action.viewData',
       entities: ['entity.system.browsable'],
       uri: url
@@ -462,8 +462,8 @@ struct SubscriptionWebViewPage {
           }
         })
         .onErrorReceive((event?: OnErrorReceiveEvent) => {
-          const code = event ? event.errorCode : -1;
-          const info = event && event.errorInfo ? event.errorInfo : '';
+          const code = event ? event.error.getErrorCode() : -1;
+          const info = event ? event.error.getErrorInfo() : '';
           promptAction.showToast({ message: '加载失败(' + code + '): ' + info });
         })
     }
