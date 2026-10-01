@@ -29,6 +29,7 @@
     "pages/ReaderFontSettings",
     "pages/WebDav",
     "pages/ReaderReplaceRules",
+    "pages/ReadStatistics",
     "pages/CoverGalleryManager",
     "pages/About",
     "pages/OpenSourceLicenses",

@@ -163,6 +163,7 @@ struct SettingsPage {
             this.readerHeaderFooterSettingsPanel()
             this.readerFontEntryItem()
             this.readerReplaceRulesEntryItem()
+            this.readStatisticsEntryItem()
             this.switchItem('正文扩展至状态栏', '开启后正文阅读区域会延伸到顶部状态栏安全区', this.readerExtendToStatusBar, (value: boolean) => {
               this.setReaderExtendToStatusBar(value);
             })
@@ -1971,6 +1972,36 @@ struct SettingsPage {
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
       router.pushUrl({ url: 'pages/ReaderReplaceRules' });
+    })
+  }
+
+  @Builder
+  readStatisticsEntryItem() {
+    Row() {
+      Column({ space: 4 }) {
+        Text('阅读统计')
+          .fontColor(this.primaryTextColor())
+          .fontSize(16)
+        Text('读过 / 读完 / 书签')
+          .fontSize(12)
+          .fontColor(this.subTextColor())
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([this.subTextColor()])
+    }
+    .width('calc(100% - 32vp)')
+    .constraintSize({ minHeight: 62 })
+    .padding({ left: 0, right: 0, top: 8, bottom: 8 })
+    .margin({ left: 16, right: 16 })
+    .border({ width: { bottom: 0.5 }, color: this.settingsDividerColor() })
+    .backgroundColor(this.cardColor())
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      router.pushUrl({ url: 'pages/ReadStatistics' });
     })
   }
 
