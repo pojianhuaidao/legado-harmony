@@ -9388,11 +9388,6 @@ struct ExplorePage {
     AppStorage.setOrCreate('singleSourceSearchKeyword', value);
     const nonce = AppStorage.get<number>('singleSourceSearchNonce') || 0;
     AppStorage.setOrCreate('singleSourceSearchNonce', nonce + 1);
-    this.keyword = value;
-    this.currentIndex = 2;
-    setTimeout((): void => {
-      this.doSearch();
-    }, 0);
   }
 
   getEntryGroupNames(entries: ExploreEntry[]): string[] {
