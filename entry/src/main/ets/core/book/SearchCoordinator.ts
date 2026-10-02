@@ -13,6 +13,7 @@ import { BookUrlResolver } from './BookUrlResolver';
 import { BookFieldSanitizer } from '../../utils/BookFieldSanitizer';
 import { BookSourceMetadataSupport } from './BookSourceMetadataSupport';
 import { BookSourceRuntimeRouter, SourceRuntimeStage } from './BookSourceRuntimeRouter';
+import { TimeoutHelper } from '../concurrency/TimeoutHelper';
 import { BookSourceStageWebRuntime, StageWebRuntimeRequest } from './BookSourceStageWebRuntime';
 import { BookSourceStageRuleSupport } from './BookSourceStageRuleSupport';
 import { RuleExecutionService } from '../rule/RuleExecutionService';
@@ -45,7 +46,12 @@ export interface SearchSourceResult {
 }
 
 const MAX_SEARCH_CONCURRENCY = 12;
-const MAX_VALIDATION_CONCURRENCY = 1;
+const MAX_VALIDATION_CONCURRENCY = 3;
+// 单源整体超时兜底：聚合书源（如书山 70+ 子源）脚本多步 + 云端 API 重试最坏可达
+// 数分钟。校验/搜索必须在一个源上设总期限，超时即跳过当前源继续后续，避免 UI
+// 一直停留在“校验中/加载中”。
+const MAX_SEARCH_SOURCE_TIMEOUT_MS = 90000;
+const MAX_VALIDATION_SOURCE_TIMEOUT_MS = 60000;
 // Batch source results so background searching does not continuously interrupt list gestures.
 const SEARCH_PROGRESS_EMIT_INTERVAL_MS = 500;
 const MAX_SEARCH_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -201,7 +207,12 @@ export class SearchCoordinator {
         currentSourceLabel = sources[sourceIndex].bookSourceName || `书源 ${sourceIndex + 1}`;
         AppStorage.setOrCreate('searchLastSource', currentSourceLabel);
         AppStorage.setOrCreate('searchLastSourceIndex', sourceIndex + 1);
-        const sourceResult = await this.searchOne(sources[sourceIndex], keyword, options);
+        const sourceResult = await TimeoutHelper.withTimeout<SearchSourceResult>(
+          this.searchOne(sources[sourceIndex], keyword, options),
+          validationOnly ? MAX_VALIDATION_SOURCE_TIMEOUT_MS : MAX_SEARCH_SOURCE_TIMEOUT_MS,
+          () => this.sourceResult([], BookSource.VALIDATION_TEMPORARY_ERROR,
+            validationOnly ? '校验超时（脚本或网络过慢），已跳过' : '搜索超时（脚本或网络过慢），已跳过')
+        );
         if (sourceResult.books.length === 0 && sourceResult.reason && sourceResult.reason !== '未搜索到结果') {
           this.lastFailureReason = `${sources[sourceIndex].bookSourceName || '书源'}：${sourceResult.reason}`;
         }

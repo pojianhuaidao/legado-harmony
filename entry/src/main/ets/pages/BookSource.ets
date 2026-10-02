@@ -165,6 +165,10 @@ struct BookSourcePage {
   @State isCheckingSources: boolean = false;
   @State checkDone: number = 0;
   @State checkTotal: number = 0;
+  // 校验范围：'enabled' 仅启用书源；'all' 全部书源（含未启用）。
+  // 用户反馈“校验源只显示 36 个”是因为默认只取启用书源，书库启用数恰为 36；
+  // 默认改为全部书源，保证能看到并校验导入的所有源。
+  @State checkSourceScope: string = 'all';
   @State checkOkCount: number = 0;
   @State checkFailedCount: number = 0;
   @State checkNoResultCount: number = 0;
@@ -1692,6 +1696,19 @@ struct BookSourcePage {
         }
         .width('100%')
 
+        Text('校验范围')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.primaryTextColor())
+          .width('100%')
+          .margin({ top: 6 })
+
+        Row({ space: 8 }) {
+          this.checkScopeOption('enabled', '仅启用书源')
+          this.checkScopeOption('all', '全部书源')
+        }
+        .width('100%')
+
         if (this.checkValidationMode === 'search') {
           this.checkActionOption('仅校验', '记录各类校验状态，校验完成后再手动处理', 'none')
           this.checkActionOption('自动禁用', '仅禁用明确失败的书源，可稍后重新启用', 'disable')
@@ -1751,6 +1768,20 @@ struct BookSourcePage {
       .onClick(() => {
         this.checkValidationMode = value;
         if (value === 'exploreReading') this.checkInvalidAction = 'none';
+      })
+  }
+
+  checkScopeOption(value: string, label: string) {
+    Text(label)
+      .fontSize(13)
+      .fontColor(this.checkSourceScope === value ? '#FFFFFF' : this.primaryTextColor())
+      .layoutWeight(1)
+      .height(38)
+      .textAlign(TextAlign.Center)
+      .borderRadius(10)
+      .backgroundColor(this.checkSourceScope === value ? this.buttonColor() : this.inputColor())
+      .onClick(() => {
+        this.checkSourceScope = value;
       })
   }
 
@@ -5515,13 +5546,15 @@ struct BookSourcePage {
     this.showCheckOptionsDialog = false;
 
     const db = AppDatabase.getInstance();
-    const enabledSources = await db.getEnabledBookSources();
-    if (enabledSources.length === 0) {
-      promptAction.showToast({ message: '暂无启用书源' });
+    const targetSources = this.checkSourceScope === 'all'
+      ? await db.getAllBookSources()
+      : await db.getEnabledBookSources();
+    if (targetSources.length === 0) {
+      promptAction.showToast({ message: '暂无可用书源' });
       return;
     }
 
-    await this.startCheckSources(enabledSources, action);
+    await this.startCheckSources(targetSources, action);
   }
 
   async checkActionSource(): Promise<void> {

@@ -99,7 +99,7 @@ struct AppIconSettingsPage {
     AppIconSettingsStore.save(getContext(this), settings).catch((e: Error) => {
       hilog.warn(0x0000, 'appIcon', 'Save app icon selection failed err=%{public}s', JSON.stringify(e));
     });
-    this.showToastSafely(`已选择${option.title}图标，重新构建后桌面生效`);
+    this.showToastSafely(`已选择${option.title}图标，需重新构建侧载包（scripts\\build_sidecar.ps1 -IconId ${option.id}）后安装生效`);
   }
 
   showToastSafely(message: string): void {
