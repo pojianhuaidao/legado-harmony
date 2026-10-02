@@ -383,10 +383,62 @@ export struct SubscriptionTab {
     });
   }
 
+  batchMoveToGroup(): void {
+    const targets: rssSources[] = [];
+    for (let i = 0; i < this.visibleSources.length; i++) {
+      const item = this.visibleSources[i];
+      if (this.selectedUrls[item.sourceUrl] ?? false) {
+        targets.push(item);
+      }
+    }
+    if (targets.length === 0) {
+      promptAction.showToast({ message: '请先选择订阅源' });
+      return;
+    }
+    this.moveGroupTarget = '';
+    this.showMoveGroupDialog = true;
+  }
+
   confirmMoveGroup(): void {
-    const item = this.menuItemSource();
-    if (!item || this.moveGroupTarget.length === 0) {
+    if (this.moveGroupTarget.length === 0) {
       promptAction.showToast({ message: '请选择分组' });
+      return;
+    }
+    if (this.selectionMode) {
+      const targets: rssSources[] = [];
+      for (let i = 0; i < this.visibleSources.length; i++) {
+        const item = this.visibleSources[i];
+        if (this.selectedUrls[item.sourceUrl] ?? false) {
+          const upd = item;
+          upd.sourceGroup = this.moveGroupTarget;
+          targets.push(upd);
+        }
+      }
+      if (targets.length === 0) {
+        promptAction.showToast({ message: '请先选择订阅源' });
+        return;
+      }
+      const db = AppDatabase.getInstance();
+      let chain: Promise<boolean> = Promise.resolve(true);
+      for (let i = 0; i < targets.length; i++) {
+        const item = targets[i];
+        chain = chain.then(() => db.updateRssSource(item));
+      }
+      chain.then(() => {
+        this.showMoveGroupDialog = false;
+        this.moveGroupTarget = '';
+        this.refresh();
+        this.exitSelectionMode();
+        promptAction.showToast({ message: `已移动 ${targets.length} 个订阅源` });
+      }).catch(() => {
+        this.showMoveGroupDialog = false;
+        promptAction.showToast({ message: '移动失败' });
+      });
+      return;
+    }
+    const item = this.menuItemSource();
+    if (!item) {
+      promptAction.showToast({ message: '源不存在或已变更' });
       return;
     }
     const upd = item;
@@ -1255,6 +1307,13 @@ export struct SubscriptionTab {
         .backgroundColor(this.inputColor())
         .fontColor(this.primaryTextColor())
         .onClick(() => this.batchSetEnabled(false))
+      Button('移动')
+        .layoutWeight(1)
+        .height(42)
+        .fontSize(14)
+        .backgroundColor(this.buttonColor())
+        .fontColor('#FFFFFF')
+        .onClick(() => this.batchMoveToGroup())
       Button('删除')
         .layoutWeight(1)
         .height(42)
