@@ -833,7 +833,7 @@ export struct SubscriptionTab {
       }
       .width('100%')
       .layoutWeight(1)
-      .padding({ left: 16, right: 16, top: 4, bottom: this.navBarBottom() + 88 })
+      .padding({ left: 16, right: 16, top: 4, bottom: this.navBarBottom() })
       .scrollBar(BarState.Off)
     }
   }
@@ -1333,14 +1333,14 @@ export struct SubscriptionTab {
       Column() {
         this.headerBar()
         this.searchBar()
+        if (this.selectionMode) {
+          this.batchActionBar()
+        }
         if (!this.selectionMode) {
           this.groupBar()
           this.historyStrip()
         }
         this.sourceList()
-        if (this.selectionMode) {
-          this.batchActionBar()
-        }
       }
       .width('100%')
       .height('100%')

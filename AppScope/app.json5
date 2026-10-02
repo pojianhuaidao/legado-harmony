@@ -1,18 +1,18 @@
-// 版本号规则（自下版本起严格执行）：
-//   versionName = 1.MMDD.NN  （MMDD=构建月份日期，NN=当日序号，首版 1.0930.01）
-//   versionCode = MMDDNN 前补一位 1 后整体视作十进制（1.0930.01 -> 1093001）
+// 版本号规则（CI 构建时按日期动态生成，见 .github/workflows/build-hap.yml Set dynamic version）：
+//   versionName = 1.MMDD.01  （MMDD=构建月份日期，01=当日序号；本地默认值随构建日期更新）
+//   versionCode = MMDD01 前补一位 1 后整体视作十进制（1.1002.01 -> 1100201）
 // 出包文件名统一按包名：lagado.hm.app_<versionName>.hap
 {
   "app": {
     "bundleName": "lagado.hm.app",
     "vendor": "legado",
-    "versionCode": 1093001,
-    "versionName": "1.0930.01",
+    "versionCode": 1100201,
+    "versionName": "1.1002.01",
     "bundleType": "app",
     "debug": false,
     "icon": "$media:layered_image",
     "label": "$string:app_name",
-    "buildVersion": "1093001",
+    "buildVersion": "1100201",
     "distributedNotificationEnabled": true,
     "keepAlive": false,
     "minAPIVersion": 12,
