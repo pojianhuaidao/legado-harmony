@@ -58,6 +58,17 @@ export struct SubscriptionTab {
   @State showDeleteDialog: boolean = false;
   @State showHistory: boolean = true;
   @State listVersion: number = 0;
+  @State showEditDialog: boolean = false;
+  @State editSourceId: number = 0;
+  @State editSourceUrl: string = '';
+  @State editSourceName: string = '';
+  @State editSourceGroup: string = '';
+  @State editSourceType: number = 0;
+  @State editSourceIcon: string = '';
+  @State editSourceIconIsUrl: boolean = true;
+  @State editSourceEnabled: boolean = true;
+  @State editCustomizeTitle: string = '';
+  @State editSourceComment: string = '';
   @StorageLink('rssSourcesVersion') @Watch('onRssSourcesVersionChanged') rssSourcesVersion: number = 0;
 
   aboutToAppear(): void {
@@ -311,6 +322,65 @@ export struct SubscriptionTab {
   openMoveGroupDialog(): void {
     this.showItemMenu = false;
     this.showMoveGroupDialog = true;
+  }
+
+  openEditDialog(): void {
+    const item = this.menuItemSource();
+    if (!item) {
+      return;
+    }
+    this.editSourceId = item.id ?? 0;
+    this.editSourceUrl = item.sourceUrl;
+    this.editSourceName = item.sourceName;
+    this.editSourceGroup = item.sourceGroup;
+    this.editSourceType = item.sourceType;
+    this.editSourceIcon = item.sourceIcon;
+    this.editSourceIconIsUrl = item.sourceIconIsUrl;
+    this.editSourceEnabled = item.enabled;
+    this.editCustomizeTitle = item.customizeTitle;
+    this.editSourceComment = item.sourceComment;
+    this.showItemMenu = false;
+    this.showEditDialog = true;
+  }
+
+  confirmEdit(): void {
+    const name = this.editSourceName.trim();
+    const url = this.editSourceUrl.trim();
+    if (name.length === 0) {
+      promptAction.showToast({ message: '请输入源名称' });
+      return;
+    }
+    if (url.length === 0) {
+      promptAction.showToast({ message: '请输入源地址' });
+      return;
+    }
+    const item = this.menuItemSource();
+    if (!item) {
+      promptAction.showToast({ message: '源不存在或已变更' });
+      return;
+    }
+    const upd = item;
+    upd.sourceName = name;
+    upd.sourceUrl = url;
+    upd.sourceGroup = this.editSourceGroup.trim();
+    upd.sourceType = this.editSourceType;
+    upd.sourceIcon = this.editSourceIcon.trim();
+    upd.sourceIconIsUrl = this.editSourceIconIsUrl;
+    upd.enabled = this.editSourceEnabled;
+    upd.customizeTitle = this.editCustomizeTitle;
+    upd.sourceComment = this.editSourceComment.trim();
+    AppDatabase.getInstance().updateRssSource(upd).then((ok: boolean) => {
+      this.showEditDialog = false;
+      if (ok) {
+        AppStorage.setOrCreate('rssSourcesVersion', (AppStorage.get<number>('rssSourcesVersion') ?? 0) + 1);
+        promptAction.showToast({ message: '保存成功' });
+      } else {
+        promptAction.showToast({ message: '保存失败' });
+      }
+    }).catch(() => {
+      this.showEditDialog = false;
+      promptAction.showToast({ message: '保存失败' });
+    });
   }
 
   confirmMoveGroup(): void {
@@ -892,6 +962,7 @@ export struct SubscriptionTab {
         .width('100%')
         .padding({ left: 16, right: 16, top: 8, bottom: 8 })
 
+      this.sheetItem('编辑', () => this.openEditDialog())
       this.sheetItem('移动至分组', () => this.openMoveGroupDialog())
       this.sheetItem('批量管理', () => {
         this.showItemMenu = false;
@@ -984,6 +1055,139 @@ export struct SubscriptionTab {
       }
       .width('100%')
       .padding({ left: 16, right: 16, bottom: 12 })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  editSheet() {
+    Column({ space: 8 }) {
+      Text('编辑订阅源')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.primaryTextColor())
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 8, bottom: 4 })
+
+      Scroll() {
+        Column({ space: 10 }) {
+          this.editField('源名称', this.editSourceName, (v: string) => { this.editSourceName = v })
+          this.editField('源地址', this.editSourceUrl, (v: string) => { this.editSourceUrl = v })
+          this.editField('分组', this.editSourceGroup, (v: string) => { this.editSourceGroup = v })
+          this.editField('图标链接', this.editSourceIcon, (v: string) => { this.editSourceIcon = v })
+          this.editField('自定义标题', this.editCustomizeTitle, (v: string) => { this.editCustomizeTitle = v })
+          this.editField('备注', this.editSourceComment, (v: string) => { this.editSourceComment = v })
+
+          Row() {
+            Text('源类型')
+              .fontSize(14)
+              .fontColor(this.secondaryTextColor())
+              .width(90)
+            Blank()
+            Row({ space: 8 }) {
+              Text('常规网站')
+                .fontSize(13)
+                .fontColor(this.editSourceType === 0 ? '#FFFFFF' : this.primaryTextColor())
+                .height(30)
+                .padding({ left: 12, right: 12 })
+                .borderRadius(15)
+                .backgroundColor(this.editSourceType === 0 ? this.accentColor() : this.inputColor())
+                .onClick(() => {
+                  this.editSourceType = 0;
+                })
+              Text('订阅源')
+                .fontSize(13)
+                .fontColor(this.editSourceType === 1 ? '#FFFFFF' : this.primaryTextColor())
+                .height(30)
+                .padding({ left: 12, right: 12 })
+                .borderRadius(15)
+                .backgroundColor(this.editSourceType === 1 ? this.accentColor() : this.inputColor())
+                .onClick(() => {
+                  this.editSourceType = 1;
+                })
+            }
+          }
+          .width('100%')
+
+          Row() {
+            Text('图标用链接')
+              .fontSize(14)
+              .fontColor(this.secondaryTextColor())
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.editSourceIconIsUrl })
+              .selectedColor(this.enabledColor())
+              .width(40)
+              .height(24)
+              .onChange((on: boolean) => {
+                this.editSourceIconIsUrl = on;
+              })
+          }
+          .width('100%')
+
+          Row() {
+            Text('启用')
+              .fontSize(14)
+              .fontColor(this.secondaryTextColor())
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.editSourceEnabled })
+              .selectedColor(this.enabledColor())
+              .width(40)
+              .height(24)
+              .onChange((on: boolean) => {
+                this.editSourceEnabled = on;
+              })
+          }
+          .width('100%')
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16 })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+
+      Row({ space: 12 }) {
+        Button('取消')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(15)
+          .backgroundColor(this.inputColor())
+          .fontColor(this.primaryTextColor())
+          .onClick(() => {
+            this.showEditDialog = false;
+          })
+        Button('保存')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(15)
+          .backgroundColor(this.buttonColor())
+          .fontColor('#FFFFFF')
+          .onClick(() => this.confirmEdit())
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 12 })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  editField(label: string, value: string, onChange: (v: string) => void) {
+    Row({ space: 10 }) {
+      Text(label)
+        .fontSize(14)
+        .fontColor(this.secondaryTextColor())
+        .width(90)
+      TextInput({ placeholder: `请输入${label}`, text: value })
+        .layoutWeight(1)
+        .height(38)
+        .fontSize(14)
+        .fontColor(this.primaryTextColor())
+        .placeholderColor(this.placeholderTextColor())
+        .backgroundColor(this.inputColor())
+        .borderRadius(10)
+        .onChange((v: string) => {
+          onChange(v)
+        })
     }
     .width('100%')
   }
@@ -1122,6 +1326,15 @@ export struct SubscriptionTab {
       onDisappear: () => {
         this.showMoveGroupDialog = false;
         this.moveGroupTarget = '';
+      }
+    })
+    .bindSheet($$this.showEditDialog, this.editSheet(), {
+      height: 560,
+      dragBar: false,
+      showClose: false,
+      backgroundColor: ThemeRuntime.dropdownPanelColor(this.appDarkMode, '', 'overlay'),
+      onDisappear: () => {
+        this.showEditDialog = false;
       }
     })
     .bindSheet($$this.showNewGroupDialog, this.newGroupDialog(), {
