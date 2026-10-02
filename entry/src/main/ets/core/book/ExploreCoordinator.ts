@@ -51,6 +51,24 @@ interface ExploreUrlItem {
   chars?: Object[];
   default?: Object;
   action?: string;
+  // Aggregation sources (书山聚合) render plain text/button/select controls inside the explore
+  // menu. Keep the raw style object (layout_flexGrow / layout_flexBasisPercent / layout_alignSelf)
+  // so native UI can approximate the intended layout.
+  style?: Object;
+}
+
+/** A native-renderable control discovered from an explore script (书山 controls array). */
+export class ExploreControl {
+  type: string = '';
+  name: string = '';
+  value: string = '';
+  action: string = '';
+  parameter: string = '';
+  options: string[] = [];
+  selected: string = '';
+  style: Record<string, string> = {};
+  sourceUrl: string = '';
+  sourceName: string = '';
 }
 
 class ExplorePlatformSelector {
@@ -67,6 +85,28 @@ export class ExploreCoordinator {
   private noticeMessage: string = '';
   private platformSelectors: Record<string, ExplorePlatformSelector> = {};
   private filterSelectors: Record<string, ExplorePlatformSelector[]> = {};
+  private controls: ExploreControl[] = [];
+  private pendingSearchKeyword: string = '';
+  private pendingExploreRefresh: boolean = false;
+
+  /** Native controls (书山 text/button/select) discovered on the latest explore load. */
+  getExploreControls(): ExploreControl[] {
+    return this.controls.slice();
+  }
+
+  /** Consume a search keyword recorded by java.searchBook() inside an explore script. */
+  takePendingSearchKeyword(): string {
+    const keyword = this.pendingSearchKeyword;
+    this.pendingSearchKeyword = '';
+    return keyword;
+  }
+
+  /** Consume a refresh request recorded by java.refreshExplore() inside a control action. */
+  takePendingExploreRefresh(): boolean {
+    const requested = this.pendingExploreRefresh;
+    this.pendingExploreRefresh = false;
+    return requested;
+  }
 
   getNoticeMessage(): string {
     return this.noticeMessage;
@@ -98,6 +138,9 @@ export class ExploreCoordinator {
   async getEntries(platform: string = '', sourceUrl: string = '',
     debugContext: BookSourceDebugContext | null = null): Promise<ExploreEntry[]> {
     this.noticeMessage = '';
+    this.controls = [];
+    this.pendingSearchKeyword = '';
+    this.pendingExploreRefresh = false;
     const sources = await appDb.getEnabledBookSourcesForExplore();
     const entries: ExploreEntry[] = [];
     for (const source of sources) {
@@ -494,6 +537,7 @@ export class ExploreCoordinator {
       const scriptItems = await this.evaluateExploreScript(raw, source, debugContext);
       if (scriptItems.length > 0) {
         this.captureExploreSelectors(source, scriptItems);
+        this.captureExploreControls(source, scriptItems);
         this.appendExploreItems(entries, scriptItems, source);
         return entries;
       }
@@ -507,6 +551,8 @@ export class ExploreCoordinator {
     try {
       const parsed = JSON.parse(raw) as ExploreUrlItem[];
       if (Array.isArray(parsed)) {
+        this.captureExploreSelectors(source, parsed);
+        this.captureExploreControls(source, parsed);
         this.appendExploreItems(entries, parsed, source);
         return entries;
       }
@@ -570,6 +616,15 @@ export class ExploreCoordinator {
       try {
         const runtimeResult = await runtime.execute(request);
         if (runtimeResult.toastMessage) this.noticeMessage = runtimeResult.toastMessage.trim();
+        // java.searchBook('关键词') records the keyword for the native explore page to start a
+        // single-source search; java.open('login') means the source wants its login panel first.
+        if (runtimeResult.requestedSearchKeyword) {
+          this.pendingSearchKeyword = runtimeResult.requestedSearchKeyword;
+        }
+        if (runtimeResult.loginPanelRequested === 'true') {
+          this.noticeMessage = '请先登录书源后再试';
+          return [];
+        }
         const parsed = this.parseExploreScriptResult(runtimeResult.value || '');
         if (parsed.length > 0 || this.noticeMessage) return parsed;
       } catch (error) {
@@ -708,6 +763,107 @@ export class ExploreCoordinator {
       if (/平台|来源|源站/.test(title)) this.platformSelectors[source.bookSourceUrl] = selector;
     }
     if (discovered.length > 0) this.filterSelectors[source.bookSourceUrl] = discovered;
+  }
+
+  /** Collect text/button/select controls (书山 controls array) for native rendering. */
+  private captureExploreControls(source: BookSource, items: ExploreUrlItem[]): void {
+    for (const item of items) {
+      const title = String(item.title || item.name || '').trim();
+      if (!title) continue;
+      const type = String(item.type || '').toLowerCase();
+      const control = new ExploreControl();
+      control.sourceUrl = source.bookSourceUrl;
+      control.sourceName = source.bookSourceName;
+      control.type = type;
+      control.name = title;
+      control.style = this.controlStyleMap(item.style);
+      if (type === 'select') {
+        const labels: string[] = [];
+        const values: string[] = [];
+        for (const rawValue of (Array.isArray(item.chars) ? item.chars : [])) {
+          let label = '';
+          let value = '';
+          if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+            const record = rawValue as Record<string, Object>;
+            label = String(record['name'] || record['title'] || record['label'] || record['value'] || '').trim();
+            value = String(record['value'] || record['key'] || label).trim();
+          } else {
+            label = String(rawValue || '').trim();
+            value = label;
+          }
+          if (label && !labels.includes(label)) {
+            labels.push(label);
+            values.push(value);
+          }
+        }
+        control.options = labels;
+        control.selected = String(item.default || labels[0] || '').trim();
+        control.value = values.length > 0 ? values[0] : '';
+        control.action = String(item.action || '');
+      } else {
+        // text: informational label; button: tap-through action script.
+        control.value = type === 'text' ? String(item.action || item.url || '').trim() : '';
+        control.action = type === 'button' ? String(item.action || '').trim() : '';
+        control.parameter = String(item.url || item.name || '').trim();
+      }
+      if (this.controls.some((existing: ExploreControl): boolean =>
+        existing.name === control.name && existing.type === control.type)) {
+        continue;
+      }
+      this.controls.push(control);
+    }
+  }
+
+  private controlStyleMap(style: Object | undefined): Record<string, string> {
+    const result: Record<string, string> = {};
+    if (!style || typeof style !== 'object' || Array.isArray(style)) return result;
+    const record = style as Record<string, Object>;
+    for (const key of Object.keys(record)) {
+      const value = record[key];
+      if (value === null || value === undefined) continue;
+      if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
+        result[key] = String(value);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Execute a native explore control's action inside the stage runtime. The script reads the
+   * pre-filled value from infoMap[<parameter>] (mirroring Legado) and may call setVariable /
+   * refreshExplore / searchBook. Returns 'ok' | 'refresh' | 'fail'.
+   */
+  async executeExploreControl(sourceUrl: string, control: ExploreControl): Promise<string> {
+    if (!control || !control.action) return 'fail';
+    const source = await appDb.getBookSource(sourceUrl);
+    if (!source) return 'fail';
+    const runtime = BookSourceStageWebRuntime.get();
+    if (!runtime.isAvailable() && !await runtime.waitUntilAvailable(5000)) return 'fail';
+    const request = new StageWebRuntimeRequest();
+    request.applyStageBudget(SourceRuntimeStage.EXPLORE);
+    request.source = source;
+    request.baseUrl = source.bookSourceUrl;
+    const parameter = control.parameter || control.name;
+    request.code = `infoMap.put(${JSON.stringify(parameter)},${JSON.stringify(control.value || '')});\n` +
+      `${control.action}\n;'';`;
+    try {
+      const result = await runtime.execute(request);
+      if (result.requestedSearchKeyword) this.pendingSearchKeyword = result.requestedSearchKeyword;
+      if (result.refreshExploreRequested === 'true') this.pendingExploreRefresh = true;
+      if (!this.noticeMessage && result.toastMessage && result.toastMessage.trim()) {
+        this.noticeMessage = result.toastMessage.trim();
+      }
+      if (result.errorMessage) {
+        console.warn('[ExploreCoordinator] control action failed:', source.bookSourceName,
+          control.name, result.errorMessage);
+        return 'fail';
+      }
+      console.info('[ExploreCoordinator] control action executed:', source.bookSourceName, control.name);
+      return this.pendingExploreRefresh ? 'refresh' : 'ok';
+    } catch (error) {
+      console.warn('[ExploreCoordinator] control action failed:', source.bookSourceName, control.name, error);
+      return 'fail';
+    }
   }
 
   private parseLoginPlatformSelector(source: BookSource): ExplorePlatformSelector {

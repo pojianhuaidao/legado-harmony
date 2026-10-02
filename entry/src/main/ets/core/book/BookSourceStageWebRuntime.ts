@@ -77,6 +77,10 @@ export class StageWebRuntimeResult {
   errorMessage: string = '';
   // 'true' when the script called java.refreshExplore() / source.refreshExplore().
   refreshExploreRequested: string = '';
+  // Keyword recorded by java.searchBook() inside an explore script (书山 search controls).
+  requestedSearchKeyword: string = '';
+  // 'true' when the script called java.open('login') to request the source login panel.
+  loginPanelRequested: string = '';
 }
 
 class StageWebRuntimeStep extends StageWebRuntimeResult {
@@ -809,6 +813,7 @@ export class BookSourceStageWebRuntime {
       loginInfo: loginInfo,
       javaState: javaState,
       sourceState: sourceState,
+      sourceConfig: JSON.stringify(sourceState || {}),
       readerActionMode: request.readerActionMode
     });
     const library = this.normalizeScript(request.source.jsLib || '');
@@ -819,7 +824,7 @@ export class BookSourceStageWebRuntime {
     const codeBase64 = this.encodeBase64(code);
     return `(function(){` +
       `function dec(v){try{return decodeURIComponent(escape(atob(v)));}catch(e){return atob(v);}}` +
-      `const S=JSON.parse(dec('${stateBase64}'));let pending='',pendingHeaders='{}',pendingCookie='',pendingCrypto='',pendingStringRules=[],url='',browserHtml='',toast='',error='',logs=[],refreshExploreRequested=false;` +
+      `const S=JSON.parse(dec('${stateBase64}'));let pending='',pendingHeaders='{}',pendingCookie='',pendingCrypto='',pendingStringRules=[],url='',browserHtml='',toast='',error='',logs=[],refreshExploreRequested=false,searchKeyword='',loginPanelRequested=false;` +
       `const cookieOps=[];const sourceData=Object.assign({},S.sourceState||{});` +
       `const cacheData=Object.assign({},S.cache||{});` +
       `const infoMap=Object.create(null);` +
@@ -906,6 +911,9 @@ export class BookSourceStageWebRuntime {
       `getVariable:function(){return S.variable||'';},setVariable:function(v){S.variable=String(v??'');return S.variable;},` +
       `refreshExplore:function(){refreshExploreRequested=true;return true;},` +
       `get:function(k){return sourceData[String(k??'')]??'';},put:function(k,v){sourceData[String(k??'')]=v;return v;},` +
+      `getConfig:function(k){if(arguments.length===0){if(Object.prototype.hasOwnProperty.call(sourceData,'__config')){return sourceData.__config;}let cfg={};try{cfg=JSON.parse(S.sourceConfig||'{}');}catch(e){cfg={};}const merged=Object.assign({},cfg,sourceData);delete merged.__config;return merged;}return sourceData[String(k??'')]??'';},` +
+      `setConfigs:function(v){try{const next=typeof v==='string'?JSON.parse(v):v;if(next&&typeof next==='object'){sourceData.__config=next;if(!Array.isArray(next)){Object.assign(sourceData,next);}}return true;}catch(e){if(typeof v==='string')sourceData[String(v)]=true;return true;}return true;},` +
+      `getServerHost:function(){return S.sourceUrl||'';},` +
       `putLoginInfo:function(v){if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){return v;}}` +
       `if(v&&typeof v==='object')Object.assign(loginMap,v);return v;},` +
       `getLoginInfo:function(k){return arguments.length?(loginMap[k]??''):JSON.stringify(loginMap);},` +
@@ -1010,11 +1018,14 @@ export class BookSourceStageWebRuntime {
       `showBrowser:function(u,h,p){url=String(u??'');` +
       `browserHtml=(typeof h==='string'&&h)?browserDocument(h,p):'';` +
       `return {body:function(){return browserHtml;}};},` +
-      `open:function(u){url=String(u??'');return url;},webView:function(){throw new Error('java.webView仅登录动作可用');},` +
+      `open:function(u){url=String(u??'');if(/^login$/i.test(url)){loginPanelRequested=true;}return url;},webView:function(){throw new Error('java.webView仅登录动作可用');},` +
       `getWebViewUA:function(){return 'Mozilla/5.0 (Linux; HarmonyOS) AppleWebKit/537.36 Mobile Safari/537.36';},` +
       `getAppVariant:function(){return 'harmony';},` +
       `refreshExplore:function(){refreshExploreRequested=true;return true;},refreshBookToc:function(){return true;},` +
-      `refreshContent:function(){return true;},upConfig:function(){return true;},searchBook:function(){return true;}};` +
+      `refreshContent:function(){return true;},upConfig:function(){return true;},` +
+      `searchBook:function(k){searchKeyword=String(k??'');return true;},` +
+      `getConfig:function(k){return source.getConfig(k);},setConfigs:function(v){return source.setConfigs(v);},` +
+      `getServerHost:function(){return source.getServerHost();}};` +
       `function TimeoutCancellationException(){}const Packages={io:{legato:{kazusa:{utils:{` +
       `TimeoutCancellationException:TimeoutCancellationException}}}}};` +
       `function JavaImporter(){return {importClass:function(){return true;},importPackage:function(){return true;}};}` +
@@ -1040,7 +1051,8 @@ export class BookSourceStageWebRuntime {
       `bookVariable:JSON.stringify(bookData),bookType:String(book.type??''),chapterImgUrl:String(chapter.imgUrl??''),` +
       `bookDurChapterIndex:String(book.durChapterIndex??''),bookImageStyle:String(book.imageStyle??''),` +
       `cacheState:JSON.stringify(cacheData),javaState:JSON.stringify(javaData),sourceState:JSON.stringify(sourceData),logs:JSON.stringify(logs),` +
-      `refreshExploreRequested:refreshExploreRequested?'true':'false',` +
+      `refreshExploreRequested:refreshExploreRequested?'true':'false',searchKeyword:searchKeyword,` +
+      `loginPanelRequested:loginPanelRequested?'true':'false',` +
       `value:value,requestedUrl:url,requestedHtml:browserHtml,toastMessage:toast,errorMessage:error}));})()`;
   }
 
@@ -1086,6 +1098,8 @@ export class BookSourceStageWebRuntime {
       step.toastMessage = String(record['toastMessage'] || '');
       step.errorMessage = String(record['errorMessage'] || '');
       step.refreshExploreRequested = String(record['refreshExploreRequested'] || '');
+      step.requestedSearchKeyword = String(record['searchKeyword'] || '');
+      step.loginPanelRequested = String(record['loginPanelRequested'] || '');
       return step;
     } catch (error) {
       // Never print the returned value: it can contain credentials or copyrighted content.

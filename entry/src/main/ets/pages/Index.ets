@@ -13,7 +13,7 @@ import { HdsTabs } from '@kit.UIDesignKit';
 import { Book, BookChapter, BookGroup, BookSource, SearchBook, SearchKeyword } from '../model/data/Book';
 import { AppDatabase } from '../model/data/AppDatabase';
 import { SearchCoordinator, SearchCallback, SearchProgress } from '../core/book/SearchCoordinator';
-import { ExploreCoordinator, ExploreEntry, ExploreFilterGroup, ExploreSourceOption } from '../core/book/ExploreCoordinator';
+import { ExploreCoordinator, ExploreControl, ExploreEntry, ExploreFilterGroup, ExploreSourceOption } from '../core/book/ExploreCoordinator';
 import { BookSourceStageWebRuntime } from '../core/book/BookSourceStageWebRuntime';
 import { ReadBookEngine } from '../core/book/ReadBookEngine';
 import { SearchBookResultList } from '../components/book/SearchBookResultList';
@@ -7560,6 +7560,8 @@ struct ExplorePage {
   @Prop navBarHeight: number = 0;
   @Prop @Watch('onActiveChanged') isActive: boolean = false;
   @State entries: ExploreEntry[] = [];
+  @State exploreControls: ExploreControl[] = [];
+  @State exploreTextValues: string[] = [];
   @State sourceOptions: ExploreSourceOption[] = [];
   private exploreSourceDataSource: ExploreSourceOptionDataSource = new ExploreSourceOptionDataSource();
   @State exploreSourceGroups: string[] = [];
@@ -7719,6 +7721,9 @@ struct ExplorePage {
         this.platformNames.length > 0 ? this.selectedPlatform : '', this.getSelectedSourceUrl());
       if (!this.isCurrentExploreLoad(loadVersion)) return;
       this.entries = entries;
+      this.exploreControls = this.coordinator.getExploreControls().filter((control: ExploreControl): boolean =>
+        control.sourceUrl === this.selectedSourceUrl);
+      this.exploreTextValues = this.exploreControls.map((control: ExploreControl): string => control.value);
       const dynamicPlatforms = this.coordinator.getDiscoveredPlatforms(this.selectedSourceUrl);
       const inferredGroups = this.getEntryGroupNames(entries);
       const activeOption = this.getSelectedSourceOption();
@@ -8059,6 +8064,31 @@ struct ExplorePage {
         .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .width('100%')
         .height(44)
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+      }
+
+      if (this.getActiveExploreControls().length > 0) {
+        Scroll() {
+          Row({ space: 8 }) {
+            ForEach(this.getActiveExploreControls(), (control: ExploreControl, index: number) => {
+              if (control.type === 'text') {
+                this.exploreTextControl(control)
+              } else if (control.type === 'select') {
+                this.exploreSelectControl(control, index)
+              } else {
+                this.exploreButtonControl(control, index)
+              }
+            })
+          }
+          .padding({ left: 16, right: 16 })
+          .constraintSize({ minWidth: '100%' })
+          .justifyContent(FlexAlign.Start)
+          .alignItems(VerticalAlign.Center)
+        }
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+        .width('100%')
+        .height(46)
         .scrollable(ScrollDirection.Horizontal)
         .scrollBar(BarState.Off)
       }
@@ -9135,6 +9165,234 @@ struct ExplorePage {
       (entry.groupTitle || '') === this.selectedPlatform);
     return hasSelectedGroup ? sourceEntries.filter((entry: ExploreEntry): boolean =>
       (entry.groupTitle || '') === this.selectedPlatform) : sourceEntries;
+  }
+
+  getActiveExploreControls(): ExploreControl[] {
+    return this.exploreControls.filter((control: ExploreControl): boolean =>
+      !this.selectedSourceUrl || control.sourceUrl === this.selectedSourceUrl);
+  }
+
+  exploreControlGrow(control: ExploreControl): number {
+    const raw = (control.style['layout_flexGrow'] || '').trim();
+    const value = Number(raw);
+    return Number.isNaN(value) ? 0 : Math.max(0, value);
+  }
+
+  exploreControlBasisPercent(control: ExploreControl): string {
+    const raw = (control.style['layout_flexBasisPercent'] || '').trim();
+    if (!raw) return '';
+    const value = Number(raw);
+    if (Number.isNaN(value)) return '';
+    const percent = (value > 0 && value <= 1) ? value * 100 : value;
+    return `${Math.min(100, Math.max(0, percent))}%`;
+  }
+
+  exploreControlAlign(control: ExploreControl): ItemAlign {
+    const value = (control.style['layout_alignSelf'] || '').toLowerCase();
+    if (value === 'flex-start' || value === 'start') return ItemAlign.Start;
+    if (value === 'flex-end' || value === 'end') return ItemAlign.End;
+    if (value === 'center') return ItemAlign.Center;
+    return ItemAlign.Stretch;
+  }
+
+  @Builder
+  exploreTextControl(control: ExploreControl) {
+    if (this.exploreControlGrow(control) > 0) {
+      Text(control.name)
+        .fontSize(12)
+        .fontColor(this.secondaryTextColor())
+        .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+        .backgroundColor(this.glassCardColor())
+        .borderRadius(12)
+        .border({ width: 1, color: this.glassBorderColor() })
+        .layoutWeight(this.exploreControlGrow(control))
+        .alignSelf(this.exploreControlAlign(control))
+    } else if (this.exploreControlBasisPercent(control) !== '') {
+      Text(control.name)
+        .fontSize(12)
+        .fontColor(this.secondaryTextColor())
+        .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+        .backgroundColor(this.glassCardColor())
+        .borderRadius(12)
+        .border({ width: 1, color: this.glassBorderColor() })
+        .width(this.exploreControlBasisPercent(control))
+        .alignSelf(this.exploreControlAlign(control))
+    } else {
+      Text(control.name)
+        .fontSize(12)
+        .fontColor(this.secondaryTextColor())
+        .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+        .backgroundColor(this.glassCardColor())
+        .borderRadius(12)
+        .border({ width: 1, color: this.glassBorderColor() })
+        .alignSelf(this.exploreControlAlign(control))
+    }
+  }
+
+  @Builder
+  exploreButtonControl(control: ExploreControl, index: number) {
+    if (this.exploreControlGrow(control) > 0) {
+      Button(control.name)
+        .height(30)
+        .fontSize(12)
+        .borderRadius(15)
+        .backgroundColor(this.buttonColor())
+        .fontColor('#FFFFFF')
+        .layoutWeight(this.exploreControlGrow(control))
+        .alignSelf(this.exploreControlAlign(control))
+        .onClick(() => {
+          this.onExploreButtonTap(control, index);
+        })
+    } else if (this.exploreControlBasisPercent(control) !== '') {
+      Button(control.name)
+        .height(30)
+        .fontSize(12)
+        .borderRadius(15)
+        .backgroundColor(this.buttonColor())
+        .fontColor('#FFFFFF')
+        .width(this.exploreControlBasisPercent(control))
+        .alignSelf(this.exploreControlAlign(control))
+        .onClick(() => {
+          this.onExploreButtonTap(control, index);
+        })
+    } else {
+      Button(control.name)
+        .height(30)
+        .fontSize(12)
+        .borderRadius(15)
+        .backgroundColor(this.buttonColor())
+        .fontColor('#FFFFFF')
+        .alignSelf(this.exploreControlAlign(control))
+        .onClick(() => {
+          this.onExploreButtonTap(control, index);
+        })
+    }
+  }
+
+  @Builder
+  exploreSelectControl(control: ExploreControl, index: number) {
+    if (this.exploreControlGrow(control) > 0) {
+      Button(control.selected || control.name)
+        .height(30)
+        .fontSize(12)
+        .borderRadius(15)
+        .backgroundColor(this.glassCardColor())
+        .fontColor(this.accentColor())
+        .border({ width: 1, color: this.glassBorderColor() })
+        .layoutWeight(this.exploreControlGrow(control))
+        .alignSelf(this.exploreControlAlign(control))
+        .onClick(() => {
+          this.onExploreSelectTap(control, index);
+        })
+    } else if (this.exploreControlBasisPercent(control) !== '') {
+      Button(control.selected || control.name)
+        .height(30)
+        .fontSize(12)
+        .borderRadius(15)
+        .backgroundColor(this.glassCardColor())
+        .fontColor(this.accentColor())
+        .border({ width: 1, color: this.glassBorderColor() })
+        .width(this.exploreControlBasisPercent(control))
+        .alignSelf(this.exploreControlAlign(control))
+        .onClick(() => {
+          this.onExploreSelectTap(control, index);
+        })
+    } else {
+      Button(control.selected || control.name)
+        .height(30)
+        .fontSize(12)
+        .borderRadius(15)
+        .backgroundColor(this.glassCardColor())
+        .fontColor(this.accentColor())
+        .border({ width: 1, color: this.glassBorderColor() })
+        .alignSelf(this.exploreControlAlign(control))
+        .onClick(() => {
+          this.onExploreSelectTap(control, index);
+        })
+    }
+  }
+
+  async onExploreButtonTap(control: ExploreControl, index: number): Promise<void> {
+    await this.executeExploreControl(control, this.exploreTextValues[index] || control.value);
+  }
+
+  async onExploreSelectTap(control: ExploreControl, index: number): Promise<void> {
+    const active = this.getActiveExploreControls();
+    if (index < 0 || index >= active.length) return;
+    const current = active[index];
+    const options = current.options;
+    const nextLabel = options.length > 0 ?
+      options[(options.indexOf(current.selected) + 1) % options.length] : current.selected;
+    const snapshot = this.exploreControls.slice();
+    const targetIndex = snapshot.findIndex((item: ExploreControl): boolean =>
+      item.sourceUrl === current.sourceUrl && item.name === current.name && item.type === current.type);
+    if (targetIndex >= 0) {
+      const updated = new ExploreControl();
+      updated.type = snapshot[targetIndex].type;
+      updated.name = snapshot[targetIndex].name;
+      updated.value = nextLabel;
+      updated.action = snapshot[targetIndex].action;
+      updated.parameter = snapshot[targetIndex].parameter;
+      updated.options = snapshot[targetIndex].options.slice();
+      updated.selected = nextLabel;
+      updated.style = snapshot[targetIndex].style;
+      updated.sourceUrl = snapshot[targetIndex].sourceUrl;
+      updated.sourceName = snapshot[targetIndex].sourceName;
+      snapshot[targetIndex] = updated;
+      this.exploreControls = snapshot;
+    }
+    await this.executeExploreControl(control, nextLabel);
+  }
+
+  async executeExploreControl(control: ExploreControl, value: string): Promise<void> {
+    if (!control || !control.action) return;
+    const updated = new ExploreControl();
+    updated.type = control.type;
+    updated.name = control.name;
+    updated.value = value;
+    updated.action = control.action;
+    updated.parameter = control.parameter;
+    updated.options = control.options.slice();
+    updated.selected = control.selected;
+    updated.style = control.style;
+    updated.sourceUrl = control.sourceUrl;
+    updated.sourceName = control.sourceName;
+    const outcome = await this.coordinator.executeExploreControl(this.selectedSourceUrl, updated);
+    if (outcome === 'fail') {
+      promptAction.showToast({ message: '控件执行失败' });
+      return;
+    }
+    const keyword = this.coordinator.takePendingSearchKeyword();
+    const refresh = this.coordinator.takePendingExploreRefresh();
+    const notice = this.coordinator.getNoticeMessage();
+    if (keyword) {
+      this.triggerExploreControlSearch(keyword);
+      return;
+    }
+    if (refresh) {
+      await this.loadEntries(this.selectedPlatform, true);
+      return;
+    }
+    if (notice) {
+      promptAction.showToast({ message: notice });
+    }
+  }
+
+  private triggerExploreControlSearch(keyword: string): void {
+    const value = (keyword || '').trim();
+    if (!value) return;
+    const sourceUrl = this.selectedSourceUrl;
+    const sourceName = this.selectedSourceName || sourceUrl;
+    AppStorage.setOrCreate('singleSourceSearchUrl', sourceUrl);
+    AppStorage.setOrCreate('singleSourceSearchName', sourceName);
+    AppStorage.setOrCreate('singleSourceSearchKeyword', value);
+    const nonce = AppStorage.get<number>('singleSourceSearchNonce') || 0;
+    AppStorage.setOrCreate('singleSourceSearchNonce', nonce + 1);
+    this.keyword = value;
+    this.currentIndex = 2;
+    setTimeout((): void => {
+      this.doSearch();
+    }, 0);
   }
 
   getEntryGroupNames(entries: ExploreEntry[]): string[] {
