@@ -204,13 +204,21 @@ export class RssSourcesUtils {
   }
 
   /**
-   * 执行导入：统一目标分组、强制图标走链接，随后批量入库。
+   * 执行导入：默认统一目标分组、强制图标走链接，随后批量入库。
+   * keepGroup 为 true 时保留各源自带 sourceGroup（空分组归入"其他"），
+   * 避免导入后被 SubscriptionTab 分组过滤不可见。
    * 与源项目 SubscriptionImport 确认按钮的数据逻辑等价。
    */
-  async applyImport(importList: rssSources[], targetGroup: string): Promise<boolean> {
+  async applyImport(importList: rssSources[], targetGroup: string, keepGroup: boolean = false): Promise<boolean> {
     for (let i = 0; i < importList.length; i++) {
       const item = importList[i]
-      item.sourceGroup = targetGroup
+      if (keepGroup) {
+        if (!item.sourceGroup || item.sourceGroup.length === 0) {
+          item.sourceGroup = '其他'
+        }
+      } else {
+        item.sourceGroup = targetGroup
+      }
       item.sourceIconIsUrl = true
     }
     return await appDb.batchInsertRssSources(importList)
