@@ -510,7 +510,7 @@ struct ReaderReplaceRulesPage {
           this.showAddRuleDialog = false;
           this.openNewRule();
         })
-        this.ruleAddActionItem($r('sys.symbol.sparkles'), '预设规则模板', () => {
+        this.ruleAddActionItem($r('sys.symbol.list_bullet'), '预设规则模板', () => {
           this.showAddRuleDialog = false;
           this.selectedPresetIds = [];
           this.showPresetDialog = true;
