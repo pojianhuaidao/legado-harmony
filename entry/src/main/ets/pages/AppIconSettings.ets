@@ -14,10 +14,6 @@ struct AppIconSettingsPage {
   @StorageLink('appIconId') appIconId: string = AppIconSettingsStore.DEFAULT_ICON_ID;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navBarHeight') navBarHeight: number = 0;
-  @State configuredIconIds: string[] = [];
-  @State loadedDynamicIcons: boolean = false;
-  @State applyingIconId: string = '';
-
   aboutToAppear(): void {
     this.syncBars();
     AppIconSettingsStore.load(getContext(this)).then((settings: AppIconSettings) => {
@@ -25,7 +21,6 @@ struct AppIconSettingsPage {
     }).catch(() => {
       AppStorage.setOrCreate(AppIconSettingsStore.KEY_ICON_ID, AppIconSettingsStore.DEFAULT_ICON_ID);
     });
-    this.refreshDynamicIcons();
   }
 
   onPageShow(): void {
@@ -93,47 +88,18 @@ struct AppIconSettingsPage {
     syncSystemBars(getContext(this), this.appDarkMode, this.pageColor());
   }
 
-  refreshDynamicIcons(): void {
-    AppIconManager.queryConfiguredIconIds().then((ids: string[]) => {
-      this.configuredIconIds = ids;
-      this.loadedDynamicIcons = true;
-    }).catch(() => {
-      this.configuredIconIds = [];
-      this.loadedDynamicIcons = false;
-    });
-  }
-
-  isConfigured(option: AppIconOption): boolean {
-    if (!option.dynamicIconId) {
-      return true;
-    }
-    return this.configuredIconIds.includes(option.dynamicIconId);
-  }
-
-  async selectIcon(option: AppIconOption): Promise<void> {
-    if (this.applyingIconId) {
-      return;
-    }
+  selectIcon(option: AppIconOption): void {
     if (this.appIconId === option.id) {
       this.showToastSafely(`当前已是${option.title}`);
       return;
     }
-    this.applyingIconId = option.id;
-    try {
-      await AppIconManager.applyIcon(option);
-      const settings = new AppIconSettings();
-      settings.iconId = option.id;
-      AppIconSettingsStore.applyToStorage(settings);
-      await AppIconSettingsStore.save(getContext(this), settings);
-      this.showToastSafely(`已切换为${option.title}`);
-    } catch (e) {
-      hilog.warn(0x0000, 'appIcon', 'Switch app icon failed option=%{public}s err=%{public}s',
-        option.id, JSON.stringify(e));
-      this.showToastSafely(this.switchErrorMessage(e));
-      this.refreshDynamicIcons();
-    } finally {
-      this.applyingIconId = '';
-    }
+    const settings = new AppIconSettings();
+    settings.iconId = option.id;
+    AppIconSettingsStore.applyToStorage(settings);
+    AppIconSettingsStore.save(getContext(this), settings).catch((e: Error) => {
+      hilog.warn(0x0000, 'appIcon', 'Save app icon selection failed err=%{public}s', JSON.stringify(e));
+    });
+    this.showToastSafely(`已选择${option.title}图标，重新构建后桌面生效`);
   }
 
   showToastSafely(message: string): void {
@@ -212,21 +178,6 @@ struct AppIconSettingsPage {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .margin({ top: 3 })
-
-      if (this.loadedDynamicIcons && !this.isConfigured(option)) {
-        Text('未生效')
-          .fontSize(10)
-          .fontColor('#B46A00')
-          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-          .backgroundColor('#FFF2D6')
-          .borderRadius(8)
-          .margin({ top: 8 })
-      } else if (this.applyingIconId === option.id) {
-        Text('切换中')
-          .fontSize(10)
-          .fontColor(this.subTextColor())
-          .margin({ top: 8 })
-      }
     }
     .width('48%')
     .height(166)
@@ -240,25 +191,5 @@ struct AppIconSettingsPage {
     .onClick(() => {
       this.selectIcon(option);
     })
-  }
-
-  switchErrorMessage(error: Object): string {
-    const code = this.errorCode(error);
-    if (!code) {
-      return '桌面图标切换失败，请检查图标管理服务、审核状态和图标 ID';
-    }
-    return `桌面图标切换失败(${code})，请检查图标管理服务、审核状态和图标 ID`;
-  }
-
-  errorCode(error: Object): string {
-    if (!error) {
-      return '';
-    }
-    const source = error as Record<string, Object>;
-    const code = source['code'];
-    if (code === undefined || code === null) {
-      return '';
-    }
-    return `${code}`;
   }
 }
