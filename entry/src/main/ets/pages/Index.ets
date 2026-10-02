@@ -8858,11 +8858,12 @@ struct ExplorePage {
   async switchExploreFilter(title: string, selection: string): Promise<void> {
     if (this.isLoading || !this.selectedSourceUrl) return;
     this.closeExploreFilterPanel();
+    const loadVersion = this.beginExploreLoad();
+    this.armExploreLoadWatchdog(loadVersion);
     this.status = `正在切换${title}到 ${selection}...`;
     this.books = [];
-    this.isLoading = true;
     const applied = await this.coordinator.applyExploreFilter(this.selectedSourceUrl, title, selection);
-    this.isLoading = false;
+    this.finishExploreLoad(loadVersion);
     if (!applied) {
       this.status = `${title}切换失败`;
       return;
@@ -8907,7 +8908,9 @@ struct ExplorePage {
       if (this.isCurrentExploreLoad(loadVersion) && this.isLoading) {
         console.warn('[ExplorePage] explore load watchdog fired for loadVersion', loadVersion);
         this.isLoading = false;
-        if (!this.status) this.status = '发现加载超时，请检查网络或书源脚本';
+        if (!this.status || this.status.includes('正在加载') || this.status.includes('正在切换')) {
+          this.status = '发现加载超时，请检查网络或书源脚本';
+        }
       }
     }, 120000);
   }
@@ -9375,7 +9378,8 @@ struct ExplorePage {
     updated.sourceName = control.sourceName;
     const outcome = await this.coordinator.executeExploreControl(this.selectedSourceUrl, updated);
     if (outcome === 'fail') {
-      promptAction.showToast({ message: '控件执行失败' });
+      const failureNotice = this.coordinator.getNoticeMessage();
+      promptAction.showToast({ message: failureNotice || '控件执行失败' });
       return;
     }
     const keyword = this.coordinator.takePendingSearchKeyword();

@@ -84,6 +84,7 @@ class ExplorePlatformSelector {
 export class ExploreCoordinator {
   private static readonly EXPLORE_MENU_SCRIPT_TIMEOUT_MS: number = 25000;
   private static readonly EXPLORE_SOURCE_TIMEOUT_MS: number = 45000;
+  private static readonly EXPLORE_CONTROL_TIMEOUT_MS: number = 45000;
   private http: HttpClient = new HttpClient(10000);
   private noticeMessage: string = '';
   private platformSelectors: Record<string, ExplorePlatformSelector> = {};
@@ -628,6 +629,10 @@ export class ExploreCoordinator {
       request.baseUrl = source.bookSourceUrl;
       request.variables = { page: '1', pageIndex: '1' };
       request.debugContext = debugContext;
+      // Menu evaluation never reads source.loginUrl (aggregation sources only use it for
+      // login/control actions). Skipping it keeps every runJavaScript replay tens of KiB
+      // smaller, which is the difference between a 25s timeout hit and a prompt return.
+      request.includeLoginUrl = false;
       try {
         const runtimeResult = await TimeoutHelper.withTimeout<StageWebRuntimeResult>(
           runtime.execute(request),
@@ -870,7 +875,16 @@ export class ExploreCoordinator {
     request.code = `infoMap.put(${JSON.stringify(parameter)},${JSON.stringify(control.value || '')});\n` +
       `${control.action}\n;'';`;
     try {
-      const result = await runtime.execute(request);
+      const result = await TimeoutHelper.withTimeout<StageWebRuntimeResult>(
+        runtime.execute(request),
+        ExploreCoordinator.EXPLORE_CONTROL_TIMEOUT_MS,
+        () => {
+          this.noticeMessage = '书源控件执行超时，请检查网络或书源脚本';
+          const timedOut = new StageWebRuntimeResult();
+          timedOut.errorMessage = '书源控件执行超时';
+          return timedOut;
+        }
+      );
       if (result.requestedSearchKeyword) this.pendingSearchKeyword = result.requestedSearchKeyword;
       if (result.refreshExploreRequested === 'true') this.pendingExploreRefresh = true;
       if (!this.noticeMessage && result.toastMessage && result.toastMessage.trim()) {
@@ -962,7 +976,20 @@ export class ExploreCoordinator {
       return false;
     }
     try {
-      const result = await runtime.execute(request);
+      const result = await TimeoutHelper.withTimeout<StageWebRuntimeResult>(
+        runtime.execute(request),
+        ExploreCoordinator.EXPLORE_CONTROL_TIMEOUT_MS,
+        () => {
+          this.noticeMessage = '书源控件执行超时，请检查网络或书源脚本';
+          const timedOut = new StageWebRuntimeResult();
+          timedOut.errorMessage = '书源控件执行超时';
+          return timedOut;
+        }
+      );
+      if (result.errorMessage) {
+        if (!this.noticeMessage) this.noticeMessage = result.errorMessage;
+        return false;
+      }
       selector.currentLabel = selection;
       if (!this.noticeMessage && result.toastMessage && result.toastMessage.trim()) {
         this.noticeMessage = result.toastMessage.trim();
