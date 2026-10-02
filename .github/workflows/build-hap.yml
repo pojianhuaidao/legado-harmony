@@ -60,6 +60,24 @@ jobs:
           ohpm config set registry https://ohpm.openharmony.cn/ohpm/
           ohpm install --all
 
+      - name: Set dynamic version by date
+        run: |
+          # 版本号规则 1.MMDD.01：MMDD 取构建日期（如 2026-10-02 -> 1.1002.01）；versionCode = "1"+MMDD+"01" 视作十进制
+          python3 - <<'EOF'
+          import datetime, re
+          d = datetime.datetime.now()
+          mmdd = d.strftime('%m%d')
+          ver = "1." + mmdd + ".01"
+          code = int("1" + mmdd + "01")
+          p = 'AppScope/app.json5'
+          s = open(p, encoding='utf-8').read()
+          s = re.sub(r'"versionCode"\s*:\s*\d+', '"versionCode": %d' % code, s)
+          s = re.sub(r'"versionName"\s*:\s*"[^"]+"', '"versionName": "%s"' % ver, s)
+          s = re.sub(r'"buildVersion"\s*:\s*"[^"]+"', '"buildVersion": "%d"' % code, s)
+          open(p, 'w', encoding='utf-8').write(s)
+          print('versionName=' + ver + ' versionCode=' + str(code))
+          EOF
+
       - name: Build debug HAP (unsigned)
         run: |
           export DEVECO_SDK_HOME="$HOS_SDK_HOME"
