@@ -76,12 +76,12 @@ jobs:
           fi
           # 出包文件名按包名：lagado.hm.app_<versionName>.hap（版本号规则 1.MMDD.NN，见 AppScope/app.json5 注释）
           VERSION=$(python3 - <<'EOF'
-import re
-s = open('AppScope/app.json5', encoding='utf-8').read()
-m = re.search(r'"versionName"\s*:\s*"([^"]+)"', s)
-print(m.group(1) if m else 'dev')
-EOF
-)
+          import re
+          s = open('AppScope/app.json5', encoding='utf-8').read()
+          m = re.search(r'"versionName"\s*:\s*"([^"]+)"', s)
+          print(m.group(1) if m else 'dev')
+          EOF
+          )
           OUT="lagado.hm.app_${VERSION}.hap"
           cp "$HAP" "$OUT"
           echo "HAP=$OUT" >> "$GITHUB_ENV"
