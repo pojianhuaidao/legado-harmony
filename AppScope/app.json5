@@ -1,3 +1,7 @@
+// 版本号规则（自下版本起严格执行）：
+//   versionName = 1.MMDD.NN  （MMDD=构建月份日期，NN=当日序号，首版 1.0930.01）
+//   versionCode = MMDDNN 前补一位 1 后整体视作十进制（1.0930.01 -> 1093001）
+// 出包文件名统一按包名：lagado.hm.app_<versionName>.hap
 {
   "app": {
     "bundleName": "lagado.hm.app",
