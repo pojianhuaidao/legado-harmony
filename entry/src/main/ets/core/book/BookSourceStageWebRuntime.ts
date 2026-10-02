@@ -22,6 +22,10 @@ export class StageWebRuntimeRequest {
   baseUrl: string = '';
   variables: Record<string, string> = {};
   readerActionMode: boolean = false;
+  // Aggregation sources (书山) ship an oversized loginUrl script (70+ sub-source configs) that
+  // only matters for login/control actions. Explore menu evaluation never reads source.loginUrl,
+  // so the caller can opt out to shrink every runJavaScript payload by tens of KiB.
+  includeLoginUrl: boolean = true;
   networkTimeoutMs: number = 20000;
   maxResponseBytes: number = 8 * 1024 * 1024;
   maxTotalResponseBytes: number = 16 * 1024 * 1024;
@@ -108,6 +112,7 @@ class StageWebRuntimeCookieOperation {
 class StageWebRuntimeTask {
   request: StageWebRuntimeRequest = new StageWebRuntimeRequest();
   estimatedBytes: number = 0;
+  queueTimer: number = 0;
   resolve: ((value: StageWebRuntimeResult) => void) | null = null;
   reject: ((reason: Error) => void) | null = null;
 }
@@ -119,6 +124,13 @@ class StageWebRuntimeTask {
 export class BookSourceStageWebRuntime {
   private static readonly MAX_QUEUED_TASKS: number = 16;
   private static readonly MAX_QUEUED_BYTES: number = 24 * 1024 * 1024;
+  // A queued task must not wait forever behind an ArkWeb controller that is still rebuilding
+  // (e.g. after quarantine/recycle). Reject it after a short window so callers with no outer
+  // deadline (native explore controls / selectors) can never hang the explore page.
+  private static readonly QUEUE_WAIT_TIMEOUT_MS: number = 6000;
+  // Whole-task deadline for one script execution: 20 steps * 20s single-step timeout is far too
+  // long for aggregation sources (书山) whose multi-step replay can stall the explore page.
+  private static readonly EXECUTE_TASK_DEADLINE_MS: number = 90000;
   private static readonly MAX_CACHE_SOURCES: number = 24;
   private static readonly MAX_CACHE_ENTRIES_PER_SOURCE: number = 128;
   private static readonly MAX_CACHE_BYTES_PER_SOURCE: number = 512 * 1024;
@@ -232,6 +244,20 @@ export class BookSourceStageWebRuntime {
       this.tasks.push(task);
       this.queuedBytes += estimatedBytes;
       this.startNext();
+      // Queue has no ready ArkWeb host yet: startNext() bailed and this task would wait
+      // indefinitely. Give it a bounded window; if the controller still never became ready,
+      // reject it so the caller (menu / control / selector) can surface a real error instead
+      // of hanging the explore page behind an invisible "加载中...".
+      if (!this.findReadyController()) {
+        task.queueTimer = setTimeout((): void => {
+          const stillQueued = this.tasks.includes(task) && this.activeTask !== task;
+          if (!stillQueued) return;
+          this.tasks = this.tasks.filter((item: StageWebRuntimeTask): boolean => item !== task);
+          this.queuedBytes = Math.max(0, this.queuedBytes - task.estimatedBytes);
+          if (task.reject) task.reject(new Error('书源脚本引擎未就绪，任务已超时'));
+          this.startNext();
+        }, BookSourceStageWebRuntime.QUEUE_WAIT_TIMEOUT_MS);
+      }
     });
   }
 
@@ -311,8 +337,12 @@ export class BookSourceStageWebRuntime {
     let requestCount = 0;
     let totalResponseBytes = 0;
     let lastResponseBody = '';
+    const taskStartedAt = Date.now();
     for (let stepIndex = 0; stepIndex < 20; stepIndex++) {
       this.ensureNotCancelled(request);
+      if (Date.now() - taskStartedAt > BookSourceStageWebRuntime.EXECUTE_TASK_DEADLINE_MS) {
+        throw new Error(`书源脚本执行超过整体时限（${BookSourceStageWebRuntime.EXECUTE_TASK_DEADLINE_MS / 1000} 秒），已中止`);
+      }
       const script = this.buildScript(request, responses, stringResults, cookies, cacheState,
         fixedNow, randomSeed, journal.responseHeaders);
       const raw = await this.runJavaScript(script);
@@ -779,7 +809,7 @@ export class BookSourceStageWebRuntime {
       sourceName: request.source.bookSourceName || '',
       sourceHeader: request.source.header || '',
       sourceLoginHeader: request.source.loginHeader || '',
-      sourceLoginUrl: request.source.loginUrl || '',
+      sourceLoginUrl: request.includeLoginUrl ? (request.source.loginUrl || '') : '',
       variable: request.source.variable || '',
       content: request.content || '',
       contextContent: contextContent,
