@@ -354,8 +354,8 @@ struct SubscriptionImportPage {
                 .fontColor(ThemeRuntime.primaryTextColor(this.appDarkMode))
                 .width('100%')
                 .margin({ top: 6, bottom: 4 })
-              ForEach(group.list, (item: rssSources) => {
-                this.itemRow(item)
+              ForEach(group.list, (item: rssSources, index: number) => {
+                this.itemRow(item, index)
               }, (item: rssSources) => item.sourceUrl)
             }
             .width('100%')
