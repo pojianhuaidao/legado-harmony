@@ -33,7 +33,6 @@ struct ReadStatisticsPage {
   @State manageMode: boolean = false;
   @State selectedBookUrls: string[] = [];
   @State selectedBookmarkIds: number[] = [];
-  @State showDeleteDialog: boolean = false;
 
   aboutToAppear(): void {
     this.syncBars();
@@ -331,13 +330,16 @@ struct ReadStatisticsPage {
 
   @Builder
   checkBox(item: ReadStatItem) {
-    const selected = this.type === 2
+    SymbolGlyph(this.isItemSelected(item) ? $r('sys.symbol.checkmark_circle') : $r('sys.symbol.circle'))
+      .fontSize(22)
+      .fontColor([this.isItemSelected(item) ? ThemeRuntime.accentColor(this.appDarkMode) : this.subTextColor()])
+      .margin({ right: 6 })
+  }
+
+  isItemSelected(item: ReadStatItem): boolean {
+    return this.type === 2
       ? this.selectedBookmarkIds.indexOf(item.bookmarkId) >= 0
       : this.selectedBookUrls.indexOf(item.bookUrl) >= 0;
-    SymbolGlyph(selected ? $r('sys.symbol.checkmark_circle') : $r('sys.symbol.circle'))
-      .fontSize(22)
-      .fontColor([selected ? ThemeRuntime.accentColor(this.appDarkMode) : this.subTextColor()])
-      .margin({ right: 6 })
   }
 
   toggleSelect(item: ReadStatItem): void {
@@ -358,6 +360,25 @@ struct ReadStatisticsPage {
       }
       this.selectedBookUrls = this.selectedBookUrls.slice();
     }
+  }
+
+  showDeleteConfirm(): void {
+    AlertDialog.show({
+      title: '删除所选记录',
+      message: '删除后不可恢复，是否继续？',
+      primaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: '删除',
+        fontColor: '#E64545',
+        action: () => {
+          this.deleteSelected();
+        }
+      }
+    });
   }
 
   async deleteSelected(): Promise<void> {
@@ -427,7 +448,7 @@ struct ReadStatisticsPage {
               .borderRadius(12)
               .margin({ left: 16, right: 16, top: 12, bottom: 24 })
               .onClick(() => {
-                this.showDeleteDialog = true;
+                this.showDeleteConfirm();
               })
           }
         }
@@ -440,27 +461,6 @@ struct ReadStatisticsPage {
       .align(Alignment.TopStart)
 
       this.titleBar()
-
-      if (this.showDeleteDialog) {
-        AlertDialog.show({
-          title: '删除所选记录',
-          message: '删除后不可恢复，是否继续？',
-          primaryButton: {
-            value: '取消',
-            action: () => {
-              this.showDeleteDialog = false;
-            }
-          },
-          secondaryButton: {
-            value: '删除',
-            fontColor: '#E64545',
-            action: () => {
-              this.showDeleteDialog = false;
-              this.deleteSelected();
-            }
-          }
-        });
-      }
     }
     .width('100%')
     .height('100%')
