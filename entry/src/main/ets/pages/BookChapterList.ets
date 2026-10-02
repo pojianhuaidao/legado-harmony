@@ -11,6 +11,7 @@ import { CoverUrlNormalizer } from '../utils/CoverUrlNormalizer';
 import { BookIdentity } from '../utils/BookIdentity';
 import { SearchBookShelfHelper } from '../utils/SearchBookShelfHelper';
 import { SearchExplorePendingBook } from '../utils/SearchExplorePendingBook';
+import { ReaderReplaceRule, ReaderReplaceRuleStore } from '../utils/ReaderReplaceRuleStore';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { BookSourceStageRuntimeHost } from '../components/BookSourceStageRuntimeHost';
 import { WebBookFetchRuntimeHost } from '../components/WebBookFetchRuntimeHost';
@@ -84,6 +85,7 @@ struct BookChapterListPage {
   @State keyword: string = '';
   @State fromCache: boolean = false;
   @State openingChapter: boolean = false;
+  @State replaceRules: ReaderReplaceRule[] = [];
   private bookVariable: string = '';
   private pageAlive: boolean = true;
   private dataSource: ChapterListDataSource = new ChapterListDataSource();
@@ -92,6 +94,7 @@ struct BookChapterListPage {
   aboutToAppear(): void {
     this.syncBars();
     this.pageAlive = true;
+    this.loadReplaceRules();
     const params = router.getParams() as Record<string, string>;
     if (params) {
       this.bookUrl = BookUrlResolver.scalar(params['bookUrl'] || '');
@@ -121,6 +124,30 @@ struct BookChapterListPage {
     // The source runtime keeps its own request lifecycle. Only guard against a late response
     // writing into a page instance the user already left.
     this.pageAlive = false;
+  }
+
+  loadReplaceRules(): void {
+    ReaderReplaceRuleStore.load(getContext(this)).then((rules: ReaderReplaceRule[]) => {
+      if (!this.pageAlive) return;
+      this.replaceRules = rules;
+    }).catch(() => {
+      this.replaceRules = [];
+    });
+  }
+
+  // 目录净化：将替换净化规则应用到章节标题（对应原版净化功能）
+  displayChapterTitle(chapter: BookChapter): string {
+    const raw = chapter.title || `第${chapter.index + 1}章`;
+    if (this.replaceRules.length === 0) {
+      return raw;
+    }
+    const book = new Book();
+    book.bookUrl = this.bookUrl;
+    book.name = this.name;
+    book.author = this.author;
+    book.origin = this.origin;
+    book.originName = this.originName;
+    return ReaderReplaceRuleStore.applyTitle(raw, this.replaceRules, book);
   }
 
   build() {
@@ -279,7 +306,7 @@ struct BookChapterListPage {
                 .width(40)
                 .textAlign(TextAlign.End)
 
-              Text(chapter.title || `第${chapter.index + 1}章`)
+              Text(this.displayChapterTitle(chapter))
                 .fontSize(15)
                 .fontWeight(chapter.index === this.currentIndex ? FontWeight.Medium : FontWeight.Regular)
                 .fontColor(chapter.index === this.currentIndex ? this.accentColor() : this.primaryTextColor())

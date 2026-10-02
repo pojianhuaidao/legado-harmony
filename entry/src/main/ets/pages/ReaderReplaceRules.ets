@@ -19,6 +19,100 @@ import { ReplaceRuleImport } from '../core/rule/ReplaceRuleImport';
 const REPLACE_RULE_IMPORT_FILE_LIMIT_BYTES: number = 5 * 1024 * 1024;
 const REPLACE_RULE_IMPORT_TIMEOUT_MS: number = 20000;
 
+// 预设净化规则模板（源自原版 legado-Harmony ruleArray 常用标题规整规则，
+// 提供可直接使用的正则，避免用户从零手写）
+class PresetRuleTemplate {
+  name: string = '';
+  pattern: string = '';
+  replacement: string = '';
+  applyToTitle: boolean = true;
+  applyToContent: boolean = false;
+  isRegex: boolean = true;
+}
+
+const PRESET_RULE_TEMPLATES: PresetRuleTemplate[] = [
+  {
+    name: '去除标题行首空白 (标题)',
+    pattern: '^\\s+',
+    replacement: '',
+    applyToTitle: true,
+    applyToContent: false,
+    isRegex: true
+  },
+  {
+    name: '章节序号加括号 (标题)',
+    pattern: '^第(\\d+)章',
+    replacement: '第($1)章',
+    applyToTitle: true,
+    applyToContent: false,
+    isRegex: true
+  },
+  {
+    name: '章节符号净化 (标题)',
+    pattern: '[|｜丨]',
+    replacement: ' ',
+    applyToTitle: true,
+    applyToContent: false,
+    isRegex: true
+  },
+  {
+    name: '书名净化标题 (标题)',
+    pattern: '^《(.*?)》',
+    replacement: '$1',
+    applyToTitle: true,
+    applyToContent: false,
+    isRegex: true
+  },
+  {
+    name: '章节名称规整 (标题)',
+    pattern: '第[0-9零一二三四五六七八九十百千]+章\\s*[：:、.。]?\\s*',
+    replacement: '',
+    applyToTitle: true,
+    applyToContent: false,
+    isRegex: true
+  },
+  {
+    name: '去除重复空格 (正文)',
+    pattern: '[ \\t\\u3000]{2,}',
+    replacement: ' ',
+    applyToTitle: true,
+    applyToContent: true,
+    isRegex: true
+  },
+  {
+    name: '章节末广告去除 (正文)',
+    pattern: '(?:本章完|谢谢阅读|未完待续|感谢阅读)[。.!！\\s]*$',
+    replacement: '',
+    applyToTitle: false,
+    applyToContent: true,
+    isRegex: true
+  },
+  {
+    name: '压缩连续空行 (正文)',
+    pattern: '\\n{3,}',
+    replacement: '\\n\\n',
+    applyToTitle: false,
+    applyToContent: true,
+    isRegex: true
+  },
+  {
+    name: '章节名重复① (标题)',
+    pattern: '^(第[0-9零一二三四五六七八九十百千]+章.+?)\\1$',
+    replacement: '$1',
+    applyToTitle: true,
+    applyToContent: false,
+    isRegex: true
+  },
+  {
+    name: '第XXX章 XXX(规范章节) (标题)',
+    pattern: '^第[0-9零一二三四五六七八九十百千]+章\\s*[-—–:：]\\s*',
+    replacement: '',
+    applyToTitle: true,
+    applyToContent: false,
+    isRegex: true
+  }
+];
+
 class ReplaceRuleFormDraft {
   ruleJson: string = '';
   timeoutDraft: string = '3000';
@@ -46,6 +140,8 @@ struct ReaderReplaceRulesPage {
   @State showRuleMoreDialog: boolean = false;
   @State showAddRuleDialog: boolean = false;
   @State showImportUrlDialog: boolean = false;
+  @State showPresetDialog: boolean = false;
+  @State selectedPresetIds: number[] = [];
   @State importUrl: string = '';
   @State isImporting: boolean = false;
   @State actionRuleId: number = 0;
@@ -337,6 +433,10 @@ struct ReaderReplaceRulesPage {
       if (this.showRuleMoreDialog) {
         this.ruleBatchMorePopupMenu()
       }
+
+      if (this.showPresetDialog) {
+        this.presetRuleDialog()
+      }
     }
     .width('100%')
     .height('100%')
@@ -409,6 +509,11 @@ struct ReaderReplaceRulesPage {
         this.ruleAddActionItem($r('sys.symbol.plus'), '新建规则', () => {
           this.showAddRuleDialog = false;
           this.openNewRule();
+        })
+        this.ruleAddActionItem($r('sys.symbol.sparkles'), '预设规则模板', () => {
+          this.showAddRuleDialog = false;
+          this.selectedPresetIds = [];
+          this.showPresetDialog = true;
         })
         this.ruleAddActionItem($r('sys.symbol.arrow_right_up_and_square'), '从 URL 导入', () => {
           this.showAddRuleDialog = false;
@@ -976,6 +1081,127 @@ struct ReaderReplaceRulesPage {
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  presetRuleDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.appDarkMode ? '#52000000' : '#26FFFFFF')
+        .onClick(() => {
+          this.showPresetDialog = false;
+        })
+
+      Column() {
+        Row() {
+          Text('预设规则模板')
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.primaryTextColor())
+            .layoutWeight(1)
+          Text('取消')
+            .fontSize(14)
+            .fontColor(this.subTextColor())
+            .onClick(() => this.showPresetDialog = false)
+        }
+        .width('100%')
+        .height(44)
+
+        Text('源自原版净化规则的常用标题/正文规整模板，勾选后一键添加')
+          .fontSize(12)
+          .fontColor(this.subTextColor())
+          .width('100%')
+          .margin({ bottom: 8 })
+
+        List({ space: 8 }) {
+          ForEach(PRESET_RULE_TEMPLATES, (template: PresetRuleTemplate, index: number) => {
+            ListItem() {
+              Row({ space: 10 }) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.isPresetSelected(index) })
+                  .selectedColor(this.buttonColor())
+                  .onChange((checked: boolean) => this.togglePresetSelected(index, checked))
+                Column({ space: 3 }) {
+                  Text(template.name)
+                    .fontSize(14)
+                    .fontColor(this.primaryTextColor())
+                    .fontWeight(FontWeight.Medium)
+                  Text(`匹配: ${template.pattern}  →  ${template.replacement === '' ? '删除' : template.replacement}`)
+                    .fontSize(11)
+                    .fontColor(this.subTextColor())
+                    .maxLines(2)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
+              }
+              .width('100%')
+              .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+              .backgroundColor(this.inputColor())
+              .borderRadius(12)
+            }
+          }, (template: PresetRuleTemplate, index: number) => `${index}_${template.name}`)
+        }
+        .layoutWeight(1)
+        .width('100%')
+
+        Button('添加选中规则')
+          .width('100%')
+          .height(44)
+          .fontSize(15)
+          .fontColor('#FFFFFF')
+          .backgroundColor(this.selectedPresetIds.length > 0 ? this.buttonColor() : this.subTextColor())
+          .borderRadius(22)
+          .margin({ top: 12 })
+          .enabled(this.selectedPresetIds.length > 0)
+          .onClick(() => this.addPresetRules())
+      }
+      .width('90%')
+      .height('72%')
+      .padding({ left: 18, right: 18, top: 16, bottom: 16 })
+      .backgroundColor(this.cardColor())
+      .borderRadius(20)
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  isPresetSelected(index: number): boolean {
+    return this.selectedPresetIds.indexOf(index) >= 0;
+  }
+
+  togglePresetSelected(index: number, checked: boolean): void {
+    const next = this.selectedPresetIds.filter((id: number) => id !== index);
+    if (checked) {
+      next.push(index);
+    }
+    this.selectedPresetIds = next;
+  }
+
+  async addPresetRules(): Promise<void> {
+    if (this.selectedPresetIds.length === 0) {
+      return;
+    }
+    const addedCount = this.selectedPresetIds.length;
+    const next = this.rules.map((rule: ReaderReplaceRule) => ReaderReplaceRuleStore.cloneRule(rule));
+    for (const index of this.selectedPresetIds) {
+      const template = PRESET_RULE_TEMPLATES[index];
+      if (!template) continue;
+      const rule = ReaderReplaceRuleStore.newRule();
+      rule.name = template.name;
+      rule.pattern = template.pattern;
+      rule.replacement = template.replacement;
+      rule.applyToTitle = template.applyToTitle;
+      rule.applyToContent = template.applyToContent;
+      rule.isRegex = template.isRegex;
+      next.push(rule);
+    }
+    await ReaderReplaceRuleStore.save(getContext(this), next);
+    this.rules = await ReaderReplaceRuleStore.load(getContext(this), true);
+    this.selectedPresetIds = [];
+    this.showPresetDialog = false;
+    promptAction.showToast({ message: `已添加 ${addedCount} 条预设规则` });
   }
 
   @Builder
