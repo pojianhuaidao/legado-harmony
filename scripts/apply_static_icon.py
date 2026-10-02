@@ -82,9 +82,26 @@ def apply(icon_id: str) -> None:
     print('请重新构建 HAP，侧载后桌面图标立即可见。')
 
 
+def status() -> None:
+    """打印当前 module.json5 图标引用与已应用的方案 id。"""
+    text = MODULE_JSON5.read_text(encoding='utf-8')
+    icon_match = re.search(r'"icon": "\$media:([^"]+)"', text)
+    start_match = re.search(r'"startWindowIcon": "\$media:([^"]+)"', text)
+    icon_ref = icon_match.group(1) if icon_match else '<未找到>'
+    start_ref = start_match.group(1) if start_match else '<未找到>'
+    print(f'module.json5 EntryAbility icon          -> $media:{icon_ref}')
+    print(f'module.json5 EntryAbility startWindowIcon -> $media:{start_ref}')
+    if icon_ref == 'layered_image' or start_ref == 'layered_image':
+        print('当前为默认图标方案（未应用任何静态方案），桌面图标不会随设置页选择变化。')
+    else:
+        applied = next((icon_id for icon_id, (_, media) in OPTIONS.items()
+                        if f'layered_image_{icon_id}' == icon_ref), None)
+        print(f'当前已应用静态图标方案: {applied or icon_ref}')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='书山静态图标方案切换工具')
-    parser.add_argument('mode', choices=['list', 'apply'])
+    parser.add_argument('mode', choices=['list', 'apply', 'status'])
     parser.add_argument('icon_id', nargs='?', default='')
     args = parser.parse_args()
 
@@ -92,6 +109,10 @@ def main() -> None:
         for icon_id in sorted(OPTIONS):
             title, media = OPTIONS[icon_id]
             print(f'{icon_id:<24} {title:<12} -> {layered_ref(icon_id)} / {media}')
+        return
+
+    if args.mode == 'status':
+        status()
         return
 
     if not args.icon_id:

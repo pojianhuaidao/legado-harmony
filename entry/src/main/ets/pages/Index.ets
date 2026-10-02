@@ -7675,6 +7675,7 @@ struct ExplorePage {
 
   async loadEntries(platformOverride: string = '', forceRefresh: boolean = false) {
     const loadVersion = this.beginExploreLoad();
+    this.armExploreLoadWatchdog(loadVersion);
     const previousActiveEntries = this.getActiveEntries();
     const previousEntry = previousActiveEntries.length > 0 ?
       previousActiveEntries[Math.min(this.selectedIndex, previousActiveEntries.length - 1)] : null;
@@ -8894,6 +8895,21 @@ struct ExplorePage {
     this.exploreMetadataUnavailable.clear();
     this.isLoading = true;
     return this.exploreLoadVersion;
+  }
+
+  /**
+   * 兜底看门狗：探索页加载链（脚本执行/云端 API/多步解析）若内部 await 永不结束，
+   * isLoading 将一直为 true，界面停在“加载中...”。协调器内已加单源 deadline，
+   * 此处再加 UI 级整体期限，超时强制结束加载状态并提示，保证页面可继续操作。
+   */
+  private armExploreLoadWatchdog(loadVersion: number): void {
+    setTimeout((): void => {
+      if (this.isCurrentExploreLoad(loadVersion) && this.isLoading) {
+        console.warn('[ExplorePage] explore load watchdog fired for loadVersion', loadVersion);
+        this.isLoading = false;
+        if (!this.status) this.status = '发现加载超时，请检查网络或书源脚本';
+      }
+    }, 120000);
   }
 
   requestExploreMetadata(book: SearchBook): void {

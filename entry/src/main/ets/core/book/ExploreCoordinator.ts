@@ -12,7 +12,8 @@ import { BookUrlResolver } from './BookUrlResolver';
 import { BookSourceScriptRunner } from './BookSourceScriptRunner';
 import { BookSourceMetadataSupport } from './BookSourceMetadataSupport';
 import { BookSourceRuntimeRouter, SourceRuntimeStage } from './BookSourceRuntimeRouter';
-import { BookSourceStageWebRuntime, StageWebRuntimeRequest } from './BookSourceStageWebRuntime';
+import { TimeoutHelper } from '../concurrency/TimeoutHelper';
+import { BookSourceStageWebRuntime, StageWebRuntimeRequest, StageWebRuntimeResult } from './BookSourceStageWebRuntime';
 import { BookSourceStageRuleSupport } from './BookSourceStageRuleSupport';
 import { RuleExecutionService } from '../rule/RuleExecutionService';
 import { RuleBatchExecutionRequest, RuleBatchExecutionResult, RuleFieldRequest } from '../rule/RuleExecutionModels';
@@ -81,6 +82,8 @@ class ExplorePlatformSelector {
 }
 
 export class ExploreCoordinator {
+  private static readonly EXPLORE_MENU_SCRIPT_TIMEOUT_MS: number = 25000;
+  private static readonly EXPLORE_SOURCE_TIMEOUT_MS: number = 45000;
   private http: HttpClient = new HttpClient(10000);
   private noticeMessage: string = '';
   private platformSelectors: Record<string, ExplorePlatformSelector> = {};
@@ -164,6 +167,18 @@ export class ExploreCoordinator {
   }
 
   async explore(entry: ExploreEntry, page: number = 1, maxItems: number = 0,
+    debugContext: BookSourceDebugContext | null = null): Promise<SearchBook[]> {
+    return TimeoutHelper.withTimeout<SearchBook[]>(
+      this.exploreInner(entry, page, maxItems, debugContext),
+      ExploreCoordinator.EXPLORE_SOURCE_TIMEOUT_MS,
+      () => {
+        this.noticeMessage = '发现加载超时（脚本或网络过慢），已跳过';
+        return [];
+      }
+    );
+  }
+
+  private async exploreInner(entry: ExploreEntry, page: number = 1, maxItems: number = 0,
     debugContext: BookSourceDebugContext | null = null): Promise<SearchBook[]> {
     this.noticeMessage = '';
     const source = await appDb.getBookSource(entry.sourceUrl);
@@ -614,7 +629,15 @@ export class ExploreCoordinator {
       request.variables = { page: '1', pageIndex: '1' };
       request.debugContext = debugContext;
       try {
-        const runtimeResult = await runtime.execute(request);
+        const runtimeResult = await TimeoutHelper.withTimeout<StageWebRuntimeResult>(
+          runtime.execute(request),
+          ExploreCoordinator.EXPLORE_MENU_SCRIPT_TIMEOUT_MS,
+          () => {
+            const timedOut = new StageWebRuntimeResult();
+            timedOut.toastMessage = '发现脚本执行超时（聚合源网络过慢），已跳过';
+            return timedOut;
+          }
+        );
         if (runtimeResult.toastMessage) this.noticeMessage = runtimeResult.toastMessage.trim();
         // java.searchBook('关键词') records the keyword for the native explore page to start a
         // single-source search; java.open('login') means the source wants its login panel first.
