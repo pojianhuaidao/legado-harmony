@@ -61,14 +61,51 @@ jobs:
           ohpm install --all
 
       - name: Set dynamic version by date
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 版本号规则 1.MMDD.01：MMDD 取构建日期（如 2026-10-02 -> 1.1002.01）；versionCode = "1"+MMDD+"01" 视作十进制
+          # 版本号规则 1.MMDD.NN：MMDD 取构建日期（如 2026-10-02 -> 1.1002.xx）；NN 为当日构建序号，同日依次 .01/.02/.03，跨日重置 .01。
+          # 序号依据仓库已发布 release 资产中当日同名 HAP 的最大序号 +1 得出（查询 GitHub API releases）。
+          # versionCode = "1"+MMDD+NN 视作十进制（1.1002.01 -> 1100201，同日随 NN 递增，跨日随 MMDD 递增）。
           python3 - <<'EOF'
-          import datetime, re
+          import datetime, re, json, os, urllib.request, urllib.error
+
           d = datetime.datetime.now()
           mmdd = d.strftime('%m%d')
-          ver = "1." + mmdd + ".01"
-          code = int("1" + mmdd + "01")
+          token = os.environ.get('GH_TOKEN', '')
+          repo = os.environ.get('GITHUB_REPOSITORY', '')
+
+          max_nn = 0
+          if repo and token:
+              page = 1
+              while True:
+                  url = 'https://api.github.com/repos/%s/releases?per_page=100&page=%d' % (repo, page)
+                  req = urllib.request.Request(url, headers={
+                      'Authorization': 'token ' + token,
+                      'User-Agent': 'legado3-harmony-ci',
+                      'Accept': 'application/vnd.github+json',
+                  })
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as resp:
+                          rels = json.load(resp)
+                  except urllib.error.HTTPError as e:
+                      print('release query failed status=%s, fallback nn=01' % e.code)
+                      break
+                  if not rels:
+                      break
+                  pat = re.compile(r'^lagado\.hm\.app_1\.%s\.(\d{2})\.hap$' % mmdd)
+                  for rel in rels:
+                      for a in rel.get('assets', []):
+                          m = pat.match(a.get('name', ''))
+                          if m:
+                              max_nn = max(max_nn, int(m.group(1)))
+                  if len(rels) < 100:
+                      break
+                  page += 1
+
+          nn = max_nn + 1
+          ver = "1." + mmdd + ".%02d" % nn
+          code = int("1" + mmdd + "%02d" % nn)
           p = 'AppScope/app.json5'
           s = open(p, encoding='utf-8').read()
           s = re.sub(r'"versionCode"\s*:\s*\d+', '"versionCode": %d' % code, s)
