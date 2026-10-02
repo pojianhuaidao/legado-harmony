@@ -1771,6 +1771,7 @@ struct BookSourcePage {
       })
   }
 
+  @Builder
   checkScopeOption(value: string, label: string) {
     Text(label)
       .fontSize(13)
