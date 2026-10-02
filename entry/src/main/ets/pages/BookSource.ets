@@ -4077,6 +4077,11 @@ struct BookSourcePage {
       promptAction.showToast({ message: '登录界面脚本未返回有效控件，请检查书源 loginUi 配置' });
       return;
     }
+    if (this.isScriptLoginUrl(source)) {
+      this.actionSourceUrl = '';
+      promptAction.showToast({ message: '登录脚本未返回有效控件，请检查书源 loginUrl 配置' });
+      return;
+    }
     const loginEntryUrl = VerificationSupport.resolveBookSourceLoginUrl(source) ||
       VerificationSupport.pickVerificationUrl(source, source.bookSourceUrl);
     if (!loginEntryUrl || !/^https?:\/\//i.test(loginEntryUrl)) {
@@ -4089,12 +4094,29 @@ struct BookSourcePage {
 
   async resolveSourceLoginItems(source: BookSource): Promise<BookSourceLoginItem[]> {
     const dynamicScript = BookSourceScriptRunner.dynamicLoginUiScript(source);
-    if (!dynamicScript) return BookSourceScriptRunner.loginItems(source);
+    if (dynamicScript) {
+      const staticItems = BookSourceScriptRunner.loginItems(source);
+      if (staticItems.length > 0) return staticItems;
+      const result = await this.runSourceLoginAction(source, dynamicScript);
+      if (result.errorMessage) throw new Error(result.errorMessage);
+      return BookSourceScriptRunner.parseLoginItems(result.resultValue);
+    }
     const staticItems = BookSourceScriptRunner.loginItems(source);
     if (staticItems.length > 0) return staticItems;
-    const result = await this.runSourceLoginAction(source, dynamicScript);
-    if (result.errorMessage) throw new Error(result.errorMessage);
-    return BookSourceScriptRunner.parseLoginItems(result.resultValue);
+    if (this.isScriptLoginUrl(source)) {
+      // 书山式登录：无 loginUi 数组，loginUrl 顶层 JS 直接执行以生成登录控件
+      const result = await this.runSourceLoginAction(source, '');
+      if (result.errorMessage) throw new Error(result.errorMessage);
+      return BookSourceScriptRunner.parseLoginItems(result.resultValue);
+    }
+    return [];
+  }
+
+  private isScriptLoginUrl(source: BookSource): boolean {
+    const raw = (source.loginUrl || '').trim();
+    if (/^@?js:/i.test(raw)) return true;
+    if (/^<js>/i.test(raw) && /<\/js>\s*$/i.test(raw)) return true;
+    return false;
   }
 
   sourceLoginCompatibilityDefault(source: BookSource, item: BookSourceLoginItem): string {
@@ -4140,6 +4162,12 @@ struct BookSourcePage {
         this.sourceLoginItems = refreshedItems;
         this.refreshSourceLoginItemsFromRuntime(source);
       }
+      if (result.loginPanelRequested) {
+        // java.open('login')：重新生成并展示原生登录面板
+        const refreshedItems = await this.resolveSourceLoginItems(source);
+        this.sourceLoginItems = refreshedItems;
+        this.refreshSourceLoginItemsFromRuntime(source);
+      }
       this.hydrateSourceLoginItemStates(source, this.sourceLoginItems, result.toastMessage, item.name);
       this.sourceLoginItems = this.sourceLoginItems.slice();
       this.markSourceLoginCompleted(item, result);
@@ -4162,7 +4190,7 @@ struct BookSourcePage {
         await this.refreshRuntimeExplore(source);
         return;
       }
-      if (result.requestedUrl || result.requestedHtml) {
+      if ((result.requestedUrl && !/^login$/i.test(result.requestedUrl)) || result.requestedHtml) {
         this.showSourceLoginUiDialog = false;
         this.sourceLoginItems = [];
         const isLogin = /(?:登录|login)/i.test(item.name) ||

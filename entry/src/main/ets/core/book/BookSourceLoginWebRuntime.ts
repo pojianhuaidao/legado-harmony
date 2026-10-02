@@ -19,6 +19,8 @@ export class LoginRuntimeStep {
   requestedSearchKeyword: string = '';
   refreshExploreRequested: boolean = false;
   refreshLoginRequested: boolean = false;
+  // True when the login script called java.open('login') and wants the native login panel shown.
+  loginPanelRequested: boolean = false;
   toastMessage: string = '';
   logMessage: string = '';
   errorMessage: string = '';
@@ -51,6 +53,7 @@ export class BookSourceLoginWebRuntime {
       loginHeader: source.loginHeader || '',
       loginInfo: this.parseRecord(source.loginInfo),
       runtime: this.parseRuntimeState(source.loginInfo),
+      sourceConfig: JSON.stringify(this.parsePersistedSourceConfig(source.loginInfo)),
       responses: responses || {},
       cookies: cookies || {},
       appliedCookieOperations: appliedCookieOperations || [],
@@ -77,7 +80,7 @@ export class BookSourceLoginWebRuntime {
       `function decodeUtf8(v){try{return decodeURIComponent(escape(atob(v)));}catch(e){return atob(v);}}` +
       `const S=JSON.parse(decodeUtf8('${stateBase64}'));` +
       `let pending='',pendingCookie='',pendingCrypto='',pendingBrowser='',pendingBrowserTitle='',pendingWebView='';` +
-      `let url='',title='',html='',injectJs='',searchKeyword='',refreshExplore=false,refreshLogin=false,toast='',diagnostic='',error='';` +
+      `let url='',title='',html='',injectJs='',searchKeyword='',refreshExplore=false,refreshLogin=false,loginPanelRequested=false,toast='',diagnostic='',error='';` +
       `const NativeDate=globalThis.Date;const FixedDate=function(){const a=Array.from(arguments);` +
       `if(new.target)return Reflect.construct(NativeDate,a.length?a:[S.fixedNow]);` +
       `return new NativeDate(S.fixedNow).toString();};FixedDate.now=function(){return S.fixedNow;};` +
@@ -118,6 +121,9 @@ export class BookSourceLoginWebRuntime {
       `refreshExplore:function(){refreshExplore=true;return true;},` +
       `put:function(k,v){sourceData[String(k??'')]=v;return v;},get:function(k){k=String(k??'');` +
       `return Object.prototype.hasOwnProperty.call(sourceData,k)?sourceData[k]:'';},` +
+      `getConfig:function(k){if(arguments.length===0){if(Object.prototype.hasOwnProperty.call(sourceData,'__config')){return sourceData.__config;}let cfg={};try{cfg=JSON.parse(S.sourceConfig||'{}');}catch(e){cfg={};}const merged=Object.assign({},cfg,sourceData);delete merged.__config;return merged;}return Object.prototype.hasOwnProperty.call(sourceData,k)?sourceData[k]:'';},` +
+      `setConfigs:function(v){try{const next=typeof v==='string'?JSON.parse(v):v;if(next&&typeof next==='object'){sourceData.__config=next;if(!Array.isArray(next)){Object.assign(sourceData,next);}}return true;}catch(e){if(typeof v==='string')sourceData[v]=true;return true;}return true;},` +
+      `getServerHost:function(){return S.sourceUrl||'';},` +
       `getLoginHeader:function(){return S.loginHeader||'';},` +
       `putLoginHeader:function(v){S.loginHeader=String(v??'');return S.loginHeader;},` +
       `removeLoginHeader:function(){S.loginHeader='';return '';},` +
@@ -164,7 +170,7 @@ export class BookSourceLoginWebRuntime {
       `if(wait){const key='browser:'+target;if(Object.prototype.hasOwnProperty.call(S.responses,key)){` +
       `const body=S.responses[key]??'';return {body:function(){return body;}};}if(!pendingBrowser){` +
       `pendingBrowser=target;pendingBrowserTitle=label;}return {body:function(){return '';}};}` +
-      `url=target;title=label;return {body:function(){return '';}};}` +
+      `if(/^login$/i.test(target)){loginPanelRequested=true;}url=target;title=label;return {body:function(){return '';}};}` +
       `function webView(u,j){const request=JSON.stringify({url:String(u??''),script:String(j??'')});` +
       `const key='webview:'+request;if(Object.prototype.hasOwnProperty.call(S.responses,key))return S.responses[key]??'';` +
       `if(!pendingWebView)pendingWebView=request;return '';}` +
@@ -263,7 +269,8 @@ export class BookSourceLoginWebRuntime {
       `encryptHex:function(v){return cryptoOp(transformation,key,iv,'encryptHex',v);},` +
       `decrypt:function(v){return cryptoOp(transformation,key,iv,'decrypt',v);},` +
       `decryptStr:function(v){return cryptoOp(transformation,key,iv,'decryptStr',v);}};}` +
-      `};` +
+      `getConfig:function(k){return source.getConfig(k);},setConfigs:function(v){return source.setConfigs(v);},` +
+      `getServerHost:function(){return source.getServerHost();}};` +
       `const TimeoutCancellationException=function(){};` +
       `function markJavaClass(value,name){try{Object.defineProperty(value,'__simpleName',{value:name,` +
       `enumerable:false,configurable:true});}catch(e){}return value;}` +
@@ -308,6 +315,7 @@ export class BookSourceLoginWebRuntime {
       `cookieOperations:JSON.stringify(cookieOps),variable:S.variable||'',` +
       `loginHeader:S.loginHeader||'',loginInfo:JSON.stringify(cleanInfo),requestedUrl:url,requestedTitle:title,` +
       `requestedHtml:html,requestedInjectJs:injectJs,requestedSearchKeyword:searchKeyword,` +
+      `loginPanelRequested:loginPanelRequested,` +
       `refreshExploreRequested:refreshExplore,refreshLoginRequested:refreshLogin,` +
       `toastMessage:toast,logMessage:diagnostic,errorMessage:error,resultValue:resultValue}));})()`;
   }
@@ -731,6 +739,7 @@ export class BookSourceLoginWebRuntime {
       result.requestedHtml = String(record['requestedHtml'] || '');
       result.requestedInjectJs = String(record['requestedInjectJs'] || '');
       result.requestedSearchKeyword = String(record['requestedSearchKeyword'] || '');
+      result.loginPanelRequested = record['loginPanelRequested'] === true;
       result.refreshExploreRequested = record['refreshExploreRequested'] === true;
       result.refreshLoginRequested = record['refreshLoginRequested'] === true;
       result.toastMessage = String(record['toastMessage'] || '');
@@ -797,6 +806,15 @@ export class BookSourceLoginWebRuntime {
       }
     } catch (_) {}
     return result;
+  }
+
+  private static parsePersistedSourceConfig(json: string): Record<string, Object> {
+    const runtime = this.parseRuntimeState(json);
+    const source = runtime['source'];
+    if (source && typeof source === 'object' && !Array.isArray(source)) {
+      return source as Record<string, Object>;
+    }
+    return {};
   }
 
   private static parseRuntimeState(json: string): Record<string, Object> {
