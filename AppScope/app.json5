@@ -12,7 +12,7 @@
     "debug": false,
     "icon": "$media:layered_image",
     "label": "$string:app_name",
-    "buildVersion": "1100201",
+    "buildVersion": "1100401",
     "distributedNotificationEnabled": true,
     "keepAlive": false,
     "minAPIVersion": 12,

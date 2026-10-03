@@ -173,6 +173,9 @@ struct SubscriptionWebViewPage {
   @State progress: number = 0;
   @State canGoBack: boolean = false;
   @State isCollected: boolean = false;
+  private mainFrameLoaded: boolean = false;
+  private pendingMainFrameError: string = '';
+  private lastErrorNotifiedUrl: string = '';
   private controller: webview.WebviewController = new webview.WebviewController();
 
   webMenuDialog: CustomDialogController | null = new CustomDialogController({
@@ -447,12 +450,17 @@ struct SubscriptionWebViewPage {
           if (event && event.url) {
             this.currentUrl = event.url;
           }
+          this.mainFrameLoaded = false;
+          this.pendingMainFrameError = '';
+          this.lastErrorNotifiedUrl = '';
           this.applyUserAgent();
         })
         .onPageEnd((event?: OnPageEndEvent) => {
           if (event && event.url) {
             this.currentUrl = event.url;
           }
+          this.mainFrameLoaded = true;
+          this.pendingMainFrameError = '';
           this.updateNavState();
         })
         .onProgressChange((event?: OnProgressChangeEvent) => {
@@ -464,7 +472,22 @@ struct SubscriptionWebViewPage {
         .onErrorReceive((event?: OnErrorReceiveEvent) => {
           const code = event ? event.error.getErrorCode() : -1;
           const info = event ? event.error.getErrorInfo() : '';
-          promptAction.showToast({ message: '加载失败(' + code + '): ' + info });
+          if (this.mainFrameLoaded) {
+            // 主页面已经加载成功，本次错误来自子资源（广告、iframe、图片等），
+            // 页面仍可正常使用，不再弹错误提示。
+            return;
+          }
+          this.pendingMainFrameError = `加载失败(${code}): ${info}`;
+          setTimeout(() => {
+            if (this.mainFrameLoaded || !this.pendingMainFrameError) return;
+            if (this.progress >= 100) return;
+            const message = this.pendingMainFrameError;
+            this.pendingMainFrameError = '';
+            const key = this.currentUrl || this.sourceUrl;
+            if (!key || this.lastErrorNotifiedUrl === key) return;
+            this.lastErrorNotifiedUrl = key;
+            promptAction.showToast({ message: message });
+          }, 900);
         })
     }
     .width('100%')
