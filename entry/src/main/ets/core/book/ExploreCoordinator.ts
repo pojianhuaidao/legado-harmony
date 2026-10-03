@@ -83,8 +83,11 @@ class ExplorePlatformSelector {
 
 export class ExploreCoordinator {
   private static readonly EXPLORE_MENU_SCRIPT_TIMEOUT_MS: number = 25000;
-  private static readonly EXPLORE_SOURCE_TIMEOUT_MS: number = 45000;
-  private static readonly EXPLORE_CONTROL_TIMEOUT_MS: number = 45000;
+  // Aggregation sources (书山) fan out to 70+ sub-sources through java.ajaxAll; the internal
+  // per-request ceiling follows source.respondTime (30s~180s), so the outer explore budget must
+  // not cut the whole aggregation short while the slowest sub-source is still in flight.
+  private static readonly EXPLORE_SOURCE_TIMEOUT_MS: number = 90000;
+  private static readonly EXPLORE_CONTROL_TIMEOUT_MS: number = 90000;
   private http: HttpClient = new HttpClient(10000);
   private noticeMessage: string = '';
   private platformSelectors: Record<string, ExplorePlatformSelector> = {};

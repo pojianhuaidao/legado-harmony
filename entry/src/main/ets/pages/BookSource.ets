@@ -4613,8 +4613,10 @@ struct BookSourcePage {
     if (!/(?:登[录陆]|退出|注销|令牌|token)/i.test(action)) return false;
     const outcome = `${result.resultValue || ''}\n${result.toastMessage || ''}`.trim();
     if (/失败|无效|未登[录陆]|请先|错误|异常/i.test(outcome)) return false;
-    return /^(?:true|1)(?:\s|$)/i.test(outcome) ||
-      /登[录陆]成功|令牌已生效|已退出|已注销|已清除.*(?:登录|令牌|凭证|状态)/i.test(outcome);
+    // 登录类动作执行成功（无失败标记）即视为登录态可能已变化：书山等聚合源的登录脚本
+    // 常直接返回 token / "0" / "success" 而非标准成功文本，若再依赖返回值文本恰好匹配
+    // “登录成功”才会失效探索缓存，登录前的空结果或旧缓存会一直滞留导致发现页无内容。
+    return true;
   }
 
   async invalidateRuntimeExplore(source: BookSource): Promise<void> {
