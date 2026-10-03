@@ -31,6 +31,10 @@ export class StageWebRuntimeRequest {
   maxTotalResponseBytes: number = 16 * 1024 * 1024;
   maxInputBytes: number = 20 * 1024 * 1024;
   maxRequestCount: number = 12;
+  // Aggregation sources (书山) fetch 70+ sub-sources through a single java.ajaxAll([...]).
+  // That batch must not be throttled by the per-step maxRequestCount (6 for explore/search);
+  // give it its own generous budget so the whole aggregation can complete in parallel.
+  maxAjaxAllRequests: number = 200;
   stage: string = SourceRuntimeStage.URL;
   ownerId: string = '';
   debugContext: BookSourceDebugContext | null = null;
@@ -89,6 +93,7 @@ export class StageWebRuntimeResult {
 
 class StageWebRuntimeStep extends StageWebRuntimeResult {
   pendingAjax: string = '';
+  pendingAjaxAll: string = '';
   pendingStringRules: string = '[]';
   inputFallbackUsed: boolean = false;
   pendingHeaders: string = '{}';
@@ -148,7 +153,7 @@ export class BookSourceStageWebRuntime {
   private queuedBytes: number = 0;
   private running: boolean = false;
   private activeTask: StageWebRuntimeTask | null = null;
-  private activeHttpClient: HttpClient | null = null;
+  private activeHttpClients: HttpClient[] = [];
   private cancelledOwners: Set<string> = new Set<string>();
   private caches: Record<string, Record<string, string>> = {};
   private cacheTouchedAt: Record<string, number> = {};
@@ -274,8 +279,8 @@ export class BookSourceStageWebRuntime {
       }
     }
     this.tasks = remaining;
-    if (this.activeTask?.request.ownerId === ownerId && this.activeHttpClient) {
-      this.activeHttpClient.cancelAll();
+    if (this.activeTask?.request.ownerId === ownerId) {
+      for (const client of this.activeHttpClients) client.cancelAll();
     }
   }
 
@@ -299,7 +304,7 @@ export class BookSourceStageWebRuntime {
       })
       .finally((): void => {
         this.activeTask = null;
-        this.activeHttpClient = null;
+        this.activeHttpClients = [];
         this.running = false;
         this.completedTaskCount++;
         if (this.maybeRecycleController()) return;
@@ -402,6 +407,48 @@ export class BookSourceStageWebRuntime {
           journal.recordResponse(responseKey, await BookSourceLoginCrypto.execute(step.pendingCrypto));
         }
         continue;
+      }
+      if (step.pendingAjaxAll) {
+        let pendingAll: string[] = [];
+        try {
+          const parsedAll = JSON.parse(step.pendingAjaxAll) as Object;
+          if (Array.isArray(parsedAll)) pendingAll = parsedAll.map((item: Object): string => String(item));
+        } catch (_) {
+          pendingAll = [];
+        }
+        if (pendingAll.length > 0) {
+          const requestedCount = requestCount + pendingAll.length;
+          const ajaxAllLimit = Math.max(1, Math.min(request.maxAjaxAllRequests || 200, 200));
+          if (requestedCount > ajaxAllLimit) throw new Error('书源脚本聚合请求次数过多');
+          requestCount = requestedCount;
+          // Run the aggregation batch concurrently (up to 8 in flight) — this is what makes
+          // 70+ sub-source aggregation sources (书山) finish in seconds instead of a serial
+          // replay chain that eats the 90s task deadline. Mirrors Legado's java.ajaxAll.
+          const responses = await this.fetchAll(request, pendingAll, step.pendingHeaders || '{}', 8);
+          this.ensureNotCancelled(request);
+          const responseLimit = Math.max(64 * 1024,
+            Math.min(request.maxResponseBytes || 8 * 1024 * 1024, 8 * 1024 * 1024));
+          const totalLimit = Math.max(responseLimit,
+            Math.min(request.maxTotalResponseBytes || 16 * 1024 * 1024, 16 * 1024 * 1024));
+          for (let index = 0; index < pendingAll.length; index++) {
+            const response = responses[index];
+            if (!response.success && response.statusCode === 0) {
+              throw new Error(response.error || '书源脚本聚合请求失败');
+            }
+            const responseBody = (response.body || '').replace(/^\uFEFF/, '');
+            lastResponseBody = responseBody;
+            totalResponseBytes += responseBody.length * 2;
+            if (totalResponseBytes > totalLimit) {
+              throw new Error('书源脚本累计响应过大');
+            }
+            const url = pendingAll[index];
+            journal.markRequestStarted(`${BookSourceHostActionKind.HTTP_REQUEST}\n${url}`);
+            journal.recordResponse(url, responseBody);
+            journal.recordResponseHeaders(url, response.headers);
+            this.captureResponseCookies(cookies, url, response.url || '', response.headers);
+          }
+          continue;
+        }
       }
       if (step.pendingAjax) {
         requestCount++;
@@ -580,11 +627,14 @@ export class BookSourceStageWebRuntime {
 
   private async fetch(request: StageWebRuntimeRequest, requestUrl: string,
     runtimeHeadersRaw: string = '{}'): Promise<HttpResponse> {
-    const timeout = Math.max(3000, Math.min(request.networkTimeoutMs || 20000, 30000));
+    // Respect the source's respondTime (Legado's per-request ceiling, typically 180000) instead
+    // of a hard 30s cap; networkTimeoutMs, when explicitly provided, remains a tighter override.
+    const respondTime = Math.max(30000, Math.min(request.source.respondTime || 180000, 180000));
+    const timeout = Math.max(3000, Math.min(request.networkTimeoutMs || respondTime, respondTime));
     const responseLimit = Math.max(64 * 1024,
       Math.min(request.maxResponseBytes || 8 * 1024 * 1024, 8 * 1024 * 1024));
     const client = new HttpClient(timeout);
-    this.activeHttpClient = client;
+    this.activeHttpClients.push(client);
     try {
       let runtimeHeaders: Record<string, string> = {};
       try {
@@ -603,8 +653,27 @@ export class BookSourceStageWebRuntime {
       return await new AnalyzeUrl(request.source, client, runtimeHeaders).fetch(requestUrl, responseLimit,
         request.debugContext);
     } finally {
-      if (this.activeHttpClient === client) this.activeHttpClient = null;
+      this.activeHttpClients = this.activeHttpClients.filter((item: HttpClient): boolean => item !== client);
     }
+  }
+
+  /**
+   * Concurrently fetch a java.ajaxAll([...]) batch, batching up to `batchSize` requests in flight.
+   * Each request gets its own HttpClient so parallel aggregation sources (书山 70+ sub-sources)
+   * finish in one round-trip window instead of a serial chain.
+   */
+  private async fetchAll(request: StageWebRuntimeRequest, urls: string[],
+    runtimeHeadersRaw: string = '{}', batchSize: number = 8): Promise<HttpResponse[]> {
+    const results: HttpResponse[] = new Array<HttpResponse>(urls.length);
+    const concurrency = Math.max(1, batchSize);
+    for (let offset = 0; offset < urls.length; offset += concurrency) {
+      const slice = urls.slice(offset, offset + concurrency);
+      const batch = await Promise.all(slice.map(
+        (url: string): Promise<HttpResponse> => this.fetch(request, url, runtimeHeadersRaw)));
+      for (let index = 0; index < batch.length; index++) results[offset + index] = batch[index];
+      this.ensureNotCancelled(request);
+    }
+    return results;
   }
 
   private captureResponseCookies(target: Record<string, string>, requestSpec: string,
@@ -1008,7 +1077,7 @@ export class BookSourceStageWebRuntime {
       `const head=html.match(/<head\\b[^>]*>/i);return head?html.replace(head[0],head[0]+bridge):bridge+html;}` +
       `const java={ajax:function(v){v=String(v??'');if(Object.prototype.hasOwnProperty.call(S.responses,v))return S.responses[v];` +
       `if(!pending){pending=v;pendingHeaders=JSON.stringify(sourceHeaders());}return '{}';},` +
-      `ajaxAll:function(v){const list=Array.isArray(v)?v:[v];return list.map(responseObject);},` +
+      `ajaxAll:function(v){const list=Array.isArray(v)?v:[v];const missing=[];for(let i=0;i<list.length;i++){const u=String(list[i]??'');if(!Object.prototype.hasOwnProperty.call(S.responses,u)&&missing.indexOf(u)<0)missing.push(u);}if(missing.length>0)pendingAjaxAll=JSON.stringify(missing);return list.map(responseObject);},` +
       `post:function(u,b,h){return responseObject(requestSpec('POST',u,b,h));},` +
       `put:function(k,v){javaData[String(k??'')]=v;return v;},` +
       `get:function(k,h){if(arguments.length>1)return responseObject(requestSpec('GET',k,null,h));` +
@@ -1134,6 +1203,7 @@ export class BookSourceStageWebRuntime {
     }
     if (!record) return step;
     step.pendingAjax = String(record['pendingAjax'] || '');
+    step.pendingAjaxAll = String(record['pendingAjaxAll'] || '');
     step.pendingStringRules = String(record['pendingStringRules'] || '[]');
     step.inputFallbackUsed = String(record['inputFallbackUsed'] || '') === 'true';
     step.pendingHeaders = String(record['pendingHeaders'] || '{}');

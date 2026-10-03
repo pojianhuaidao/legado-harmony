@@ -4734,6 +4734,54 @@ struct BookSourcePage {
       this.loginRuntimeStepRunning = false;
       return;
     }
+    if (step.pendingAjaxAll) {
+      let pendingAll: string[] = [];
+      try {
+        const parsedAll = JSON.parse(step.pendingAjaxAll) as Object;
+        if (Array.isArray(parsedAll)) pendingAll = parsedAll.map((item: Object): string => String(item));
+      } catch (_) {
+        pendingAll = [];
+      }
+      if (pendingAll.length > 0) {
+        this.loginRuntimeRequestCount += pendingAll.length;
+        if (this.loginRuntimeRequestCount > 200) {
+          this.finishLoginRuntime(null, '登录脚本聚合请求次数过多');
+          return;
+        }
+        const requestSource = this.copyBookSourceRuntime(baseSource);
+        requestSource.variable = step.variable;
+        requestSource.loginHeader = step.loginHeader;
+        requestSource.loginInfo = step.loginInfo;
+        for (const url of pendingAll) {
+          this.snapshotLoginRuntimeRequestCookie(url);
+          if (!this.loginRuntimeJournal.markRequestStarted(url)) {
+            this.finishLoginRuntime(null, '登录脚本重复请求未完成，已停止以避免重复提交');
+            return;
+          }
+        }
+        const responses = await Promise.all(pendingAll.map((url: string): Promise<HttpResponse> =>
+          this.fetchLoginRuntimeRequest(requestSource, url)));
+        if (!this.loginRuntimeActive) return;
+        for (let index = 0; index < pendingAll.length; index++) {
+          const response = responses[index];
+          if (!response.success && response.statusCode === 521) {
+            this.finishLoginRuntime(null, '接口请求失败（HTTP 521）：服务端源站当前离线，请稍后重试');
+            return;
+          }
+          if (!response.success && !response.body) {
+            this.finishLoginRuntime(null, response.error || `HTTP ${response.statusCode}`);
+            return;
+          }
+          this.loginRuntimeJournal.recordResponse(pendingAll[index], response.body || '');
+        }
+        for (const key of this.loginRuntimeCookieUrls) {
+          this.loginRuntimeCookies[key] = CookieStore.getCookie(key);
+        }
+        this.loginRuntimeStepRunning = false;
+        this.continueLoginRuntime();
+        return;
+      }
+    }
     if (step.pendingAjax) {
       if (this.loginRuntimeJournal.hasResponse(step.pendingAjax)) {
         this.loginRuntimeStepRunning = false;
@@ -4896,8 +4944,10 @@ struct BookSourcePage {
     return value;
   }
 
-  fetchLoginRuntimeRequest(source: BookSource, requestUrl: string): Promise<HttpResponse> {
-    const client = new HttpClient(15000);
+  fetchLoginRuntimeRequest(source: BookSource, requestUrl: string,
+    timeoutMs: number = 20000): Promise<HttpResponse> {
+    const clientTimeout = Math.max(15000, Math.min(timeoutMs - 5000, 175000));
+    const client = new HttpClient(clientTimeout);
     return new Promise<HttpResponse>((resolve) => {
       let completed = false;
       const timeoutId = setTimeout(() => {
@@ -4912,7 +4962,7 @@ struct BookSourcePage {
           success: false,
           error: '登录请求超时，请检查网络或切换书源线路'
         });
-      }, 20000);
+      }, timeoutMs);
       new AnalyzeUrl(source, client).fetch(requestUrl)
         .then((response: HttpResponse): void => {
           if (completed) return;

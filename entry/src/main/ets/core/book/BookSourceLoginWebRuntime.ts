@@ -3,6 +3,7 @@ import { util } from '@kit.ArkTS';
 
 export class LoginRuntimeStep {
   pendingAjax: string = '';
+  pendingAjaxAll: string = '';
   pendingCookie: string = '';
   pendingCrypto: string = '';
   pendingBrowserAwait: string = '';
@@ -79,7 +80,7 @@ export class BookSourceLoginWebRuntime {
     return `(function(){` +
       `function decodeUtf8(v){try{return decodeURIComponent(escape(atob(v)));}catch(e){return atob(v);}}` +
       `const S=JSON.parse(decodeUtf8('${stateBase64}'));` +
-      `let pending='',pendingCookie='',pendingCrypto='',pendingBrowser='',pendingBrowserTitle='',pendingWebView='';` +
+      `let pending='',pendingAjaxAll='',pendingCookie='',pendingCrypto='',pendingBrowser='',pendingBrowserTitle='',pendingWebView='';` +
       `let url='',title='',html='',injectJs='',searchKeyword='',refreshExplore=false,refreshLogin=false,loginPanelRequested=false,toast='',diagnostic='',error='';` +
       `const NativeDate=globalThis.Date;const FixedDate=function(){const a=Array.from(arguments);` +
       `if(new.target)return Reflect.construct(NativeDate,a.length?a:[S.fixedNow]);` +
@@ -223,7 +224,7 @@ export class BookSourceLoginWebRuntime {
       `const java={` +
       `ajax:function(v){v=String(v??'');if(Object.prototype.hasOwnProperty.call(S.responses,v))return S.responses[v];` +
       `if(!pending)pending=v;return '{"code":599,"message":"pending","data":null}';},` +
-      `ajaxAll:function(v){const list=Array.isArray(v)?v:[v];return list.map(responseObject);},` +
+      `ajaxAll:function(v){const list=Array.isArray(v)?v:[v];const missing=[];for(let i=0;i<list.length;i++){const u=String(list[i]??'');if(!Object.prototype.hasOwnProperty.call(S.responses,u)&&missing.indexOf(u)<0)missing.push(u);}if(missing.length>0)pendingAjaxAll=JSON.stringify(missing);return list.map(responseObject);},` +
       `post:function(u,b,h){return responseObject(requestSpec('POST',u,b,h));},` +
       `put:function(k,v){vars[k]=v;return v;},get:function(k,h){if(arguments.length>1)` +
       `return responseObject(requestSpec('GET',k,null,h));k=String(k??'');` +
@@ -310,7 +311,7 @@ export class BookSourceLoginWebRuntime {
       `const resultValue=resultText(globalThis.result)||resultText(evaluatedResult);` +
       `const cleanInfo={};Object.keys(loginMap).forEach(function(k){cleanInfo[k]=String(loginMap[k]??'');});` +
       `cleanInfo['${this.RUNTIME_STATE_KEY}']=JSON.stringify({java:vars,source:sourceData,cache:cacheData});` +
-      `return encodeURIComponent(JSON.stringify({pendingAjax:pending,pendingCookie:pendingCookie,` +
+      `return encodeURIComponent(JSON.stringify({pendingAjax:pending,pendingAjaxAll:pendingAjaxAll,pendingCookie:pendingCookie,` +
       `pendingCrypto:pendingCrypto,pendingBrowserAwait:pendingBrowser,pendingBrowserTitle:pendingBrowserTitle,pendingWebView:pendingWebView,` +
       `cookieOperations:JSON.stringify(cookieOps),variable:S.variable||'',` +
       `loginHeader:S.loginHeader||'',loginInfo:JSON.stringify(cleanInfo),requestedUrl:url,requestedTitle:title,` +
@@ -751,6 +752,7 @@ export class BookSourceLoginWebRuntime {
     }
     if (record) {
       result.pendingAjax = String(record['pendingAjax'] || '');
+      result.pendingAjaxAll = String(record['pendingAjaxAll'] || '');
       result.pendingCookie = String(record['pendingCookie'] || '');
       result.pendingCrypto = String(record['pendingCrypto'] || '');
       result.pendingBrowserAwait = String(record['pendingBrowserAwait'] || '');
