@@ -132,6 +132,7 @@ export class AppDataBackupService {
   static readonly CATEGORY_LOCAL_BOOKS: string = 'localBooks';
   static readonly CATEGORY_SETTINGS: string = 'settings';
   static readonly CATEGORY_SEARCH_HISTORY: string = 'searchHistory';
+  static readonly CATEGORY_RSS_SOURCES: string = 'rssSources';
 
   private static readonly SETTINGS_STORES: string[] = [
     'app_icon_settings',

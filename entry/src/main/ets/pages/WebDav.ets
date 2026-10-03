@@ -22,6 +22,7 @@ class WebDavFormDraft {
   tab: string = 'settings';
   encryptBackup: boolean = false;
   includeLocalBooks: boolean = false;
+  includeRssSources: boolean = true;
   entryNameDraft: string = '';
 }
 
