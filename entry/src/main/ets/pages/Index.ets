@@ -88,6 +88,7 @@ struct Index {
   @State hdsMaterialRenderBranch: boolean = false;
   @State bookshelfMultiSelectActive: boolean = false;
   @State bookshelfActiveGroupId: number = 0;
+  @State tabBarCollapsed: boolean = false;
   @StorageLink('themeRevision') @Watch('onThemeRevisionChanged') themeRevision: number = 0;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navBarHeight') navBarHeight: number = 0;
@@ -391,6 +392,9 @@ struct Index {
       } else {
         this.compatTabs()
       }
+      if (this.tabBarCollapsed && !this.bookshelfMultiSelectActive) {
+        this.tabBarExpandFloatingButton()
+      }
       if (this.globalTtsActive && !this.showGlobalTtsPanel) {
         this.globalTtsMiniPlayer()
       }
@@ -648,7 +652,7 @@ struct Index {
     .key(`home_immersive_tabs_${this.themeRevision}_${this.appDarkMode ? 'dark' : 'light'}`)
     .barBackgroundColor(this.immersiveTabsBarBackgroundColor())
     .barMode(BarMode.Fixed)
-    .barHeight(this.bookshelfMultiSelectActive ? 0 : 56)
+    .barHeight(this.tabBarCollapsedBarHeight())
     .barOverlap(true)
     .borderRadius(30)
     .clip(true)
@@ -670,6 +674,7 @@ struct Index {
     .onChange((index: number) => {
       this.currentIndex = index;
       this.syncHomeSystemBars();
+      this.collapseTabBar();
     })
     .width('100%')
     .height('100%')
@@ -736,12 +741,13 @@ struct Index {
       .tabBar(this.compatTabBar(this.navigationIcon('mine'), '我的', 3))
     }
     .barMode(BarMode.Fixed)
-    .barHeight(this.bookshelfMultiSelectActive ? 0 : 56 + this.compatTabSafeHeight())
+    .barHeight(this.tabBarCollapsedBarHeight())
     .barBackgroundColor(ThemeRuntime.cardColor(this.appDarkMode))
     .scrollable(false)
     .onChange((index: number) => {
       this.currentIndex = index;
       this.syncHomeSystemBars();
+      this.collapseTabBar();
     })
     .width('100%')
     .height('100%')
@@ -832,6 +838,56 @@ struct Index {
 
   floatingBarBottomMargin(): number {
     return this.navBarHeight > 0 ? this.navBarHeight : 8;
+  }
+
+  tabBarCollapsedBarHeight(): number {
+    if (this.bookshelfMultiSelectActive) return 0;
+    if (this.tabBarCollapsed) return 0;
+    return this.supportsImmersiveTabs() ? 56 : 56 + this.compatTabSafeHeight();
+  }
+
+  collapseTabBar(): void {
+    this.tabBarCollapsed = true;
+  }
+
+  expandTabBar(): void {
+    this.tabBarCollapsed = false;
+  }
+
+  currentTabBarLabel(): string {
+    const labels: string[] = ['书架', '发现', '订阅', '我的'];
+    return labels[this.currentIndex] ?? '菜单';
+  }
+
+  @Builder
+  tabBarExpandFloatingButton() {
+    Stack({ alignContent: Alignment.Center }) {
+      Circle()
+        .width(52)
+        .height(52)
+        .fill(this.tabBarActiveColor())
+        .shadow({ radius: 12, color: '#40000000', offsetY: 3 })
+      Column({ space: 1 }) {
+        SymbolGlyph($r('sys.symbol.chevron_up'))
+          .fontSize(15)
+          .fontColor(['#FFFFFF'])
+        Text(this.currentTabBarLabel())
+          .fontSize(9)
+          .fontColor(['#FFFFFF'])
+          .maxLines(1)
+      }
+    }
+    .width(52)
+    .height(52)
+    .borderRadius(26)
+    .position({
+      x: this.globalTtsViewportWidth - 68,
+      y: this.globalTtsViewportHeight - this.floatingBarBottomMargin() - 64
+    })
+    .onClick(() => {
+      this.expandTabBar();
+    })
+    .zIndex(30)
   }
 
   compatTabSafeHeight(): number {
@@ -7563,6 +7619,7 @@ struct ExplorePage {
   @State exploreControls: ExploreControl[] = [];
   @State exploreTextValues: string[] = [];
   @State sourceOptions: ExploreSourceOption[] = [];
+  @State exploreTotalBookSourceCount: number = 0;
   private exploreSourceDataSource: ExploreSourceOptionDataSource = new ExploreSourceOptionDataSource();
   @State exploreSourceGroups: string[] = [];
   @State activeExploreSourceGroup: string = '__all__';
@@ -8310,6 +8367,16 @@ struct ExplorePage {
   @Builder
   exploreSourceDropdown() {
     Column() {
+      Row() {
+        Text(`全部书源 ${this.exploreTotalBookSourceCount > 0 ? this.exploreTotalBookSourceCount : this.sourceOptions.length} · 可探索 ${this.sourceOptions.length}`)
+          .fontSize(12)
+          .fontColor(this.subTextColor())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+
       this.exploreSourceGroupBar()
 
       if (this.getFilteredExploreSourceOptions().length === 0) {
@@ -9797,6 +9864,7 @@ struct SearchPage {
   @State showSearchSourcePicker: boolean = false;
   @State searchSourcePickerQuery: string = '';
   @State searchableSources: BookSource[] = [];
+  @State totalBookSourceCount: number = 0;
   @State sourceGroups: string[] = [];
   @State pendingSelectedSourceUrlsRaw: string = '';
   @State expandedSearchSourceGroups: string[] = [];
@@ -9901,6 +9969,8 @@ struct SearchPage {
       const sources = await db.getEnabledBookSourcesForSearch();
       this.searchableSources = sources.filter((source: BookSource): boolean =>
         !!(source.bookSourceUrl && source.bookSourceName && source.searchUrl && source.searchRule?.bookList));
+      const allSources = await db.getAllBookSources();
+      this.totalBookSourceCount = allSources.length;
       const groups: string[] = [];
       for (const source of this.searchableSources) {
         const group = this.normalizeSourceGroup(source);
@@ -10059,12 +10129,21 @@ struct SearchPage {
     return groups.length;
   }
 
+  searchableSourceTotalLabel(): number {
+    return this.totalBookSourceCount > 0 ? this.totalBookSourceCount : this.searchableSources.length;
+  }
+
   searchScopeSummary(): string {
     if (this.singleSourceSearchUrl) {
       return this.singleSourceSearchName || this.singleSourceSearchUrl;
     }
     if (this.isAllSearchSourcesSelected()) {
-      return this.searchableSources.length > 0 ? `全部书源 · ${this.searchableSources.length}` : '全部书源';
+      if (this.searchableSources.length === 0) {
+        return this.totalBookSourceCount > 0 ? `全部书源 · ${this.totalBookSourceCount}` : '全部书源';
+      }
+      return this.totalBookSourceCount > 0 ?
+        `全部书源 · ${this.totalBookSourceCount}（可搜索 ${this.searchableSources.length}）` :
+        `全部书源 · ${this.searchableSources.length}`;
     }
     const selected = this.effectiveSelectedSourceUrls();
     if (selected.length === 0) return '未选择书源';
@@ -10497,7 +10576,7 @@ struct SearchPage {
               .fontSize(18)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.primaryTextColor())
-            Text(`已选 ${this.pendingSelectedSourceUrls().length} / ${this.searchableSources.length} 个书源`)
+            Text(`已选 ${this.pendingSelectedSourceUrls().length} / ${this.searchableSources.length} 个可搜索书源 · 全部 ${this.searchableSourceTotalLabel()} 个书源`)
               .fontSize(12)
               .fontColor(this.subTextColor())
           }
@@ -10542,7 +10621,7 @@ struct SearchPage {
               .fontSize(15)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.primaryTextColor())
-            Text(`已启用且支持搜索的 ${this.searchableSources.length} 个书源`)
+            Text(`共 ${this.searchableSourceTotalLabel()} 个书源，已启用且支持搜索 ${this.searchableSources.length} 个`)
               .fontSize(12)
               .fontColor(this.subTextColor())
           }
