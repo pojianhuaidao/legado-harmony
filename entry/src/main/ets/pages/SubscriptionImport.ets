@@ -111,8 +111,10 @@ struct SubscriptionImportPage {
       return;
     }
     this.parseResult = list;
-    this.parseInfo = `解析到 ${list.length} 个订阅源，点击"确认导入"预览分组与差异`;
-    promptAction.showToast({ message: `解析到 ${list.length} 个订阅源` });
+    this.parseInfo = `解析到 ${list.length} 个订阅源，已弹出导入确认预览`;
+    promptAction.showToast({ message: `解析到 ${list.length} 个订阅源，正在生成导入确认...` });
+    // 解析完成后自动弹出确认导入预览弹窗，避免用户找不到确认入口
+    this.buildPreview();
   }
 
   fetchText(url: string): Promise<string> {

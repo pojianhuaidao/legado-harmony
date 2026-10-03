@@ -1,5 +1,6 @@
 import { Book, BookChapter, BookSource, SearchBook } from '../../model/data/Book';
 import { appDb } from '../../model/data/AppDatabase';
+import { TimeoutHelper } from '../concurrency/TimeoutHelper';
 import { ExploreCoordinator, ExploreEntry } from './ExploreCoordinator';
 import { WebBookService } from './WebBookService';
 import { BookTypeSupport } from './BookTypeSupport';
@@ -38,6 +39,9 @@ class ExploreBookCandidate {
  */
 export class ExploreReadingValidator {
   private static readonly EXPLORE_SAMPLE_LIMIT: number = 4;
+  // 单源整体超时：发现/详情/目录/正文任一段内部链路过慢时，跳过当前源继续后续，
+  // 避免串行校验长期停滞（表现为"校验一直停在前面几项"）。
+  private static readonly SOURCE_TIMEOUT_MS: number = 90000;
   private static readonly CHAPTER_SAMPLE_LIMIT: number = 32;
   private cancelled: boolean = false;
 
@@ -54,9 +58,18 @@ export class ExploreReadingValidator {
     for (const source of sources) {
       if (this.cancelled) break;
       this.publishProgress(onProgress, done, sources.length, source, '发现分类');
-      const result = await this.validateSource(source, (stage: string): void => {
-        this.publishProgress(onProgress, done, sources.length, source, stage);
-      });
+      const result = await TimeoutHelper.withTimeout<ExploreReadingValidationResult>(
+        this.validateSource(source, (stage: string): void => {
+          this.publishProgress(onProgress, done, sources.length, source, stage);
+        }),
+        ExploreReadingValidator.SOURCE_TIMEOUT_MS,
+        (): ExploreReadingValidationResult => {
+          const timeoutResult = new ExploreReadingValidationResult();
+          timeoutResult.validationStatus = BookSource.VALIDATION_TEMPORARY_ERROR;
+          timeoutResult.reason = '校验超时（发现/阅读链路过慢），已跳过';
+          return timeoutResult;
+        }
+      );
       if (this.cancelled) break;
       done++;
       if (onSourceComplete) await onSourceComplete(source, result);

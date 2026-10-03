@@ -1703,6 +1703,12 @@ struct BookSourcePage {
           .width('100%')
           .margin({ top: 6 })
 
+        Text(this.checkScopeCountText)
+          .fontSize(11)
+          .fontColor(this.subTextColor())
+          .width('100%')
+          .margin({ top: 2 })
+
         Row({ space: 8 }) {
           this.checkScopeOption('enabled', '仅启用书源')
           this.checkScopeOption('all', '全部书源')
@@ -1782,7 +1788,7 @@ struct BookSourcePage {
       .borderRadius(10)
       .backgroundColor(this.checkSourceScope === value ? this.buttonColor() : this.inputColor())
       .onClick(() => {
-        this.checkSourceScope = value;
+        this.applyCheckScope(value, label);
       })
   }
 
@@ -5532,6 +5538,29 @@ struct BookSourcePage {
       return;
     }
     this.showCheckOptionsDialog = true;
+    this.refreshCheckScopeCounts();
+  }
+
+  // 刷新校验范围实时书源数量，确保"全部书源"范围对用户可见、且数量来自全量查询
+  async refreshCheckScopeCounts(): Promise<void> {
+    try {
+      const db = AppDatabase.getInstance();
+      const allSources = await db.getAllBookSources();
+      const enabledSources = await db.getEnabledBookSources();
+      this.checkScopeCountAll = allSources.length;
+      this.checkScopeCountEnabled = enabledSources.length;
+      this.checkScopeCountText = this.checkSourceScope === 'all' ?
+        `全部书源：${allSources.length} 个` : `仅启用书源：${enabledSources.length} 个`;
+    } catch (e) {
+      this.checkScopeCountText = this.checkSourceScope === 'all' ? '全部书源：--' : '仅启用书源：--';
+    }
+  }
+
+  async applyCheckScope(value: string, label: string): Promise<void> {
+    this.checkSourceScope = value;
+    await this.refreshCheckScopeCounts();
+    promptAction.showToast({ message: `${label}（${this.checkSourceScope === 'all' ?
+      this.checkScopeCountAll : this.checkScopeCountEnabled} 个书源）` });
   }
 
   async startCheckEnabledSources(action: string = 'none'): Promise<void> {
