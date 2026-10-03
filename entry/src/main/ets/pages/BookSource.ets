@@ -169,6 +169,9 @@ struct BookSourcePage {
   // 用户反馈“校验源只显示 36 个”是因为默认只取启用书源，书库启用数恰为 36；
   // 默认改为全部书源，保证能看到并校验导入的所有源。
   @State checkSourceScope: string = 'all';
+  @State checkScopeCountAll: number = 0;
+  @State checkScopeCountEnabled: number = 0;
+  @State checkScopeCountText: string = '全部书源：--';
   @State checkOkCount: number = 0;
   @State checkFailedCount: number = 0;
   @State checkNoResultCount: number = 0;
