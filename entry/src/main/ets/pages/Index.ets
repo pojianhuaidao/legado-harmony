@@ -7874,8 +7874,14 @@ struct ExplorePage {
   }
 
   shouldOfferExploreSourceLogin(): boolean {
-    return !!this.selectedSourceUrl &&
-      /请先登[录陆]|需要登[录陆]|未登[录陆]|令牌|token|无权限|登录设备数已达上限|设备管理/i.test(this.status || '');
+    const statusHit = /请先登[录陆]|需要登[录陆]|未登[录陆]|令牌|token|无权限|登录设备数已达上限|设备管理/i.test(this.status || '');
+    if (statusHit) return true;
+    if (!this.selectedSourceUrl) return false;
+    // 书山类聚合源登录按钮由 ExploreCoordinator 补进控件条（loginUrl 未注入时脚本
+    // 不会生成登录控件），控件条存在登录按钮即提供登录入口。
+    const controls = this.getActiveExploreControls();
+    return controls.some((control: ExploreControl): boolean =>
+      /登\s*录/.test(control.name || '') && /login/i.test(control.action || ''));
   }
 
   exploreSourceLoginButtonLabel(): string {
@@ -9377,6 +9383,10 @@ struct ExplorePage {
     updated.sourceUrl = control.sourceUrl;
     updated.sourceName = control.sourceName;
     const outcome = await this.coordinator.executeExploreControl(this.selectedSourceUrl, updated);
+    if (outcome === 'login') {
+      this.openExploreSourceLogin();
+      return;
+    }
     if (outcome === 'fail') {
       const failureNotice = this.coordinator.getNoticeMessage();
       promptAction.showToast({ message: failureNotice || '控件执行失败' });
