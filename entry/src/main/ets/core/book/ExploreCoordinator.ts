@@ -92,6 +92,7 @@ export class ExploreCoordinator {
   private controls: ExploreControl[] = [];
   private pendingSearchKeyword: string = '';
   private pendingExploreRefresh: boolean = false;
+  private pendingLoginRequested: boolean = false;
 
   /** Native controls (书山 text/button/select) discovered on the latest explore load. */
   getExploreControls(): ExploreControl[] {
@@ -109,6 +110,13 @@ export class ExploreCoordinator {
   takePendingExploreRefresh(): boolean {
     const requested = this.pendingExploreRefresh;
     this.pendingExploreRefresh = false;
+    return requested;
+  }
+
+  /** Consume a login-panel request recorded by java.open('login') inside an explore script/control. */
+  takePendingLoginRequested(): boolean {
+    const requested = this.pendingLoginRequested;
+    this.pendingLoginRequested = false;
     return requested;
   }
 
@@ -145,6 +153,7 @@ export class ExploreCoordinator {
     this.controls = [];
     this.pendingSearchKeyword = '';
     this.pendingExploreRefresh = false;
+    this.pendingLoginRequested = false;
     const sources = await appDb.getEnabledBookSourcesForExplore();
     const entries: ExploreEntry[] = [];
     for (const source of sources) {
@@ -163,8 +172,35 @@ export class ExploreCoordinator {
       }
       const parsed = await this.parseExploreUrl(source, platform, debugContext);
       entries.push(...parsed);
+      this.ensureLoginControlFor(source);
     }
     return entries;
+  }
+
+  /**
+   * 书山类聚合源依赖 loginUrl 变量生成登录控件，但探索菜单脚本注入时
+   * includeLoginUrl=false（为提速不注入几十 KiB 登录库），导致脚本不产出
+   * 登录控件、发现页无登录入口。这里在源具备登录能力（loginUrl/loginUi/
+   * loginCheckJs/loginHeader 任一非空）且控件条尚无登录项时，补一个原生
+   * 登录按钮，点击执行 java.open('login') 打开书源登录面板。
+   */
+  private ensureLoginControlFor(source: BookSource): void {
+    const loginUrl = String(source.loginUrl || '').trim();
+    const loginUi = String(source.loginUi || '').trim();
+    const loginCheckJs = String(source.loginCheckJs || '').trim();
+    const loginHeader = String(source.loginHeader || '').trim();
+    if (!(loginUrl || loginUi || loginCheckJs || loginHeader)) return;
+    const hasLoginControl = this.controls.some((control: ExploreControl): boolean =>
+      control.sourceUrl === source.bookSourceUrl && /登\s*录/.test(control.name || ''));
+    if (hasLoginControl) return;
+    const control = new ExploreControl();
+    control.type = 'button';
+    control.name = '登录';
+    control.action = 'java.open("login")';
+    control.parameter = 'login';
+    control.sourceUrl = source.bookSourceUrl;
+    control.sourceName = source.bookSourceName;
+    this.controls.push(control);
   }
 
   async explore(entry: ExploreEntry, page: number = 1, maxItems: number = 0,
@@ -650,6 +686,7 @@ export class ExploreCoordinator {
           this.pendingSearchKeyword = runtimeResult.requestedSearchKeyword;
         }
         if (runtimeResult.loginPanelRequested === 'true') {
+          this.pendingLoginRequested = true;
           this.noticeMessage = '请先登录书源后再试';
           return [];
         }
@@ -887,6 +924,10 @@ export class ExploreCoordinator {
       );
       if (result.requestedSearchKeyword) this.pendingSearchKeyword = result.requestedSearchKeyword;
       if (result.refreshExploreRequested === 'true') this.pendingExploreRefresh = true;
+      if (result.loginPanelRequested === 'true') {
+        this.pendingLoginRequested = true;
+        return 'login';
+      }
       if (!this.noticeMessage && result.toastMessage && result.toastMessage.trim()) {
         this.noticeMessage = result.toastMessage.trim();
       }

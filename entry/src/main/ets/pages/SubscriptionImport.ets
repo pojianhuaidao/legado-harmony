@@ -400,9 +400,10 @@ struct SubscriptionImportPage {
   }
 
   build() {
-    Column() {
-      Row() {
-        ImmersiveBackButton({
+    Stack() {
+      Column() {
+        Row() {
+          ImmersiveBackButton({
           iconColor: ThemeRuntime.primaryTextColor(this.appDarkMode),
           darkMode: this.appDarkMode,
           buttonSize: 40,
@@ -507,6 +508,10 @@ struct SubscriptionImportPage {
       .width('100%')
       .layoutWeight(1)
       .align(Alignment.Top)
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(ThemeRuntime.pageColor(this.appDarkMode))
 
       if (this.previewVisible) {
         Column() {
