@@ -720,8 +720,48 @@ export class BookSourceLoginWebRuntime {
   static parseResult(raw: string): LoginRuntimeStep {
     const result = new LoginRuntimeStep();
     let value = (raw || '').trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.substring(1, value.length - 1);
+    // ArkWeb runJavaScript 对返回值可能额外再做一层 JSON.stringify（带转义引号）或重复 URI
+    // 编码。循环先解码 URI、再剥字符串包裹与残余转义，直到得到对象或确定为纯文本，避免
+    // 登录脚本的 toast/return 信息因双层包裹被解析成空而只回显"操作已执行，没有返回提示信息"。
+    for (let depth = 0; depth < 4; depth++) {
+      let trimmed = value.trim();
+      try {
+        const d = decodeURIComponent(trimmed);
+        if (d !== trimmed) trimmed = d;
+      } catch (_) {
+        // 保留原样
+      }
+      const quoted = (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith("'") && trimmed.endsWith("'"));
+      if (quoted) {
+        // 带转义引号（\"...\"）说明被额外 JSON.stringify 包裹一层：解出内层字符串继续剥。
+        if (trimmed.startsWith('\\"')) {
+          try {
+            value = JSON.parse(trimmed) as string;
+            continue;
+          } catch (_) {
+          }
+        }
+        value = trimmed.substring(1, trimmed.length - 1);
+        continue;
+      }
+      // 残余 JSON 转义（record 被 JSON.stringify 两层时内容形如 {\"toastMessage\":\"hi\"}，
+      // 再叠加 URI 编码时为 {\\\"toastMessage...）：仅当内容以 \{ 的转义形式开头时再解一层，
+      // 正常 JSON（{" 开头）不触发，避免误伤。
+      if (trimmed.startsWith('{\\"') || trimmed.startsWith('{\\\\\"') ||
+        trimmed.startsWith('[\\"') || trimmed.startsWith('[\\\\"')) {
+        try {
+          // 包引号后按 JSON 字符串字面量解析：外层 stringify 的结构引号 \" → "、内容引号
+          // \\\" → \"，等价于对二次 stringify 反转义得到内层 JSON 文本。
+          value = JSON.parse('"' + trimmed + '"') as string;
+          continue;
+        } catch (_) {
+          value = trimmed;
+          break;
+        }
+      }
+      value = trimmed;
+      break;
     }
     // 宽容解析：书山等聚合源的登录脚本可能返回标准协议以外的结构（{code,msg} / {success,data} /
     // 纯文本 / 数组 / 未完整 URI 编码的文本）。任一步解析失败都降级为文本结果，绝不弹「格式异常」硬错。

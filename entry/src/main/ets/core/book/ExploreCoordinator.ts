@@ -82,7 +82,13 @@ class ExplorePlatformSelector {
 }
 
 export class ExploreCoordinator {
-  private static readonly EXPLORE_MENU_SCRIPT_TIMEOUT_MS: number = 25000;
+  // Menu-script timeout for a single exploreUrl script execution. Aggregation sources (书山)
+  // run a large exploreUrl script that calls java.ajax(getServerHost()+"/api/get_config") on the
+  // first pass; when the cloud aggregation endpoint is slow this inner watchdog fired at 25s and
+  // cut the whole explore short ("发现脚本执行超时（聚合源网络过慢），已跳过") before the
+  // 90s EXPLORE_SOURCE_TIMEOUT_MS outer budget could even matter. Keep it aligned with the outer
+  // budget so a slow get_config has a real chance to complete instead of being skipped early.
+  private static readonly EXPLORE_MENU_SCRIPT_TIMEOUT_MS: number = 90000;
   // Aggregation sources (书山) fan out to 70+ sub-sources through java.ajaxAll; the internal
   // per-request ceiling follows source.respondTime (30s~180s), so the outer explore budget must
   // not cut the whole aggregation short while the slowest sub-source is still in flight.
