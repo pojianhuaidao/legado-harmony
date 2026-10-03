@@ -717,13 +717,39 @@ export class BookSourceLoginWebRuntime {
   }
 
   static parseResult(raw: string): LoginRuntimeStep {
+    const result = new LoginRuntimeStep();
     let value = (raw || '').trim();
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.substring(1, value.length - 1);
     }
+    // 宽容解析：书山等聚合源的登录脚本可能返回标准协议以外的结构（{code,msg} / {success,data} /
+    // 纯文本 / 数组 / 未完整 URI 编码的文本）。任一步解析失败都降级为文本结果，绝不弹「格式异常」硬错。
+    let decoded = value;
     try {
-      const record = JSON.parse(decodeURIComponent(value)) as Record<string, Object>;
-      const result = new LoginRuntimeStep();
+      decoded = decodeURIComponent(value);
+    } catch (_) {
+      decoded = value;
+    }
+    let record: Record<string, Object> | null = null;
+    try {
+      const parsed = JSON.parse(decoded) as Object;
+      if (Array.isArray(parsed)) {
+        const first = parsed.length > 0 ? parsed[0] : null;
+        if (first && typeof first === 'object' && !Array.isArray(first)) {
+          record = first as Record<string, Object>;
+        } else {
+          result.resultValue = first === null || first === undefined ? '' : String(first);
+        }
+      } else if (parsed && typeof parsed === 'object') {
+        record = parsed as Record<string, Object>;
+      } else {
+        result.resultValue = parsed === null || parsed === undefined ? '' : String(parsed);
+      }
+    } catch (_) {
+      // 非 JSON：按纯文本返回，由上层 parseLoginItems 或直接展示处理。
+      result.resultValue = decoded || value;
+    }
+    if (record) {
       result.pendingAjax = String(record['pendingAjax'] || '');
       result.pendingCookie = String(record['pendingCookie'] || '');
       result.pendingCrypto = String(record['pendingCrypto'] || '');
@@ -739,19 +765,34 @@ export class BookSourceLoginWebRuntime {
       result.requestedHtml = String(record['requestedHtml'] || '');
       result.requestedInjectJs = String(record['requestedInjectJs'] || '');
       result.requestedSearchKeyword = String(record['requestedSearchKeyword'] || '');
-      result.loginPanelRequested = record['loginPanelRequested'] === true;
-      result.refreshExploreRequested = record['refreshExploreRequested'] === true;
-      result.refreshLoginRequested = record['refreshLoginRequested'] === true;
+      result.loginPanelRequested = record['loginPanelRequested'] === true ||
+        String(record['loginPanelRequested'] || '') === 'true';
+      result.refreshExploreRequested = record['refreshExploreRequested'] === true ||
+        String(record['refreshExploreRequested'] || '') === 'true';
+      result.refreshLoginRequested = record['refreshLoginRequested'] === true ||
+        String(record['refreshLoginRequested'] || '') === 'true';
       result.toastMessage = String(record['toastMessage'] || '');
       result.logMessage = String(record['logMessage'] || '');
       result.errorMessage = String(record['errorMessage'] || '');
       result.resultValue = String(record['resultValue'] || '');
-      return result;
-    } catch (_) {
-      const result = new LoginRuntimeStep();
-      result.errorMessage = '登录脚本返回格式异常';
-      return result;
+      // 兼容外部结果结构：{code,msg} / {success,data} / {message,data} / 数组首项等。
+      const code = record['code'];
+      const success = record['success'];
+      const message = String(record['msg'] || record['message'] || '');
+      const data = record['data'];
+      if (!result.toastMessage && message) result.toastMessage = message;
+      if (!result.resultValue && data !== undefined && data !== null) {
+        result.resultValue = typeof data === 'string' ? String(data) : JSON.stringify(data);
+      }
+      const codeText = String(code ?? '');
+      const successText = String(success ?? '');
+      const successFlag = successText === 'true' || codeText === '0' || codeText === '200' || codeText === 'true';
+      if (!result.errorMessage && message && !successFlag && (code !== undefined || success !== undefined)) {
+        // 明确的业务失败（success=false / code 非成功值）才保留提示，正常业务返回不视为格式异常。
+        result.errorMessage = message;
+      }
     }
+    return result;
   }
 
   static parseRecord(json: string): Record<string, string> {

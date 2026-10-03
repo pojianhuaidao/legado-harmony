@@ -1101,45 +1101,72 @@ export class BookSourceStageWebRuntime {
     } else if (value.startsWith("'") && value.endsWith("'")) {
       value = value.substring(1, value.length - 1);
     }
+    let decoded = value;
     try {
-      const record = JSON.parse(decodeURIComponent(value)) as Record<string, Object>;
-      const step = new StageWebRuntimeStep();
-      step.pendingAjax = String(record['pendingAjax'] || '');
-      step.pendingStringRules = String(record['pendingStringRules'] || '[]');
-      step.inputFallbackUsed = String(record['inputFallbackUsed'] || '') === 'true';
-      step.pendingHeaders = String(record['pendingHeaders'] || '{}');
-      step.pendingCookie = String(record['pendingCookie'] || '');
-      step.pendingCrypto = String(record['pendingCrypto'] || '');
-      step.cookieOperations = String(record['cookieOperations'] || '[]');
-      step.variable = String(record['variable'] || '');
-      step.loginHeader = String(record['loginHeader'] || '');
-      step.bookVariable = String(record['bookVariable'] || '{}');
-      step.bookType = String(record['bookType'] || '');
-      step.chapterImgUrl = String(record['chapterImgUrl'] || '');
-      step.bookDurChapterIndex = String(record['bookDurChapterIndex'] || '');
-      step.bookImageStyle = String(record['bookImageStyle'] || '');
-      step.cacheState = String(record['cacheState'] || '{}');
-      step.javaState = String(record['javaState'] || '{}');
-      step.sourceState = String(record['sourceState'] || '{}');
-      step.logs = String(record['logs'] || '[]');
-      step.value = String(record['value'] || '');
-      step.requestedUrl = String(record['requestedUrl'] || '');
-      step.requestedHtml = String(record['requestedHtml'] || '');
-      step.toastMessage = String(record['toastMessage'] || '');
-      step.errorMessage = String(record['errorMessage'] || '');
-      step.refreshExploreRequested = String(record['refreshExploreRequested'] || '');
-      step.requestedSearchKeyword = String(record['searchKeyword'] || '');
-      step.loginPanelRequested = String(record['loginPanelRequested'] || '');
-      return step;
+      decoded = decodeURIComponent(value);
+    } catch (_) {
+      decoded = value;
+    }
+    const step = new StageWebRuntimeStep();
+    let record: Record<string, Object> | null = null;
+    try {
+      const parsed = JSON.parse(decoded) as Object;
+      if (Array.isArray(parsed)) {
+        const first = parsed.length > 0 ? parsed[0] : null;
+        if (first && typeof first === 'object' && !Array.isArray(first)) {
+          record = first as Record<string, Object>;
+        } else {
+          step.value = first === null || first === undefined ? '' : String(first);
+        }
+      } else if (parsed && typeof parsed === 'object') {
+        record = parsed as Record<string, Object>;
+      } else {
+        step.value = parsed === null || parsed === undefined ? '' : String(parsed);
+      }
     } catch (error) {
       // Never print the returned value: it can contain credentials or copyrighted content.
       console.warn('[StageWebRuntime] invalid result envelope, length=' + value.length +
         ', encoded=' + String(value.indexOf('%7B') >= 0 || value.indexOf('%7b') >= 0) +
         ', error=' + String(error));
-      const step = new StageWebRuntimeStep();
-      step.errorMessage = '书源脚本返回格式异常';
+      // 宽容解析：非标准信封按纯文本值返回，不弹「格式异常」硬错；脚本自身业务错误仍保留。
+      step.value = decoded || value;
       return step;
     }
+    if (!record) return step;
+    step.pendingAjax = String(record['pendingAjax'] || '');
+    step.pendingStringRules = String(record['pendingStringRules'] || '[]');
+    step.inputFallbackUsed = String(record['inputFallbackUsed'] || '') === 'true';
+    step.pendingHeaders = String(record['pendingHeaders'] || '{}');
+    step.pendingCookie = String(record['pendingCookie'] || '');
+    step.pendingCrypto = String(record['pendingCrypto'] || '');
+    step.cookieOperations = String(record['cookieOperations'] || '[]');
+    step.variable = String(record['variable'] || '');
+    step.loginHeader = String(record['loginHeader'] || '');
+    step.bookVariable = String(record['bookVariable'] || '{}');
+    step.bookType = String(record['bookType'] || '');
+    step.chapterImgUrl = String(record['chapterImgUrl'] || '');
+    step.bookDurChapterIndex = String(record['bookDurChapterIndex'] || '');
+    step.bookImageStyle = String(record['bookImageStyle'] || '');
+    step.cacheState = String(record['cacheState'] || '{}');
+    step.javaState = String(record['javaState'] || '{}');
+    step.sourceState = String(record['sourceState'] || '{}');
+    step.logs = String(record['logs'] || '[]');
+    step.value = String(record['value'] || '');
+    step.requestedUrl = String(record['requestedUrl'] || '');
+    step.requestedHtml = String(record['requestedHtml'] || '');
+    step.toastMessage = String(record['toastMessage'] || '');
+    step.errorMessage = String(record['errorMessage'] || '');
+    step.refreshExploreRequested = String(record['refreshExploreRequested'] || '');
+    step.requestedSearchKeyword = String(record['searchKeyword'] || '');
+    step.loginPanelRequested = String(record['loginPanelRequested'] || '');
+    // 兼容外部结果结构：{code,msg} / {success,data} / {message,data} / 数组首项等。
+    if (!step.value && record['msg']) step.value = String(record['msg']);
+    if (!step.value && record['message']) step.value = String(record['message']);
+    const dataValue = record['data'];
+    if (!step.value && dataValue !== undefined && dataValue !== null) {
+      step.value = typeof dataValue === 'string' ? String(dataValue) : JSON.stringify(dataValue);
+    }
+    return step;
   }
 
   private variableValue(raw: string, key: string): string {
