@@ -49,6 +49,7 @@ struct WebDavPage {
   @State encryptBackup: boolean = false;
   @State backupPassword: string = '';
   @State includeLocalBooks: boolean = false;
+  @State includeRssSources: boolean = true;
   @State showRestorePasswordDialog: boolean = false;
   @State restorePassword: string = '';
   @State restorePasswordError: string = '';
@@ -527,6 +528,26 @@ struct WebDavPage {
                 })
             }
             .width('100%')
+
+            Row() {
+              Column() {
+                Text('包含订阅源')
+                  .fontSize(14)
+                  .fontColor(this.primaryTextColor())
+                Text('RSS 订阅源与分组随备份一起保存/恢复')
+                  .fontSize(11)
+                  .fontColor(this.subTextColor())
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+              Toggle({ type: ToggleType.Switch, isOn: this.includeRssSources })
+                .selectedColor(this.accentColor())
+                .onChange((value: boolean) => {
+                  this.includeRssSources = value;
+                  this.scheduleFormDraftSave();
+                })
+            }
+            .width('100%')
             Button(this.encryptBackup ? '立即上传加密备份' : '立即上传备份')
               .width('100%')
               .height(44)
@@ -745,6 +766,7 @@ struct WebDavPage {
       this.backupPassword = await WebDavSecretStore.password(getContext(this), this.draftBackupPasswordId);
       this.encryptBackup = draft.encryptBackup === true;
       this.includeLocalBooks = draft.includeLocalBooks === true;
+      this.includeRssSources = draft.includeRssSources !== false;
       this.entryNameDraft = draft.entryNameDraft || '';
       this.configured = !!this.connection.id;
       this.formDraftDirty = true;
@@ -779,6 +801,7 @@ struct WebDavPage {
       draft.tab = this.tab;
       draft.encryptBackup = this.encryptBackup;
       draft.includeLocalBooks = this.includeLocalBooks;
+      draft.includeRssSources = this.includeRssSources;
       draft.entryNameDraft = this.entryNameDraft;
       FormDraftStore.persistSoon(getContext(this), 'webdav:form', JSON.stringify(draft));
     }, 60);
@@ -795,6 +818,7 @@ struct WebDavPage {
     draft.tab = this.tab;
     draft.encryptBackup = this.encryptBackup;
     draft.includeLocalBooks = this.includeLocalBooks;
+    draft.includeRssSources = this.includeRssSources;
     draft.entryNameDraft = this.entryNameDraft;
     FormDraftStore.persist(getContext(this), 'webdav:form', JSON.stringify(draft));
     WebDavSecretStore.savePassword(getContext(this), this.draftPasswordId, this.password, true);

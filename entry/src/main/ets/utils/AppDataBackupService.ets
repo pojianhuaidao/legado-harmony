@@ -27,9 +27,11 @@ import { BookSourceGroupStore } from './BookSourceGroupStore';
 import { ReaderReplaceRule, ReaderReplaceRuleStore } from './ReaderReplaceRuleStore';
 import { TtsSettingsStore } from './TtsSettingsStore';
 import { BookshelfStateStore } from './BookshelfStateStore';
+import { rssSources, RssSourceGroup } from '../model/data/RssSource';
 
 export class AppDataBackupSelection {
   sources: boolean = true;
+  rssSources: boolean = true;
   bookshelf: boolean = true;
   progress: boolean = true;
   bookmarks: boolean = true;
@@ -55,6 +57,8 @@ export class AppDataBackupManifest {
   sourceFilesDir: string = '';
   categories: string[] = [];
   sources: BookSource[] = [];
+  rssSources: rssSources[] = [];
+  rssSourceGroups: RssSourceGroup[] = [];
   books: Book[] = [];
   bookGroups: BookGroup[] = [];
   progress: BookProgressBackup[] = [];
@@ -82,6 +86,7 @@ export class AppDataBackupImportSession {
 
 export class AppDataBackupImportResult {
   sources: number = 0;
+  rssSources: number = 0;
   books: number = 0;
   bookGroups: number = 0;
   localBooks: number = 0;
@@ -96,6 +101,7 @@ export class AppDataBackupImportResult {
   summary(): string {
     const parts: string[] = [];
     if (this.sources > 0) parts.push(`书源 ${this.sources}`);
+    if (this.rssSources > 0) parts.push(`订阅源 ${this.rssSources}`);
     if (this.books > 0) parts.push(`书架 ${this.books}`);
     if (this.bookGroups > 0) parts.push(`分组 ${this.bookGroups}`);
     if (this.localBooks > 0) parts.push(`本地图书 ${this.localBooks}`);
@@ -198,6 +204,12 @@ export class AppDataBackupService {
       manifest.sources = (await db.getAllBookSources()).map((source: BookSource): BookSource =>
         AppDataBackupService.sanitizeBookSource(source));
       manifest.sourceGroupPreferences = await AppDataBackupService.readPreferenceStore(context, 'book_source_groups');
+    }
+
+    if (selection.rssSources) {
+      manifest.categories.push(AppDataBackupService.CATEGORY_RSS_SOURCES);
+      manifest.rssSources = await db.getRssSources();
+      manifest.rssSourceGroups = await db.getRssSourceGroups();
     }
 
     const allBooks = await db.getAllBooks();
@@ -470,6 +482,16 @@ export class AppDataBackupService {
       if (manifest.sourceGroupPreferences) {
         await AppDataBackupService.restorePreferenceStore(context, 'book_source_groups',
           manifest.sourceGroupPreferences, manifest.sourceFilesDir);
+      }
+    }
+
+    if (selection.rssSources && AppDataBackupService.hasCategory(manifest, AppDataBackupService.CATEGORY_RSS_SOURCES)) {
+      for (const group of manifest.rssSourceGroups || []) {
+        if (group.rssGroupName) await db.insertRssSourceGroup(group.rssGroupName);
+      }
+      for (const rss of manifest.rssSources || []) {
+        await db.insertRssSource(rss);
+        result.rssSources++;
       }
     }
 
