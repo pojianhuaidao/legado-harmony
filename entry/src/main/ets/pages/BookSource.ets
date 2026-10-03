@@ -31,6 +31,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import commonEventManager from '@ohos.commonEventManager';
 import { BookSourceLoginItem, BookSourceScriptRunner } from '../core/book/BookSourceScriptRunner';
 import { BookSourceLoginWebRuntime, LoginCookieOperation, LoginRuntimeStep } from '../core/book/BookSourceLoginWebRuntime';
+import { BookSourceStageWebRuntime } from '../core/book/BookSourceStageWebRuntime';
 import { BookSourceLoginCrypto } from '../core/book/BookSourceLoginCrypto';
 import { BookSourceExecutionJournal } from '../core/book/BookSourceExecutionJournal';
 import {
@@ -4188,6 +4189,7 @@ struct BookSourcePage {
         this.actionSourceDetail = source;
       }
       const previousVariable = source.variable || '';
+      const previousLoginHeader = source.loginHeader || '';
       const result = await this.runSourceLoginAction(source, item.action);
       if (result.errorMessage) throw new Error(result.errorMessage);
       source.variable = result.variable;
@@ -4195,6 +4197,9 @@ struct BookSourcePage {
       source.loginInfo = result.loginInfo;
       await AppDatabase.getInstance().updateBookSourceLoginRuntime(source.bookSourceUrl,
         source.variable, source.loginHeader, source.loginInfo);
+      // 登录凭证可能影响配置接口（如书山 /api/get_config 返回的源站配置带登录态）：登录成功后
+      // 清空 Stage 配置缓存，避免下一次探索仍复用登录前的旧配置。
+      BookSourceStageWebRuntime.clearConfigCache();
       if (this.shouldInvalidateExploreAfterLoginAction(item, result)) {
         await this.invalidateRuntimeExplore(source);
       }
@@ -4214,11 +4219,19 @@ struct BookSourcePage {
       this.markSourceLoginCompleted(item, result);
       if (result.toastMessage) {
         promptAction.showToast({ message: result.toastMessage.trim() || '操作成功' });
+      } else if (result.loginHeader.trim() && result.loginHeader !== previousLoginHeader) {
+        // 登录脚本未提供 toast/文本但已写入 loginHeader（书山 putLoginHeader(token)）：把
+        // "已获取登录凭证"回显出来，避免用户只见"登录已执行/没有返回提示信息"。
+        promptAction.showToast({ message: '登录成功，已获取登录凭证（token/cookie）' });
       } else if (result.variable !== previousVariable && result.variable.trim()) {
         promptAction.showToast({ message: /token/i.test(`${item.name}\n${item.action}`) ?
           'Token 已获取并保存到书源变量' : '书源变量已更新' });
       } else if (result.logMessage) {
         promptAction.showToast({ message: result.logMessage.trim() });
+      } else if (result.resultValue.trim()) {
+        // 脚本直接 return 的文本/token 回显给用户（安卓 Legado 登录后亦展示脚本返回值）。
+        const returnText = result.resultValue.trim().substring(0, 120);
+        promptAction.showToast({ message: `书源返回：${returnText}` });
       } else if (!result.requestedSearchKeyword && !result.refreshExploreRequested &&
         !result.requestedUrl && !result.requestedHtml) {
         promptAction.showToast({ message: '操作已执行，书源没有返回提示信息' });

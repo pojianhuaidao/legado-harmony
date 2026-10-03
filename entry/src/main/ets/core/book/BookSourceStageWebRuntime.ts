@@ -140,6 +140,18 @@ export class BookSourceStageWebRuntime {
   private static readonly MAX_CACHE_ENTRIES_PER_SOURCE: number = 128;
   private static readonly MAX_CACHE_BYTES_PER_SOURCE: number = 512 * 1024;
   private static readonly MAX_CACHE_BYTES_TOTAL: number = 4 * 1024 * 1024;
+  // Stable source-configuration endpoints (书山 /api/get_config returns the 70+ sub-source
+  // catalogue that every explore first pass re-downloads) are effectively static between login
+  // and explore. A short-TTL memory cache removes that repeated cloud round-trip, which is the
+  // dominant cost of a slow explore load. Keyed by full URL so server switches never collide.
+  private static readonly CONFIG_CACHE_TTL_MS: number = 5 * 60 * 1000;
+  private static configCache: Map<string, { body: string; headers: Record<string, string>; fetchedAt: number }> =
+    new Map<string, { body: string; headers: Record<string, string>; fetchedAt: number }>();
+
+  /** Drop the cached configuration responses, called after a login action changes credentials. */
+  static clearConfigCache(): void {
+    BookSourceStageWebRuntime.configCache.clear();
+  }
   // ArkWeb keeps native compiler/renderer allocations outside the ArkTS heap. Rebuilding the
   // hidden host frequently prevents a sequence of large user-supplied libraries from growing
   // those allocations until HarmonyOS reports a foreground THREAD_BLOCK freeze.
@@ -627,6 +639,21 @@ export class BookSourceStageWebRuntime {
 
   private async fetch(request: StageWebRuntimeRequest, requestUrl: string,
     runtimeHeadersRaw: string = '{}'): Promise<HttpResponse> {
+    // 配置类 GET（书山 /api/get_config）在登录与探索之间几乎不变：命中短 TTL 缓存时直接复用，
+    // 避免每次探索首轮都重新下载 70+ 子源配置（服务端慢时单次可达 10~20s，是发现页慢的主因）。
+    const configCacheUrl = this.configCacheUrl(requestUrl);
+    if (configCacheUrl) {
+      const cached = BookSourceStageWebRuntime.configCache.get(configCacheUrl);
+      if (cached && Date.now() - cached.fetchedAt < BookSourceStageWebRuntime.CONFIG_CACHE_TTL_MS) {
+        return {
+          url: requestUrl,
+          statusCode: 200,
+          headers: cached.headers,
+          body: cached.body,
+          success: true
+        };
+      }
+    }
     // Respect the source's respondTime (Legado's per-request ceiling, typically 180000) instead
     // of a hard 30s cap; networkTimeoutMs, when explicitly provided, remains a tighter override.
     const respondTime = Math.max(30000, Math.min(request.source.respondTime || 180000, 180000));
@@ -650,8 +677,16 @@ export class BookSourceStageWebRuntime {
         }
       } catch (_) {
       }
-      return await new AnalyzeUrl(request.source, client, runtimeHeaders).fetch(requestUrl, responseLimit,
+      const response = await new AnalyzeUrl(request.source, client, runtimeHeaders).fetch(requestUrl, responseLimit,
         request.debugContext);
+      if (configCacheUrl && response.success && response.body) {
+        BookSourceStageWebRuntime.configCache.set(configCacheUrl, {
+          body: response.body,
+          headers: response.headers || {},
+          fetchedAt: Date.now()
+        });
+      }
+      return response;
     } finally {
       this.activeHttpClients = this.activeHttpClients.filter((item: HttpClient): boolean => item !== client);
     }
@@ -701,6 +736,24 @@ export class BookSourceStageWebRuntime {
     const value = (spec || '').trim();
     const optionAt = value.indexOf(',{');
     return optionAt > 0 ? value.substring(0, optionAt).trim() : value;
+  }
+
+  /**
+   * Return the cacheable URL for a stable configuration request, or '' when the spec is not a
+   * plain GET of a known config endpoint (POST / dynamic data must never be cached).
+   */
+  private configCacheUrl(spec: string): string {
+    const value = (spec || '').trim();
+    const optionAt = value.indexOf(',{');
+    if (optionAt > 0) {
+      const options = value.substring(optionAt + 1);
+      if (/["']method["']\s*:\s*["']POST["']/i.test(options)) return '';
+      if (/["']method["']\s*:\s*["'](?:PUT|DELETE|PATCH)["']/i.test(options)) return '';
+    }
+    const url = this.requestUrlFromSpec(spec);
+    if (!/^https?:\/\//i.test(url)) return '';
+    if (!/(?:get_config|getConfig|getServerConfig|\/config\/)/i.test(url)) return '';
+    return url;
   }
 
   private ensureNotCancelled(request: StageWebRuntimeRequest): void {
