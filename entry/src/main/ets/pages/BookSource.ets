@@ -2046,6 +2046,10 @@ struct BookSourcePage {
           .fontColor('#FFFFFF')
           .onClick(() => {
             this.saveSourceLoginInputs();
+            if (this.pendingOpenLoginHandled) {
+              this.pendingOpenLoginHandled = false;
+              router.back();
+            }
             this.showSourceLoginUiDialog = false;
             this.sourceLoginItems = [];
             this.actionSourceUrl = '';
