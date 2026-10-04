@@ -587,8 +587,7 @@ struct Index {
   }
 
   immersiveTabsBarBackgroundColor(): ResourceColor {
-    return this.supportsImmersiveTabs() ? Color.Transparent :
-      ThemeRuntime.glassPanelColor(this.appDarkMode, '', 'panel');
+    return ThemeRuntime.cardColor(this.appDarkMode);
   }
 
   @Builder
@@ -657,10 +656,6 @@ struct Index {
     .borderRadius(30)
     .clip(true)
     .barFloatingStyle({
-      systemMaterialEffect: {
-        materialType: ImmersiveMaterialRuntime.materialType(),
-        materialLevel: ImmersiveMaterialRuntime.materialLevel()
-      },
       barBottomMargin: this.floatingBarBottomMargin(),
       gradientMask: {
         maskColor: '#00000000',
