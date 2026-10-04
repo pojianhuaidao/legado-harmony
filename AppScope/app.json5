@@ -6,8 +6,8 @@
   "app": {
     "bundleName": "lagado.hm.app",
     "vendor": "legado",
-    "versionCode": 1100410,
-    "versionName": "1.1004.10",
+    "versionCode": 1100411,
+    "versionName": "1.1004.11",
     "bundleType": "app",
     "debug": false,
     "icon": "$media:layered_image",
