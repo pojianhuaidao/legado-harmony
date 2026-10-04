@@ -520,14 +520,28 @@ export class BookSourceStageWebRuntime {
       // the next evaluation (for example, caching an empty paragraph-comment summary).
       cacheState = this.storeCache(sourceKey, nextCacheState);
       const persistedBeforeSave = await AppDatabase.getInstance().getBookSource(request.source.bookSourceUrl);
+      let loginHeaderChanged = false;
       if (persistedBeforeSave) {
         // Empty state from a non-login task is never an explicit logout. Preserve a token/header
         // that another page saved while this asynchronous task was running.
         request.source.variable = step.variable || persistedBeforeSave.variable || '';
-        request.source.loginHeader = request.source.loginHeader || persistedBeforeSave.loginHeader || '';
+        // putLoginHeader() inside the login script writes into S.sourceLoginHeader, which the
+        // bridge returns as step.loginHeader. Without this back-fill, a successful 书山 login
+        // (loginHeader = bare api_key) would never reach the database: the next explore pass
+        // reads source.getLoginHeader() = '' and the aggregated API rejects the request for a
+        // missing X-Api-Key, leaving the discover page permanently empty.
+        request.source.loginHeader = step.loginHeader || request.source.loginHeader || persistedBeforeSave.loginHeader || '';
+        loginHeaderChanged = !!step.loginHeader &&
+          step.loginHeader !== (persistedBeforeSave.loginHeader || '');
         request.source.loginInfo = this.mergeRuntimeState(
           persistedBeforeSave.loginInfo || request.source.loginInfo || '',
           step.javaState, step.sourceState);
+      }
+      // A successful login changes credentials; the stable configuration endpoint (书山
+      // /api/get_config) may hold a pre-login cached response, so drop the config cache to
+      // force the next explore pass to re-fetch with the fresh token.
+      if (loginHeaderChanged) {
+        BookSourceStageWebRuntime.clearConfigCache();
       }
       await AppDatabase.getInstance().updateBookSourceLoginRuntime(request.source.bookSourceUrl,
         request.source.variable || '', request.source.loginHeader || '', request.source.loginInfo || '');
