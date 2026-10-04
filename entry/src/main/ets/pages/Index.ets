@@ -7719,7 +7719,7 @@ struct ExplorePage {
     const sourceUrl = AppStorage.get<string>('bookSourceExploreRefreshSourceUrl') || '';
     if (sourceUrl) this.selectedSourceUrl = sourceUrl;
     this.exploreContentLoadedAt = 0;
-    if (this.isActive && !this.isLoading) {
+    if (!this.isLoading) {
       this.loadEntries('', true);
     }
   }
