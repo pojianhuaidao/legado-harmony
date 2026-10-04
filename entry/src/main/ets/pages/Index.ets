@@ -870,10 +870,10 @@ struct Index {
       Column({ space: 1 }) {
         SymbolGlyph($r('sys.symbol.chevron_up'))
           .fontSize(15)
-          .fontColor(['#FFFFFF'])
+          .fontColor('#FFFFFF')
         Text(this.currentTabBarLabel())
           .fontSize(9)
-          .fontColor(['#FFFFFF'])
+          .fontColor('#FFFFFF')
           .maxLines(1)
       }
     }
