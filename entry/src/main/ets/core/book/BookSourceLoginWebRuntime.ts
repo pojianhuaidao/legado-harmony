@@ -269,7 +269,7 @@ export class BookSourceLoginWebRuntime {
       `encryptBase64:function(v){return cryptoOp(transformation,key,iv,'encryptBase64',v);},` +
       `encryptHex:function(v){return cryptoOp(transformation,key,iv,'encryptHex',v);},` +
       `decrypt:function(v){return cryptoOp(transformation,key,iv,'decrypt',v);},` +
-      `decryptStr:function(v){return cryptoOp(transformation,key,iv,'decryptStr',v);}};}` +
+      `decryptStr:function(v){return cryptoOp(transformation,key,iv,'decryptStr',v);}};},` +
       `getConfig:function(k){return source.getConfig(k);},setConfigs:function(v){return source.setConfigs(v);},` +
       `getServerHost:function(){return source.getServerHost();}};` +
       `const TimeoutCancellationException=function(){};` +
