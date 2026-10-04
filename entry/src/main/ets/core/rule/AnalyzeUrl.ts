@@ -222,6 +222,26 @@ export class AnalyzeUrl {
       }
     } catch (_) {
     }
+    // Aggregation sources (书山) resolve their cloud API host from the variable
+    // config (BookSourceStageWebRuntime.__resolveServerHost: config[0].host /
+    // hosts[0]). That API host may differ from loginUrl's host (mirror/backup
+    // endpoints), so it must be trusted here too; otherwise loginHeader and
+    // runtime headers are silently dropped and the cloud rejects the request.
+    try {
+      const variable = JSON.parse(this.source.variable || '{}') as Record<string, Object>;
+      const config = variable['config'];
+      if (Array.isArray(config) && config.length) {
+        const first = config[0] as Record<string, Object>;
+        if (first && typeof first['host'] === 'string') trustedUrls.push(first['host']);
+      }
+      const hosts = variable['hosts'];
+      if (Array.isArray(hosts)) {
+        for (const host of hosts) {
+          if (typeof host === 'string') trustedUrls.push(host);
+        }
+      }
+    } catch (_) {
+    }
     for (const trustedUrl of trustedUrls) {
       const trustedHost = this.urlHost(trustedUrl);
       if (trustedHost && this.hostsShareSite(requestHost, trustedHost)) return true;
