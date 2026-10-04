@@ -587,7 +587,7 @@ struct Index {
   }
 
   immersiveTabsBarBackgroundColor(): ResourceColor {
-    return ThemeRuntime.cardColor(this.appDarkMode);
+    return Color.Transparent;
   }
 
   @Builder
@@ -861,7 +861,6 @@ struct Index {
         .width(52)
         .height(52)
         .fill(this.tabBarActiveColor())
-        .shadow({ radius: 12, color: '#40000000', offsetY: 3 })
       Column({ space: 1 }) {
         SymbolGlyph($r('sys.symbol.chevron_up'))
           .fontSize(15)
