@@ -700,6 +700,16 @@ export class ExploreCoordinator {
           return [];
         }
         const parsed = this.parseExploreScriptResult(runtimeResult.value || '');
+        // Tail-expression hoisting (书山 exploreUrl ends with an if/else block whose last
+        // expression is JSON.stringify(sort)) can still fail to yield a value for other
+        // reasons.  Log exactly what came back so the empty page is debuggable.
+        if (parsed.length === 0 && !this.noticeMessage) {
+          const rawValue = runtimeResult.value || '';
+          const valueBytes = rawValue.length * 2;
+          const snippet = rawValue.length > 80 ? rawValue.substring(0, 80) + '...' : rawValue;
+          console.error(`[ExploreCoordinator] explore returned empty: source=${source.bookSourceName} value=${valueBytes}B snippet=${snippet} toast=${runtimeResult.toastMessage} error=${runtimeResult.errorMessage}`);
+          this.noticeMessage = `探索返回空(value=${valueBytes}B)`;
+        }
         if (parsed.length > 0 || this.noticeMessage) return parsed;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error || '');
