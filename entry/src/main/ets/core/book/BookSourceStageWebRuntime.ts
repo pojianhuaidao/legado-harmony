@@ -963,6 +963,7 @@ export class BookSourceStageWebRuntime {
       fixedNow: fixedNow,
       randomSeed: randomSeed,
       loginInfo: loginInfo,
+      secretKey: this.readSourceSecretKey(request.source),
       javaState: javaState,
       sourceState: sourceState,
       sourceConfig: JSON.stringify(sourceState || {}),
@@ -1064,6 +1065,8 @@ export class BookSourceStageWebRuntime {
       `const source={bookSourceUrl:S.sourceUrl,bookSourceName:S.sourceName,header:S.sourceHeader,loginUrl:S.sourceLoginUrl||'',` +
       `getKey:function(){return S.sourceUrl;},getTag:function(){return S.sourceName;},getSource:function(){return this;},` +
       `getLoginHeader:function(){return S.sourceLoginHeader||'';},` +
+      `getSecretKey:function(){return String(S.secretKey||sourceData.secretKey||loginMap.secretKey||loginMap.token||loginMap.api_key||'');},` +
+      `setSecretKey:function(v){v=String(v??'');sourceData.secretKey=v;loginMap.secretKey=v;return v;},` +
       `getLoginHeaderMap:loginHeaderMap,` +
       `putLoginHeader:function(v){S.sourceLoginHeader=typeof v==='string'?v:JSON.stringify(v??'');return S.sourceLoginHeader;},` +
       `removeLoginHeader:function(){S.sourceLoginHeader='';return '';},` +
@@ -1185,12 +1188,17 @@ export class BookSourceStageWebRuntime {
       `refreshContent:function(){return true;},upConfig:function(){return true;},` +
       `searchBook:function(k){searchKeyword=String(k??'');return true;},` +
       `getConfig:function(k){return source.getConfig(k);},setConfigs:function(v){return source.setConfigs(v);},` +
-      `getServerHost:function(){return source.getServerHost();}};` +
+      `getServerHost:function(){return source.getServerHost();},` +
+      `getLoginHeader:function(){return source.getLoginHeader();}};` +
+      `const json={ajax:function(u,opt){u=String(u??'');if(opt&&typeof opt==='object'&&!Array.isArray(opt)){const method=String(opt.method||'GET').toUpperCase();const body=opt.body!==undefined&&opt.body!==null?(typeof opt.body==='string'?opt.body:JSON.stringify(opt.body)):undefined;const headers=headerObject(opt.headers);const spec=requestSpec(method,u,body,headers);if(Object.prototype.hasOwnProperty.call(S.responses,spec))return S.responses[spec];if(!pending){pending=spec;pendingHeaders=JSON.stringify(Object.assign({},sourceHeaders(),headers));}return '{}';}return java.ajax(u);},` +
+      `post:function(u,b,h){const headers=headerObject(h);const spec=requestSpec('POST',u,b,headers);if(Object.prototype.hasOwnProperty.call(S.responses,spec))return S.responses[spec];if(!pending){pending=spec;pendingHeaders=JSON.stringify(Object.assign({},sourceHeaders(),headers));}return '{}';},` +
+      `get:function(u,h){const headers=headerObject(h);const spec=requestSpec('GET',u,null,headers);if(Object.prototype.hasOwnProperty.call(S.responses,spec))return S.responses[spec];if(!pending){pending=spec;pendingHeaders=JSON.stringify(Object.assign({},sourceHeaders(),headers));}return '{}';}};` +
       `function TimeoutCancellationException(){}const Packages={io:{legato:{kazusa:{utils:{` +
       `TimeoutCancellationException:TimeoutCancellationException}}}}};` +
       `function JavaImporter(){return {importClass:function(){return true;},importPackage:function(){return true;}};}` +
       `function importClass(){return true;}function importPackage(){return true;}` +
       `globalThis.source=source;globalThis.book=book;globalThis.chapter=chapter;globalThis.java=java;` +
+      `globalThis.json=json;` +
       `globalThis.cache=cache;globalThis.cookie=cookie;globalThis.infoMap=infoMap;` +
       `const runtimeScope=Object.create(globalThis);runtimeScope.source=source;runtimeScope.book=book;` +
       `runtimeScope.chapter=chapter;runtimeScope.java=java;runtimeScope.cache=cache;runtimeScope.cookie=cookie;` +
@@ -1417,6 +1425,16 @@ export class BookSourceStageWebRuntime {
       return state as Record<string, Object>;
     } catch (_) {
       return {};
+    }
+  }
+
+  private readSourceSecretKey(source: BookSource): string {
+    try {
+      const raw = JSON.parse(String(source.rawSourceJson || '{}')) as Record<string, unknown>;
+      const v = raw['secretKey'];
+      return typeof v === 'string' ? v : '';
+    } catch (_) {
+      return '';
     }
   }
 
