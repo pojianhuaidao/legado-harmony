@@ -1053,6 +1053,14 @@ export class BookSourceStageWebRuntime {
       `const m=String(v[k]??'').match(/^Bearer\\s+([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)\\./i);if(!m)continue;try{` +
       `let p=m[2].replace(/-/g,'+').replace(/_/g,'/');while(p.length%4)p+='=';const d=JSON.parse(b64d(p)||'{}');` +
       `if(Number(d.exp||0)>0&&Number(d.exp)*1000<=Number(S.fixedNow)+30000)return null;}catch(e){}}return v;}` +
+      `let __serverHostResolving=false;` +
+      `function __resolveServerHost(){if(__serverHostResolving)return '';__serverHostResolving=true;try{` +
+      `const g=globalThis.getServerHost;if(typeof g==='function'){try{const h=g();` +
+      `if(typeof h==='string'&&/^https?:\/\//i.test(h))return h;}catch(e){}}` +
+      `let rec={};try{rec=JSON.parse(String(S.variable||'{}'));}catch(e){rec={};}` +
+      `const cfg=rec['config'];if(Array.isArray(cfg)&&cfg[0]&&typeof cfg[0].host==='string'&&/^https?:\/\//i.test(cfg[0].host))return cfg[0].host;` +
+      `const hosts=rec['hosts'];if(Array.isArray(hosts)&&hosts.length&&typeof hosts[0]==='string'&&/^https?:\/\//i.test(hosts[0]))return hosts[0];` +
+      `}finally{__serverHostResolving=false;}return '';}` +
       `const source={bookSourceUrl:S.sourceUrl,bookSourceName:S.sourceName,header:S.sourceHeader,loginUrl:S.sourceLoginUrl||'',` +
       `getKey:function(){return S.sourceUrl;},getTag:function(){return S.sourceName;},getSource:function(){return this;},` +
       `getLoginHeader:function(){return S.sourceLoginHeader||'';},` +
@@ -1065,7 +1073,7 @@ export class BookSourceStageWebRuntime {
       `get:function(k){return sourceData[String(k??'')]??'';},put:function(k,v){sourceData[String(k??'')]=v;return v;},` +
       `getConfig:function(k){if(arguments.length===0){if(Object.prototype.hasOwnProperty.call(sourceData,'__config')){return sourceData.__config;}let cfg={};try{cfg=JSON.parse(S.sourceConfig||'{}');}catch(e){cfg={};}const merged=Object.assign({},cfg,sourceData);delete merged.__config;return merged;}return sourceData[String(k??'')]??'';},` +
       `setConfigs:function(v){try{const next=typeof v==='string'?JSON.parse(v):v;if(next&&typeof next==='object'){sourceData.__config=next;if(!Array.isArray(next)){Object.assign(sourceData,next);}}return true;}catch(e){if(typeof v==='string')sourceData[String(v)]=true;return true;}return true;},` +
-      `getServerHost:function(){return S.sourceUrl||'';},` +
+      `getServerHost:function(){const h=__resolveServerHost();return h||S.sourceUrl||'';},` +
       `putLoginInfo:function(v){if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){return v;}}` +
       `if(v&&typeof v==='object')Object.assign(loginMap,v);return v;},` +
       `getLoginInfo:function(k){return arguments.length?(loginMap[k]??''):JSON.stringify(loginMap);},` +
