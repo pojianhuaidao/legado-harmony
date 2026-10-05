@@ -708,11 +708,13 @@ export class ExploreCoordinator {
           const valueBytes = rawValue.length * 2;
           const snippet = rawValue.length > 80 ? rawValue.substring(0, 80) + '...' : rawValue;
           console.error(`[ExploreCoordinator] explore returned empty: source=${source.bookSourceName} value=${valueBytes}B snippet=${snippet} toast=${runtimeResult.toastMessage} error=${runtimeResult.errorMessage}`);
+          const diag = (runtimeResult.diagnostic || '').trim();
+          const diagText = diag ? `\n\n[诊断]\n${diag}` : '';
           const scriptError = (runtimeResult.errorMessage || '').trim().split('\n')[0];
           if (scriptError) {
-            this.noticeMessage = `探索脚本错误: ${scriptError.length > 400 ? scriptError.substring(0, 400) + '...' : scriptError}`;
+            this.noticeMessage = `探索脚本错误: ${scriptError.length > 400 ? scriptError.substring(0, 400) + '...' : scriptError}${diagText}`;
           } else if (!this.noticeMessage) {
-            this.noticeMessage = `探索返回空(value=${valueBytes}B)`;
+            this.noticeMessage = `探索返回空(value=${valueBytes}B)${diagText}`;
           }
         }
         if (parsed.length > 0 || this.noticeMessage) return parsed;

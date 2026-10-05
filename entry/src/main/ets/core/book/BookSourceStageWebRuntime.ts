@@ -89,6 +89,8 @@ export class StageWebRuntimeResult {
   requestedSearchKeyword: string = '';
   // 'true' when the script called java.open('login') to request the source login panel.
   loginPanelRequested: string = '';
+  // 屏幕诊断版（1.1005.05）：空态排障时随结果上屏的逐步骤诊断行（脚本侧 host/tail/jsLib/登录态 + 桥侧 HTTP 状态码/返回长度）。
+  diagnostic: string = '';
 }
 
 class StageWebRuntimeStep extends StageWebRuntimeResult {
@@ -347,6 +349,8 @@ export class BookSourceStageWebRuntime {
     // distinct rule here and replays the script once the values are available, exactly like the
     // java.ajax/cookie/crypto host actions.
     const stringResults: Record<string, string> = {};
+    const diagnosticLines: string[] = [];
+    let httpDiagCount = 0;
     const cookies: Record<string, string> = {};
     let cacheState = this.caches[sourceKey] || {};
     const fixedNow = Date.now();
@@ -365,6 +369,8 @@ export class BookSourceStageWebRuntime {
       const raw = await this.runJavaScript(script);
       this.ensureNotCancelled(request);
       const step = this.parseStep(raw);
+      const stepDiag = String(step.diagnostic || '').trim();
+      if (stepDiag) diagnosticLines.push(stepDiag);
       if (request.debugContext && step.logs) {
         try {
           const logs = JSON.parse(step.logs) as Object[];
@@ -454,6 +460,12 @@ export class BookSourceStageWebRuntime {
               throw new Error('书源脚本累计响应过大');
             }
             const url = pendingAll[index];
+            if (request.stage === SourceRuntimeStage.EXPLORE) {
+              httpDiagCount++;
+              if (httpDiagCount <= 12) {
+                diagnosticLines.push(`[http] ${response.statusCode} ${responseBody.length}B ${this.shortDiagUrl(url)}`);
+              }
+            }
             journal.markRequestStarted(`${BookSourceHostActionKind.HTTP_REQUEST}\n${url}`);
             journal.recordResponse(url, responseBody);
             journal.recordResponseHeaders(url, response.headers);
@@ -552,9 +564,19 @@ export class BookSourceStageWebRuntime {
       }
       await AppDatabase.getInstance().updateBookSourceLoginRuntime(request.source.bookSourceUrl,
         request.source.variable || '', request.source.loginHeader || '', request.source.loginInfo || '');
+      if (request.stage === SourceRuntimeStage.EXPLORE && diagnosticLines.length > 0) {
+        if (httpDiagCount > 12) diagnosticLines.push(`[http] ... 另有 ${httpDiagCount - 12} 个请求未逐条列出`);
+        step.diagnostic = diagnosticLines.join('\n');
+      }
       return step;
     }
     throw new Error('书源脚本执行步骤过多');
+  }
+
+  private shortDiagUrl(url: string): string {
+    const value = String(url || '');
+    if (value.length <= 110) return value;
+    return value.substring(0, 110) + '...';
   }
 
   private smallApiError(body: string): string {
@@ -1245,13 +1267,20 @@ export class BookSourceStageWebRuntime {
       `const evaluatedText=text(evaluated);const fallbackText=text(globalThis.result);` +
       `const usedInputFallback=!evaluatedText&&!error&&fallbackText===String(S.content||'');` +
       `const value=evaluatedText||fallbackText;` +
+      `const __diag=[];__diag.push('host='+(function(){try{return source.getServerHost();}catch(e){return '[err]';}})());` +
+      `__diag.push('tail='+(__tailExpr?(__tailExpr.length>80?__tailExpr.substring(0,80)+'...':__tailExpr):'(none)'));` +
+      `__diag.push('codeLen='+__code.length);__diag.push('runCodeLen='+__runCode.length);` +
+      `__diag.push('evalErr='+(evalErr?'Y':'N'));__diag.push('error='+(error?'Y':'N'));` +
+      `__diag.push('loginKeys='+(Object.keys(loginMap).join(',')||'(none)'));` +
+      `__diag.push('loginHeader='+String(S.sourceLoginHeader||'').length+'B');` +
+      `__diag.push('varLen='+String(S.variable||'').length);const diagString=__diag.join(' | ');` +
       `return encodeURIComponent(JSON.stringify({pendingAjax:pending,pendingStringRules:JSON.stringify(pendingStringRules),inputFallbackUsed:usedInputFallback,pendingHeaders:pendingHeaders,pendingCookie:pendingCookie,pendingCrypto:pendingCrypto,` +
       `cookieOperations:JSON.stringify(cookieOps),variable:S.variable||'',loginHeader:S.sourceLoginHeader||'',` +
       `bookVariable:JSON.stringify(bookData),bookType:String(book.type??''),chapterImgUrl:String(chapter.imgUrl??''),` +
       `bookDurChapterIndex:String(book.durChapterIndex??''),bookImageStyle:String(book.imageStyle??''),` +
       `cacheState:JSON.stringify(cacheData),javaState:JSON.stringify(javaData),sourceState:JSON.stringify(sourceData),logs:JSON.stringify(logs),` +
       `refreshExploreRequested:refreshExploreRequested?'true':'false',searchKeyword:searchKeyword,` +
-      `loginPanelRequested:loginPanelRequested?'true':'false',` +
+      `loginPanelRequested:loginPanelRequested?'true':'false',diagnostic:diagString,` +
       `value:value,requestedUrl:url,requestedHtml:browserHtml,toastMessage:toast,errorMessage:error}));})()`;
   }
 
@@ -1329,6 +1358,7 @@ export class BookSourceStageWebRuntime {
     step.refreshExploreRequested = String(record['refreshExploreRequested'] || '');
     step.requestedSearchKeyword = String(record['searchKeyword'] || '');
     step.loginPanelRequested = String(record['loginPanelRequested'] || '');
+    step.diagnostic = String(record['diagnostic'] || '');
     // 兼容外部结果结构：{code,msg} / {success,data} / {message,data} / 数组首项等。
     if (!step.value && record['msg']) step.value = String(record['msg']);
     if (!step.value && record['message']) step.value = String(record['message']);
