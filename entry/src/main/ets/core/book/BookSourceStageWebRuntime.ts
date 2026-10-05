@@ -993,7 +993,7 @@ export class BookSourceStageWebRuntime {
     const library = this.normalizeScript(request.source.jsLib || '');
     const exposeFunctions = this.functionExposeScript(library);
     const stageCode = this.normalizeScript(request.code || '');
-    const code = `${library}\n${exposeFunctions}\n${stageCode}\n//# sourceURL=book-source-stage.js`;
+    const code = `${library}\n${exposeFunctions}\n//# sourceURL=book-source-stage.js\n${stageCode}`;
     const stateBase64 = this.encodeBase64(state);
     const codeBase64 = this.encodeBase64(code);
     return `(function(){` +
@@ -1229,7 +1229,7 @@ export class BookSourceStageWebRuntime {
       `globalThis.title=S.chapterTitle||'';Object.keys(bookData).forEach(function(k){` +
       `if(/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k)&&globalThis[k]===undefined)globalThis[k]=bookData[k];});` +
       `Object.keys(S.variables||{}).forEach(function(k){globalThis[k]=S.variables[k];});` +
-      `const __code=dec('${codeBase64}');function extractTailExpression(c){var t=String(c||'').trim();var m=t.match(/([^;{}]+);\\s*}\\s*$/);if(!m)return '';var e=(m[1]||'').trim();if(!e||/^(if|for|while|switch|catch|function|return|let|const|var|class|throw|break|continue)\\b/.test(e))return '';return e;}const __tailExpr=extractTailExpression(__code);const __runCode=__tailExpr?(__code+'\\n;'+__tailExpr+';'):__code;` +
+      `const __code=dec('${codeBase64}');function extractTailExpression(c){var t=String(c||'').replace(/\\n?\\/\\/\\#\\s*sourceURL=.*$/,'').trim();var m=t.match(/([^;{}]+);\\s*}\\s*$/);if(!m)return '';var e=(m[1]||'').trim();if(!e||/^(if|for|while|switch|catch|function|return|let|const|var|class|throw|break|continue)\\b/.test(e))return '';return e;}const __tailExpr=extractTailExpression(__code);const __runCode=__tailExpr?(__code+'\\n;'+__tailExpr+';'):__code;` +
       `let evaluated;let evalErr='';try{evaluated=(function(){return eval(__runCode);}).call(globalThis);}catch(e){evalErr=String((e&&e.name?e.name+': ':'')+((e&&e.message)||e||'脚本执行失败')+(e&&e.stack?'\\n'+e.stack:''));if(__tailExpr){try{evaluated=(function(){return eval(__code);}).call(globalThis);evalErr='';}catch(e2){evalErr=String((e2&&e2.name?e2.name+': ':'')+((e2&&e2.message)||e2||'脚本执行失败')+(e2&&e2.stack?'\\n'+e2.stack:''));}}}` +
       `catch(e){error=evalErr||String((e&&e.name?e.name+': ':'')+((e&&e.message)||e||'脚本执行失败')+(e&&e.stack?'\\n'+e.stack:''));}` +
       `function text(v){if(typeof v==='string')return v;if(v===undefined||v===null)return '';try{return JSON.stringify(v);}catch(e){return String(v);}}` +
