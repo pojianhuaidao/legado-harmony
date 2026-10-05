@@ -993,7 +993,16 @@ export class BookSourceStageWebRuntime {
     const library = this.normalizeScript(request.source.jsLib || '');
     const exposeFunctions = this.functionExposeScript(library);
     const stageCode = this.normalizeScript(request.code || '');
-    const code = `${library}\n${exposeFunctions}\n//# sourceURL=book-source-stage.js\n${stageCode}`;
+    // Fallback helpers for sources whose jsLib is missing/stripped (e.g. shushan explore
+    // relies on jsLib-defined getServerHost/getSessionId; without them eval throws
+    // ReferenceError before the tail-expression fallback can ever run).
+    const fallbackGuard =
+      `var getServerHost=getServerHost||function(){return source.getServerHost();};` +
+      `var getSessionId=getSessionId||function(){try{var ch=String((typeof cookie!=='undefined'&&cookie.getCookie?cookie.getCookie('fanqienovel.com'):'')||'');` +
+      `var m=ch.match(/sessionid=([^;]+)/);if(m&&m[1])return m[1];}catch(e){}` +
+      `try{var li=(source.getLoginInfoMap?source.getLoginInfoMap():{})||{};if(li['番茄登录Token'])return String(li['番茄登录Token']);}catch(e){}return '';};` +
+      `var getSecretKey=getSecretKey||function(){return source.getSecretKey();};`;
+    const code = `${library}\n${exposeFunctions}\n${fallbackGuard}\n//# sourceURL=book-source-stage.js\n${stageCode}`;
     const stateBase64 = this.encodeBase64(state);
     const codeBase64 = this.encodeBase64(code);
     return `(function(){` +
