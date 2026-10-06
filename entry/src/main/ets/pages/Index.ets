@@ -1002,6 +1002,7 @@ struct BookshelfPage {
   private shelfTileEntriesCacheKey: string = '';
   private shelfTileEntriesCache: ShelfTileSortEntry[] = [];
   @State shelfScope: string = 'all';
+  @State showSearchPage: boolean = false;
   @State showShelfScopeOptions: boolean = false;
   @State showShelfSortMenu: boolean = false;
   @State showShelfLayoutMenu: boolean = false;
@@ -2310,7 +2311,7 @@ struct BookshelfPage {
           .borderRadius(20)
           .backgroundColor(ThemeRuntime.glassPanelColor(this.appDarkMode, '', 'panel'))
           .onClick(() => {
-            router.pushUrl({ url: 'pages/SearchBookDetail' });
+            this.showSearchPage = true;
           })
         }
 
@@ -3310,6 +3311,16 @@ struct BookshelfPage {
       }
       if (this.openingBook) {
         this.shelfBookOpeningOverlay(this.openingBook)
+      }
+      if (this.showSearchPage) {
+        SearchPage({
+          statusBarHeight: this.statusBarHeight,
+          navBarHeight: this.navBarHeight,
+          isActive: true,
+          onClose: () => {
+            this.showSearchPage = false;
+          }
+        })
       }
     }
     .width('100%')
@@ -9888,6 +9899,7 @@ struct SearchPage {
   private coordinator: SearchCoordinator | null = null;
   private hasInitialized: boolean = false;
   private shelfStatusVersion: number = 0;
+  private onClose: () => void = () => {};
   private shelfSyncRunning: boolean = false;
   private pendingShelfSyncBooks: SearchBook[] = [];
   private searchResultKeySet: Set<string> = new Set<string>();
@@ -10212,6 +10224,23 @@ struct SearchPage {
       Column() {
         Column() {
         Row() {
+        if (this.onClose) {
+          Button() {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(18)
+              .fontColor([this.primaryTextColor()])
+          }
+          .type(ButtonType.Circle)
+          .width(40)
+          .height(40)
+          .margin({ left: 4, right: 0 })
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.showSearchHistoryDropdown = false;
+            this.hideKeyboard();
+            this.onClose();
+          })
+        }
         if (ImmersiveMaterialRuntime.supportsHds()) {
           Row() {
             this.searchFieldContent()
