@@ -10,7 +10,7 @@
  *  6) 返回 / 历史回退后触发 rssSourcesVersion 自增，订阅列表自动刷新。
  */
 import { router, promptAction } from '@kit.ArkUI';
-import { webview, WebResourceResponse } from '@kit.ArkWeb';
+import { webview } from '@kit.ArkWeb';
 import pasteboard from '@ohos.pasteboard';
 import { common, Want } from '@kit.AbilityKit';
 import { syncSystemBars } from '../utils/SystemBars';
