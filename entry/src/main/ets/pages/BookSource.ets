@@ -744,7 +744,7 @@ struct BookSourcePage {
             .height(56)
             .padding({ left: 4, right: 12 })
 
-            Web({ src: BOOK_SOURCE_REPO_URL, controller: this.sourceRepoController })
+            Web({ src: this.BOOK_SOURCE_REPO_URL, controller: this.sourceRepoController })
               .width('100%')
               .layoutWeight(1)
               .javaScriptAccess(true)
