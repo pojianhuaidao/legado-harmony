@@ -1109,10 +1109,10 @@ export class BookSourceStageWebRuntime {
       `let __serverHostResolving=false;` +
       `function __resolveServerHost(){if(__serverHostResolving)return '';__serverHostResolving=true;try{` +
       `const g=globalThis.getServerHost;if(typeof g==='function'){try{const h=g();` +
-      `if(typeof h==='string'&&/^https?:\/\//i.test(h))return h;}catch(e){}}` +
+      `if(typeof h==='string'&&/^https?:\\/\\//i.test(h))return h;}catch(e){}}` +
       `let rec={};try{rec=JSON.parse(String(S.variable||'{}'));}catch(e){rec={};}` +
-      `const cfg=rec['config'];if(Array.isArray(cfg)&&cfg[0]&&typeof cfg[0].host==='string'&&/^https?:\/\//i.test(cfg[0].host))return cfg[0].host;` +
-      `const hosts=rec['hosts'];if(Array.isArray(hosts)&&hosts.length&&typeof hosts[0]==='string'&&/^https?:\/\//i.test(hosts[0]))return hosts[0];` +
+      `const cfg=rec['config'];if(Array.isArray(cfg)&&cfg[0]&&typeof cfg[0].host==='string'&&/^https?:\\/\\//i.test(cfg[0].host))return cfg[0].host;` +
+      `const hosts=rec['hosts'];if(Array.isArray(hosts)&&hosts.length&&typeof hosts[0]==='string'&&/^https?:\\/\\//i.test(hosts[0]))return hosts[0];` +
       `}finally{__serverHostResolving=false;}return '';}` +
       `const source={bookSourceUrl:S.sourceUrl,bookSourceName:S.sourceName,header:S.sourceHeader,loginUrl:S.sourceLoginUrl||'',` +
       `getKey:function(){return S.sourceUrl;},getTag:function(){return S.sourceName;},getSource:function(){return this;},` +
@@ -1261,7 +1261,7 @@ export class BookSourceStageWebRuntime {
       `if(/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k)&&globalThis[k]===undefined)globalThis[k]=bookData[k];});` +
       `Object.keys(S.variables||{}).forEach(function(k){globalThis[k]=S.variables[k];});` +
       `const __code=dec('${codeBase64}');function extractTailExpression(c){var t=String(c||'').replace(/\\n?\\/\\/\\#\\s*sourceURL=.*$/,'').trim();var m=t.match(/([^;{}]+);\\s*}\\s*$/);if(!m)return '';var e=(m[1]||'').trim();if(!e||/^(if|for|while|switch|catch|function|return|let|const|var|class|throw|break|continue)\\b/.test(e))return '';return e;}const __tailExpr=extractTailExpression(__code);const __runCode=__tailExpr?(__code+'\\n;'+__tailExpr+';'):__code;` +
-      `let error='';let evaluated;let evalErr='';try{try{evaluated=(function(){return eval(__runCode);}).call(globalThis);}catch(e){evalErr=String((e&&e.name?e.name+': ':'')+((e&&e.message)||e||'脚本执行失败')+(e&&e.stack?'\\n'+e.stack:''));if(__tailExpr){try{evaluated=(function(){return eval(__code);}).call(globalThis);evalErr='';}catch(e2){evalErr=String((e2&&e2.name?e2.name+': ':'')+((e2&&e2.message)||e2||'脚本执行失败')+(e2&&e2.stack?'\\n'+e2.stack:''));}}}}` +
+      `error='';let evaluated;let evalErr='';try{try{evaluated=(function(){return eval(__runCode);}).call(globalThis);}catch(e){evalErr=String((e&&e.name?e.name+': ':'')+((e&&e.message)||e||'脚本执行失败')+(e&&e.stack?'\\n'+e.stack:''));if(__tailExpr){try{evaluated=(function(){return eval(__code);}).call(globalThis);evalErr='';}catch(e2){evalErr=String((e2&&e2.name?e2.name+': ':'')+((e2&&e2.message)||e2||'脚本执行失败')+(e2&&e2.stack?'\\n'+e2.stack:''));}}}}` +
       `catch(e){error=evalErr||String((e&&e.name?e.name+': ':'')+((e&&e.message)||e||'脚本执行失败')+(e&&e.stack?'\\n'+e.stack:''));}` +
       `function text(v){if(typeof v==='string')return v;if(v===undefined||v===null)return '';try{return JSON.stringify(v);}catch(e){return String(v);}}` +
       `const evaluatedText=text(evaluated);const fallbackText=text(globalThis.result);` +
