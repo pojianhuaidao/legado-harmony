@@ -188,6 +188,11 @@ struct BookSourcePage {
   @State checkAutoHandledCount: number = 0;
   @State checkBackgroundMode: boolean = false;
   @State webImportActive: boolean = false;
+  @State showSourceRepo: boolean = false;
+  @State sourceRepoImporting: boolean = false;
+  private sourceRepoController: webview.WebviewController = new webview.WebviewController();
+  private sourceRepoImportPending: boolean = false;
+  private readonly BOOK_SOURCE_REPO_URL: string = 'https://www.yck2026.fun/yuedu/shuyuan/index.html';
   private sourceListScroller: Scroller = new Scroller();
   private sourceScrollbarPointerAnchor: number = 0;
   private sourceScrollbarPendingIndex: number = -1;
@@ -700,6 +705,63 @@ struct BookSourcePage {
 
       if (this.showAddDialog) {
         this.addSourceDropdown()
+      }
+
+      if (this.showSourceRepo) {
+        Stack({ alignContent: Alignment.TopStart }) {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor(this.pageColor())
+
+          Column() {
+            Row() {
+              Text('‹')
+                .fontSize(26)
+                .fontColor(this.primaryTextColor())
+                .width(44)
+                .height(44)
+                .textAlign(TextAlign.Center)
+                .onClick(() => {
+                  this.closeSourceRepo();
+                })
+
+              Text('源仓库')
+                .fontSize(18)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.primaryTextColor())
+                .layoutWeight(1)
+                .textAlign(TextAlign.Start)
+
+              if (this.sourceRepoImporting) {
+                LoadingProgress()
+                  .width(22)
+                  .height(22)
+                  .margin({ right: 12 })
+              }
+            }
+            .width('100%')
+            .height(56)
+            .padding({ left: 4, right: 12 })
+
+            Web({ src: BOOK_SOURCE_REPO_URL, controller: this.sourceRepoController })
+              .width('100%')
+              .layoutWeight(1)
+              .javaScriptAccess(true)
+              .domStorageAccess(true)
+              .mixedMode(MixedMode.All)
+              .fileAccess(true)
+              .onLoadIntercept((event: OnLoadInterceptEvent) => {
+                return this.handleSourceRepoLoadIntercept(event);
+              })
+          }
+          .width('100%')
+          .height('100%')
+          .padding({ top: this.statusBarHeight })
+        }
+        .width('100%')
+        .height('100%')
+        .zIndex(10)
       }
 
       if (this.showImportUrlDialog) {
@@ -1394,6 +1456,10 @@ struct BookSourcePage {
           this.showAddDialog = false;
           this.importFromFile();
         }, false)
+        this.popupActionItem($r('sys.symbol.book'), '源仓库', this.primaryTextColor(), () => {
+          this.showAddDialog = false;
+          this.openSourceRepo();
+        })
         this.popupActionItem($r('sys.symbol.arrow_right_up_and_square'), '订阅管理', this.primaryTextColor(), () => {
           this.showAddDialog = false;
           router.pushUrl({ url: 'pages/SubscriptionIndex' });
@@ -6360,6 +6426,94 @@ struct BookSourcePage {
         AppStorage.get<string>('pendingBookSourceImportUrl')) {
         this.handlePendingBookSourceImport();
       }
+    }
+  }
+
+  openSourceRepo(): void {
+    this.showSourceRepo = true;
+    this.sourceRepoImporting = false;
+    this.sourceRepoImportPending = false;
+  }
+
+  closeSourceRepo(): void {
+    this.showSourceRepo = false;
+    this.sourceRepoImporting = false;
+    this.sourceRepoImportPending = false;
+  }
+
+  handleSourceRepoLoadIntercept(event?: OnLoadInterceptEvent): boolean {
+    let requestUrl = '';
+    try {
+      requestUrl = event?.data.getRequestUrl() || '';
+    } catch (_) {
+      return false;
+    }
+    const importUrl = this.parseSourceRepoImportUrl(requestUrl);
+    if (!importUrl) return false;
+    if (!this.sourceRepoImportPending && !this.sourceRepoImporting) {
+      this.sourceRepoImportPending = true;
+      this.confirmSourceRepoImport(importUrl).catch((error: Object): void => {
+        this.sourceRepoImportPending = false;
+        const message = error instanceof Error ? error.message : String(error || '');
+        promptAction.showToast({ message: message ? `导入书源失败：${message}` : '导入书源失败' });
+      });
+    }
+    return true;
+  }
+
+  parseSourceRepoImportUrl(raw: string): string {
+    const value = String(raw || '').trim();
+    const supported = /^yuedu:\/\/booksource\/importonline(?:[/?#]|$)/i.test(value) ||
+      /^legado:\/\/import\/booksource(?:[/?#]|$)/i.test(value);
+    if (!supported || value.length > 32 * 1024) return '';
+    const match = value.match(/[?&]src=([^&#]*)/i);
+    if (!match || !match[1]) return '';
+    let target = match[1].replace(/\+/g, '%20');
+    try {
+      target = decodeURIComponent(target);
+    } catch (_) {
+      return '';
+    }
+    // Some pages encode an already encoded link once more before constructing the scheme.
+    if (!/^https?:\/\//i.test(target) && /%[0-9a-f]{2}/i.test(target)) {
+      try {
+        target = decodeURIComponent(target);
+      } catch (_) {}
+    }
+    return /^https?:\/\//i.test(target) && target.length <= 16 * 1024 ? target : '';
+  }
+
+  async confirmSourceRepoImport(importUrl: string): Promise<void> {
+    const hostMatch = importUrl.match(/^https?:\/\/([^/?#]+)/i);
+    const host = hostMatch && hostMatch[1] ? hostMatch[1] : '远程服务器';
+    const result = await promptAction.showDialog({
+      title: '导入书源',
+      message: `将从 ${host} 下载并导入书源。`,
+      buttons: [
+        { text: '取消', color: this.subTextColor() },
+        { text: '导入', color: this.accentColor() }
+      ]
+    });
+    if (result.index !== 1) {
+      this.sourceRepoImportPending = false;
+      return;
+    }
+    this.sourceRepoImporting = true;
+    this.sourceRepoImportPending = false;
+    try {
+      const content = await this.fetchImportUrlBody(importUrl);
+      if (!content.trim()) {
+        promptAction.showToast({ message: '书源内容为空' });
+        return;
+      }
+      await this.importSourcesFromJson(content);
+      promptAction.showToast({ message: '书源导入成功' });
+    } catch (e) {
+      console.error('从源仓库导入书源失败:', e);
+      const message = this.importErrorMessage(e as Object);
+      promptAction.showToast({ message: `导入失败: ${message}` });
+    } finally {
+      this.sourceRepoImporting = false;
     }
   }
 

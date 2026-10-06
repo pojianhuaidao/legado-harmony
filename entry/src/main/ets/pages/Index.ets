@@ -105,6 +105,7 @@ struct Index {
   @StorageLink('globalTtsCover') globalTtsCover: ResourceStr = '';
   @StorageLink('globalTtsChapterTitle') globalTtsChapterTitle: string = '';
   @StorageLink('globalTtsMode') globalTtsMode: string = '';
+  @StorageLink('shelfSearchMode') shelfSearchMode: string = 'online';
   @StorageLink('globalTtsChapterProgress') globalTtsChapterProgress: string = '';
   @State showGlobalTtsPanel: boolean = false;
   @State showGlobalTtsCatalog: boolean = false;
@@ -9881,6 +9882,7 @@ struct SearchPage {
     SearchExploreSettingsStore.LEGACY_SOURCE_SELECTION;
   @StorageLink('singleSourceSearchUrl') singleSourceSearchUrl: string = '';
   @StorageLink('singleSourceSearchName') singleSourceSearchName: string = '';
+  @StorageLink('shelfSearchMode') shelfSearchMode: string = 'online';
   @StorageLink('appLightButtonColor') appLightButtonColor: string = '#007DFF';
   @StorageLink('appDarkButtonColor') appDarkButtonColor: string = '#3F8CFF';
   private coordinator: SearchCoordinator | null = null;
@@ -10267,18 +10269,31 @@ struct SearchPage {
         .alignItems(VerticalAlign.Center)
 
         Row({ space: 6 }) {
-          SymbolGlyph($r('sys.symbol.magnifyingglass'))
-            .fontSize(14)
-            .fontColor([this.buttonColor()])
-          Text(`搜索范围：${this.searchScopeSummary()}`)
-            .fontSize(13)
-            .fontColor(this.primaryTextColor())
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          Text('选择')
-            .fontSize(12)
-            .fontColor(this.buttonColor())
+          this.searchModeSwitch()
+          if (this.shelfSearchMode === 'local') {
+            SymbolGlyph($r('sys.symbol.bookshelf'))
+              .fontSize(14)
+              .fontColor([this.buttonColor()])
+            Text('搜索范围：书架藏书')
+              .fontSize(13)
+              .fontColor(this.primaryTextColor())
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+          } else {
+            SymbolGlyph($r('sys.symbol.magnifyingglass'))
+              .fontSize(14)
+              .fontColor([this.buttonColor()])
+            Text(`搜索范围：${this.searchScopeSummary()}`)
+              .fontSize(13)
+              .fontColor(this.primaryTextColor())
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+            Text('选择')
+              .fontSize(12)
+              .fontColor(this.buttonColor())
+          }
         }
         .width('calc(100% - 32vp)')
         .height(36)
@@ -10286,10 +10301,14 @@ struct SearchPage {
         .margin({ left: 16, right: 16, bottom: 6 })
         .borderRadius(18)
         .backgroundColor(this.glassCardColor())
-        .border({ width: 1, color: (this.singleSourceSearchUrl || !this.isAllSearchSourcesSelected()) ?
+        .border({ width: 1, color: (this.shelfSearchMode !== 'local' && (this.singleSourceSearchUrl || !this.isAllSearchSourcesSelected())) ?
           this.buttonColor() : this.glassBorderColor() })
         .alignItems(VerticalAlign.Center)
-        .onClick(() => this.openSearchSourcePicker())
+        .onClick(() => {
+          if (this.shelfSearchMode !== 'local') {
+            this.openSearchSourcePicker();
+          }
+        })
 
         if (this.statusMessage) {
           Row() {
@@ -10786,6 +10805,94 @@ struct SearchPage {
     this.doSearch();
   }
 
+  searchModePlaceholder(): string {
+    return this.shelfSearchMode === 'local' ? '搜索书架藏书' : '搜索书籍';
+  }
+
+  @Builder
+  searchModeSwitch() {
+    Row({ space: 0 }) {
+      Text('本地')
+        .fontSize(12)
+        .fontColor(this.shelfSearchMode === 'local' ? '#FFFFFF' : this.subTextColor())
+        .padding({ left: 10, right: 10 })
+        .height(24)
+        .borderRadius(12)
+        .backgroundColor(this.shelfSearchMode === 'local' ? this.buttonColor() : '#00000000')
+        .onClick(() => {
+          this.shelfSearchMode = 'local';
+        })
+      Text('在线')
+        .fontSize(12)
+        .fontColor(this.shelfSearchMode === 'online' ? '#FFFFFF' : this.subTextColor())
+        .padding({ left: 10, right: 10 })
+        .height(24)
+        .borderRadius(12)
+        .backgroundColor(this.shelfSearchMode === 'online' ? this.buttonColor() : '#00000000')
+        .onClick(() => {
+          this.shelfSearchMode = 'online';
+        })
+    }
+    .padding(2)
+    .borderRadius(14)
+    .backgroundColor(this.glassCardColor())
+  }
+
+  async doLocalSearch(): Promise<void> {
+    this.showSearchHistoryDropdown = false;
+    const keyword = this.keyword.trim();
+    if (!keyword) {
+      promptAction.showToast({ message: '请输入搜索关键词' });
+      return;
+    }
+    this.isSearching = true;
+    this.statusMessage = '';
+    this.hideKeyboard();
+    try {
+      const db = AppDatabase.getInstance();
+      await db.initWithContext(getContext(this));
+      const allBooks = await db.getAllBooks();
+      const kw = keyword.toLowerCase();
+      const matched = allBooks.filter((book: Book): boolean => {
+        const name = String(book.name || '').toLowerCase();
+        const author = String(book.author || '').toLowerCase();
+        return name.includes(kw) || author.includes(kw);
+      });
+      const books: SearchBook[] = matched.map((book: Book): SearchBook => this.localBookToSearchBook(book));
+      this.searchResults = books.slice();
+      this.displayedSearchResults = books.slice();
+      this.searchResultKeySet.clear();
+      this.rebuildSearchResultKeys(books);
+      this.showResult = true;
+      this.isSearching = false;
+      this.statusMessage = books.length > 0 ? `书架中找到 ${books.length} 本` : `书架中未找到「${keyword}」相关书籍`;
+      this.saveSearchHistoryLater(db, keyword);
+    } catch (e) {
+      console.error('本地书架搜索失败:', e);
+      this.isSearching = false;
+      promptAction.showToast({ message: '书架搜索失败' });
+    }
+  }
+
+  localBookToSearchBook(book: Book): SearchBook {
+    const searchBook = new SearchBook();
+    searchBook.bookUrl = book.bookUrl;
+    searchBook.tocUrl = book.tocUrl;
+    searchBook.origin = book.origin;
+    searchBook.originName = book.originName || book.origin;
+    searchBook.type = book.type;
+    searchBook.name = book.name;
+    searchBook.author = book.author;
+    searchBook.kind = '';
+    searchBook.status = book.status;
+    searchBook.coverUrl = book.coverUrl;
+    searchBook.intro = book.intro;
+    searchBook.latestChapterTitle = book.latestChapterTitle;
+    searchBook.wordCount = book.wordCount;
+    searchBook.updateTime = book.updateTime;
+    return searchBook;
+  }
+
   async deleteSearchHistoryItem(keyword: string): Promise<void> {
     try {
       await AppDatabase.getInstance().deleteSearchKeyword(keyword);
@@ -10835,6 +10942,10 @@ struct SearchPage {
     const keyword = this.keyword.trim();
     if (!keyword) {
       promptAction.showToast({ message: '请输入搜索关键词' });
+      return;
+    }
+    if (this.shelfSearchMode === 'local') {
+      await this.doLocalSearch();
       return;
     }
 
