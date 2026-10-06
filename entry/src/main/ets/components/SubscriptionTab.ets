@@ -48,6 +48,8 @@ export struct SubscriptionTab {
   @State selectionMode: boolean = false;
   @State selectedUrls: Record<string, boolean> = {};
   @State showAddMenu: boolean = false;
+  @StorageLink('subscriptionLayoutMode') layoutMode: string = 'list';
+  @State showLayoutMenu: boolean = false;
   @State showNewGroupDialog: boolean = false;
   @State newGroupName: string = '';
   @State showItemMenu: boolean = false;
@@ -72,6 +74,7 @@ export struct SubscriptionTab {
   @StorageLink('rssSourcesVersion') @Watch('onRssSourcesVersionChanged') rssSourcesVersion: number = 0;
 
   aboutToAppear(): void {
+    AppStorage.setOrCreate('subscriptionLayoutMode', 'list');
     this.refresh();
   }
 
@@ -602,6 +605,15 @@ export struct SubscriptionTab {
           .layoutWeight(1)
 
         Row({ space: 2 }) {
+          SymbolGlyph(this.layoutMode === 'tile' ? $r('sys.symbol.square_grid_2x2') : $r('sys.symbol.list_bullet'))
+            .fontSize(21)
+            .fontColor([this.primaryTextColor()])
+            .width(40)
+            .height(40)
+            .accessibilityText('切换排版')
+            .onClick(() => {
+              this.showLayoutMenu = !this.showLayoutMenu;
+            })
           SymbolGlyph($r('sys.symbol.timer'))
             .fontSize(21)
             .fontColor([this.primaryTextColor()])
@@ -823,6 +835,21 @@ export struct SubscriptionTab {
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
+    } else if (this.layoutMode === 'tile') {
+      Grid() {
+        ForEach(this.visibleSources, (item: rssSources, index: number) => {
+          GridItem() {
+            this.sourceTile(item, index)
+          }
+        })
+      }
+      .columnsTemplate('1fr 1fr')
+      .columnsGap(10)
+      .rowsGap(10)
+      .width('100%')
+      .layoutWeight(1)
+      .padding({ left: 16, right: 16, top: 4, bottom: this.navBarBottom() })
+      .scrollBar(BarState.Off)
     } else {
       List({ space: 10 }) {
         ForEach(this.visibleSources, (item: rssSources, index: number) => {
@@ -955,6 +982,122 @@ export struct SubscriptionTab {
   }
 
   @Builder
+  sourceTile(item: rssSources, index: number) {
+    Column({ space: 8 }) {
+      Row() {
+        if (this.selectionMode) {
+          SymbolGlyph(this.selectedUrls[item.sourceUrl] ?? false ? $r('sys.symbol.checkmark_circle_fill') :
+            $r('sys.symbol.circle'))
+            .fontSize(22)
+            .fontColor([this.selectedUrls[item.sourceUrl] ?? false ? this.accentColor() : this.secondaryTextColor()])
+            .onClick(() => this.toggleSelect(item.sourceUrl))
+        } else {
+          Toggle({ type: ToggleType.Switch, isOn: item.enabled })
+            .selectedColor(this.enabledColor())
+            .width(40)
+            .height(24)
+            .onChange((on: boolean) => {
+              const upd = item;
+              upd.enabled = on;
+              AppDatabase.getInstance().updateRssSource(upd).then(() => {
+                this.refresh();
+              }).catch(() => {
+                promptAction.showToast({ message: '状态更新失败' });
+              });
+            })
+        }
+      }
+      .width('100%')
+      .height(26)
+      .alignItems(VerticalAlign.Center)
+
+      Stack({ alignContent: Alignment.Center }) {
+        Circle()
+          .width(52)
+          .height(52)
+          .fill(this.avatarBg(item.sourceUrl))
+        if (item.sourceIconIsUrl && item.sourceIcon.length > 0) {
+          Image(item.sourceIcon)
+            .width(46)
+            .height(46)
+            .borderRadius(23)
+            .objectFit(ImageFit.Cover)
+        } else {
+          Text(this.initialOf(item.sourceName))
+            .fontSize(20)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FFFFFF')
+        }
+        if (item.enabled) {
+          Circle()
+            .width(11)
+            .height(11)
+            .fill(this.enabledColor())
+            .position({ x: 40, y: 40 })
+            .border({ width: 1.5, color: this.cardColor() })
+        }
+      }
+
+      Column({ space: 4 }) {
+        Row({ space: 4 }) {
+          Text(item.sourceName.length > 0 ? item.sourceName : item.sourceUrl)
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.primaryTextColor())
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          Text(SUBSCRIPTION_TYPE[item.sourceType] ?? '订阅源')
+            .fontSize(10)
+            .fontColor('#FFFFFF')
+            .height(18)
+            .padding({ left: 6, right: 6 })
+            .borderRadius(9)
+            .backgroundColor(this.sourceBadgeColor(item.sourceType))
+            .textAlign(TextAlign.Center)
+        }
+        .width('100%')
+
+        Text(item.sourceUrl)
+          .fontSize(11)
+          .fontColor(this.secondaryTextColor())
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .padding(14)
+    .borderRadius(ThemeRuntime.glassCornerRadius(14, 'card'))
+    .backgroundColor(this.glassCardColor())
+    .border({ width: ThemeRuntime.glassBorderWidth('card'), color: this.glassBorderColor() })
+    .shadow({
+      radius: ThemeRuntime.glassShadowRadius('card'),
+      color: this.glassShadowColor(),
+      offsetX: ThemeRuntime.glassShadowOffsetX('card'),
+      offsetY: ThemeRuntime.glassShadowOffsetY('card')
+    })
+    .alignItems(HorizontalAlign.Center)
+    .onClick(() => {
+      if (this.selectionMode) {
+        this.toggleSelect(item.sourceUrl);
+      } else {
+        this.openSource(item);
+      }
+    })
+    .gesture(
+      LongPressGesture({ repeat: false, duration: 450 })
+        .onAction(() => {
+          if (!this.selectionMode) {
+            this.openItemMenu(item, index);
+          }
+        })
+    )
+  }
+
+  @Builder
   addMenu() {
     Column({ space: 4 }) {
       this.menuItem('新建订阅', () => {
@@ -1002,6 +1145,57 @@ export struct SubscriptionTab {
     .borderRadius(10)
     .alignItems(VerticalAlign.Center)
     .onClick(() => action())
+  }
+
+  @Builder
+  layoutMenu() {
+    Column({ space: 4 }) {
+      this.layoutMenuItem('列表', 'list', $r('sys.symbol.list_bullet'))
+      this.layoutMenuItem('平铺', 'tile', $r('sys.symbol.square_grid_2x2'))
+    }
+    .margin({ top: 112, right: 16 })
+    .width(132)
+    .padding(6)
+    .borderRadius(ThemeRuntime.glassCornerRadius(14, 'menu'))
+    .backgroundColor(ThemeRuntime.dropdownPanelColor(this.appDarkMode, '', 'menu'))
+    .backdropBlur(ThemeRuntime.glassBlur('menu', 22))
+    .border({ width: ThemeRuntime.glassBorderWidth('menu'), color: ThemeRuntime.glassBorderColor(this.appDarkMode, 'menu') })
+    .shadow({
+      radius: ThemeRuntime.glassShadowRadius('menu'),
+      color: ThemeRuntime.glassShadowColor(this.appDarkMode, 'menu'),
+      offsetX: ThemeRuntime.glassShadowOffsetX('menu'),
+      offsetY: ThemeRuntime.glassShadowOffsetY('menu')
+    })
+  }
+
+  @Builder
+  layoutMenuItem(label: string, mode: string, icon: Resource) {
+    Row({ space: 10 }) {
+      SymbolGlyph(icon)
+        .fontSize(17)
+        .fontColor([this.layoutMode === mode ? this.accentColor() : this.secondaryTextColor()])
+      Text(label)
+        .fontSize(14)
+        .fontWeight(this.layoutMode === mode ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.layoutMode === mode ? this.accentColor() : this.primaryTextColor())
+        .layoutWeight(1)
+
+      if (this.layoutMode === mode) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(14)
+          .fontColor([this.accentColor()])
+      }
+    }
+    .width('100%')
+    .height(38)
+    .padding({ left: 10, right: 10 })
+    .borderRadius(10)
+    .backgroundColor(this.layoutMode === mode ? this.inputColor() : '#00000000')
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.layoutMode = mode;
+      this.showLayoutMenu = false;
+    })
   }
 
   @Builder
@@ -1346,6 +1540,21 @@ export struct SubscriptionTab {
       .height('100%')
       .backgroundColor(this.pageColor())
 
+      if (this.showLayoutMenu) {
+        Stack({ alignContent: Alignment.TopEnd }) {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('#33000000')
+            .onClick(() => {
+              this.showLayoutMenu = false;
+            })
+          this.layoutMenu()
+        }
+        .width('100%')
+        .height('100%')
+      }
+
       if (this.showAddMenu) {
         Stack({ alignContent: Alignment.TopEnd }) {
           Column()
@@ -1366,6 +1575,9 @@ export struct SubscriptionTab {
     .onClick(() => {
       if (this.showAddMenu) {
         this.showAddMenu = false;
+      }
+      if (this.showLayoutMenu) {
+        this.showLayoutMenu = false;
       }
     })
     .bindSheet($$this.showItemMenu, this.itemMenuSheet(), {

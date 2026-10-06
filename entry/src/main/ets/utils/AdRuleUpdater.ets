@@ -32,6 +32,14 @@ const MAX_WHITELIST_SUFFIXES: number = 500;
 const SCHEMA_VERSION: number = 1;
 
 /**
+ * 并行抓取结果：第一个成功源返回的规则文本 + 首个失败错误（全部失败时用于兜底提示）。
+ */
+interface FetchResult {
+  rawText: string;
+  lastError: Error | null;
+}
+
+/**
  * 动态规则包：与沙箱 JSON 结构一一对应。
  */
 export class AdRulesBundle {
@@ -210,21 +218,11 @@ export class AdRuleUpdater {
    * 任一步骤失败抛出 Error，由 UI 层提示用户。
    */
   static async update(context: Context): Promise<AdRulesBundle> {
-    let rawText: string = '';
-    let lastError: Error | null = null;
-    for (let i = 0; i < RULE_SOURCES.length; i++) {
-      try {
-        rawText = await AdRuleUpdater.fetchRuleText(RULE_SOURCES[i]);
-        if (rawText.length > 0) {
-          break;
-        }
-      } catch (e) {
-        lastError = e as Error;
-      }
+    const fetched = await AdRuleUpdater.fetchFirstAvailableText();
+    if (fetched.rawText.length === 0) {
+      throw fetched.lastError ? fetched.lastError : new Error('所有规则源均不可达');
     }
-    if (rawText.length === 0) {
-      throw lastError ? lastError : new Error('所有规则源均不可达');
-    }
+    const rawText = fetched.rawText;
     const json = await taskpool.execute(parseAdGuardRulesTask, rawText) as string;
     const bundle = AdRuleUpdater.parseBundle(json);
     await AdRuleUpdater.saveToSandbox(context, bundle);
@@ -244,13 +242,41 @@ export class AdRuleUpdater {
     AdBlocker.setDynamicRules(bundle.hostSuffixes, bundle.whitelistSuffixes, bundle.cssSelectors);
   }
 
+  private static async fetchFirstAvailableText(): Promise<FetchResult> {
+    let rawText: string = '';
+    let lastError: Error | null = null;
+    let done: boolean = false;
+    const jobs: Promise<void>[] = [];
+    for (let i = 0; i < RULE_SOURCES.length; i++) {
+      const source = RULE_SOURCES[i];
+      jobs.push((async () => {
+        if (done) {
+          return;
+        }
+        try {
+          const text = await AdRuleUpdater.fetchRuleText(source);
+          if (!done && text.length > 0) {
+            done = true;
+            rawText = text;
+          }
+        } catch (e) {
+          if (!lastError) {
+            lastError = e as Error;
+          }
+        }
+      })());
+    }
+    await Promise.all(jobs);
+    return { rawText: rawText, lastError: lastError };
+  }
+
   private static async fetchRuleText(source: string): Promise<string> {
     const httpRequest = http.createHttp();
     try {
       const response = await httpRequest.request(source, {
         method: http.RequestMethod.GET,
-        connectTimeout: 15000,
-        readTimeout: 60000,
+        connectTimeout: 10000,
+        readTimeout: 30000,
         header: {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 12; HarmonyOS) AppleWebKit/537.36'
         },

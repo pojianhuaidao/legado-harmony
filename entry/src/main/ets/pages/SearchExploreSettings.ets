@@ -50,7 +50,7 @@ struct SearchExploreSettingsPage {
               this.onSettingChanged();
             })
           this.actionItem('更新广告规则', '从 AdGuard / EasyList 规则源抓取并解析，写入本地拦截规则（域名黑名单 / 白名单 / CSS 选择器）',
-            this.adRuleUpdating ? '更新中…' : (this.adRuleInfo.length > 0 ? this.adRuleInfo : '点击更新'),
+            this.adRuleUpdating ? '更新中…' : (this.adRuleInfo.length > 0 ? this.adRuleInfo : '在线更新'),
             () => { this.updateAdRules(); })
           }
           .width('calc(100% - 24vp)')
