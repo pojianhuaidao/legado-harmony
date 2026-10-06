@@ -7,8 +7,9 @@ export class AppIconOption {
   preview: Resource = $r('app.media.icon');
 }
 
-// 静态图标方案：每个选项对应一组编译期默认图标资源（layered_image_<id> 与 icon.png），
-// 不再依赖运行时动态图标（AppGallery selectDynamicIcon）。
+// 运行时动态图标方案：每个选项对应 app.json5 alternateIcons 中声明的备用图标
+// （AppScope/resources/base/media 下的 ic_app_* 资源），通过 bundleManager.setAlternateIcon 即时切换，
+// 无需重新构建侧载包。
 export class AppIconManager {
   static readonly OPTIONS: AppIconOption[] = [
     AppIconManager.option(
@@ -78,6 +79,15 @@ export class AppIconManager {
       $r('app.media.ic_app_theme_neon_night')
     )
   ];
+
+  // 返回 app.json5 alternateIcons 中对应的备用图标 name；默认图标返回空串表示恢复系统默认图标
+  static alternateIconName(iconId: string): string {
+    const normalized = AppIconSettingsStore.normalizeIconId(iconId);
+    if (normalized === AppIconSettingsStore.DEFAULT_ICON_ID) {
+      return '';
+    }
+    return `ic_app_${normalized}`;
+  }
 
   static optionById(iconId: string): AppIconOption {
     const normalized = AppIconSettingsStore.normalizeIconId(iconId);

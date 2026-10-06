@@ -1,4 +1,6 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { bundleManager } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { syncSystemBars } from '../utils/SystemBars';
 import { AppIconManager, AppIconOption } from '../utils/AppIconManager';
@@ -93,13 +95,25 @@ struct AppIconSettingsPage {
       this.showToastSafely(`当前已是${option.title}`);
       return;
     }
-    const settings = new AppIconSettings();
-    settings.iconId = option.id;
-    AppIconSettingsStore.applyToStorage(settings);
-    AppIconSettingsStore.save(getContext(this), settings).catch((e: Error) => {
-      hilog.warn(0x0000, 'appIcon', 'Save app icon selection failed err=%{public}s', JSON.stringify(e));
-    });
-    this.showToastSafely(`已选择${option.title}图标，需重新构建侧载包（scripts\\build_sidecar.ps1 -IconId ${option.id}）后安装生效`);
+    const alternateName = AppIconManager.alternateIconName(option.id);
+    try {
+      bundleManager.setAlternateIcon(alternateName).then(() => {
+        // 切换成功后再持久化，保证桌面图标与设置页勾选一致
+        const settings = new AppIconSettings();
+        settings.iconId = option.id;
+        AppIconSettingsStore.applyToStorage(settings);
+        AppIconSettingsStore.save(getContext(this), settings).catch((e: Error) => {
+          hilog.warn(0x0000, 'appIcon', 'Save app icon selection failed err=%{public}s', JSON.stringify(e));
+        });
+        this.showToastSafely(`已切换为${option.title}图标`);
+      }).catch((err: BusinessError) => {
+        hilog.error(0x0000, 'appIcon', 'setAlternateIcon failed err=%{public}s', JSON.stringify(err));
+        this.showToastSafely(`图标切换失败：${err.message}`);
+      });
+    } catch (e) {
+      hilog.warn(0x0000, 'appIcon', 'setAlternateIcon call failed err=%{public}s', JSON.stringify(e));
+      this.showToastSafely('图标切换失败，请稍后重试');
+    }
   }
 
   showToastSafely(message: string): void {

@@ -122,6 +122,8 @@ export class HttpClient {
     const client = http.createHttp();
     this.activeClients.add(client);
     let responseTooLarge = false;
+    const protoStart = Date.now();
+    console.info(`[HttpClient] begin ${req.method} ${this.hostForLog(req.url)} len=${(req.url || '').length} maxBytes=${req.maxResponseBytes || 0} forceHttp1=${forceHttp1} connectTO=${req.connectTimeout || this.timeout} readTO=${req.readTimeout || this.timeout}`);
     try {
       const method = this.resolveMethod(req.method);
       const headers: Record<string, string> = { ...this.defaultHeaders, ...req.headers };
@@ -168,7 +170,10 @@ export class HttpClient {
           };
           this.applyTlsTrust(options, req.url);
           if (forceHttp1) options.usingProtocol = http.HttpProtocol.HTTP1_1;
+          const streamStart = Date.now();
+          console.info(`[HttpClient] inStream request begin host=${this.hostForLog(req.url)} elapsed=${Date.now() - protoStart}ms`);
           responseCode = await client.requestInStream(req.url, options);
+          console.info(`[HttpClient] inStream request done code=${responseCode} elapsed=${Date.now() - protoStart}ms streamCost=${Date.now() - streamStart}ms`);
         } catch (error) {
           streamError = this.decorateTlsError(req.url, this.describeError(error as Object));
         } finally {
@@ -188,6 +193,7 @@ export class HttpClient {
         const result = this.mergeArrayBuffers(chunks, receivedBytes);
         const streamedResponse = this.buildResponse(req, responseCode, streamedHeaders, result);
         if (streamError) {
+          console.info(`[HttpClient] inStream streamError host=${this.hostForLog(req.url)} elapsed=${Date.now() - protoStart}ms err=${streamError}`);
           // Some servers finish a chunked response and then close the connection in a way
           // Network Kit reports as 2300056. Preserve the received body so callers can
           // validate and use a complete payload instead of losing it with the socket error.
@@ -207,11 +213,14 @@ export class HttpClient {
       };
       this.applyTlsTrust(options, req.url);
       if (forceHttp1) options.usingProtocol = http.HttpProtocol.HTTP1_1;
+      const plainStart = Date.now();
+      console.info(`[HttpClient] plain request begin host=${this.hostForLog(req.url)} elapsed=${Date.now() - protoStart}ms`);
       const resp = await client.request(req.url, options);
-
+      console.info(`[HttpClient] plain request done code=${resp.responseCode} elapsed=${Date.now() - protoStart}ms streamCost=${Date.now() - plainStart}ms`);
       const responseHeaders = (resp.header || {}) as Record<string, string>;
       return this.buildResponse(req, resp.responseCode, responseHeaders, resp.result);
     } catch (e) {
+      console.info(`[HttpClient] request error host=${this.hostForLog(req.url)} elapsed=${Date.now() - protoStart}ms err=${this.describeError(e as Object)}`);
       return {
         url: req.url,
         statusCode: 0,

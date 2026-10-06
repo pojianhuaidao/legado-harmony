@@ -237,6 +237,11 @@ export class BookSourceStageWebRuntime {
     return this.findReadyController() !== null;
   }
 
+  /** True when a task is running or queued: a nested execute() would deadlock behind the serial queue. */
+  isBusy(): boolean {
+    return this.running || this.activeTask !== null || this.tasks.length > 0;
+  }
+
   execute(request: StageWebRuntimeRequest): Promise<StageWebRuntimeResult> {
     return new Promise<StageWebRuntimeResult>((resolve, reject) => {
       if (request.ownerId && this.cancelledOwners.has(request.ownerId)) {
@@ -364,11 +369,15 @@ export class BookSourceStageWebRuntime {
       if (Date.now() - taskStartedAt > BookSourceStageWebRuntime.EXECUTE_TASK_DEADLINE_MS) {
         throw new Error(`书源脚本执行超过整体时限（${BookSourceStageWebRuntime.EXECUTE_TASK_DEADLINE_MS / 1000} 秒），已中止`);
       }
+      const stepStart = Date.now();
       const script = this.buildScript(request, responses, stringResults, cookies, cacheState,
         fixedNow, randomSeed, journal.responseHeaders);
+      console.info(`[StageWebRuntime] step${stepIndex} begin elapsed=${Date.now() - taskStartedAt}ms scriptLen=${script.length}`);
       const raw = await this.runJavaScript(script);
+      console.info(`[StageWebRuntime] step${stepIndex} runJS done stepCost=${Date.now() - stepStart}ms totalElapsed=${Date.now() - taskStartedAt}ms`);
       this.ensureNotCancelled(request);
       const step = this.parseStep(raw);
+      console.info(`[StageWebRuntime] step${stepIndex} parsed pendingAjax=${String(step.pendingAjax || '').substring(0, 120)} pendingAjaxAll=${String(step.pendingAjaxAll || '').substring(0, 120)} pendingCrypto=${String(step.pendingCrypto || '').substring(0, 80)} pendingCookie=${String(step.pendingCookie || '').substring(0, 60)}`);
       const stepDiag = String(step.diagnostic || '').trim();
       if (stepDiag) diagnosticLines.push(stepDiag);
       if (request.debugContext && step.logs) {
@@ -538,7 +547,9 @@ export class BookSourceStageWebRuntime {
       // script cache/runtime state only after a pass finishes, otherwise a placeholder can poison
       // the next evaluation (for example, caching an empty paragraph-comment summary).
       cacheState = this.storeCache(sourceKey, nextCacheState);
+      console.info(`[StageWebRuntime] step${stepIndex} persist: getBookSource begin`);
       const persistedBeforeSave = await AppDatabase.getInstance().getBookSource(request.source.bookSourceUrl);
+      console.info(`[StageWebRuntime] step${stepIndex} persist: getBookSource done`);
       let loginHeaderChanged = false;
       if (persistedBeforeSave) {
         // Empty state from a non-login task is never an explicit logout. Preserve a token/header
@@ -562,12 +573,15 @@ export class BookSourceStageWebRuntime {
       if (loginHeaderChanged) {
         BookSourceStageWebRuntime.clearConfigCache();
       }
+      console.info(`[StageWebRuntime] step${stepIndex} persist: updateBookSourceLoginRuntime begin`);
       await AppDatabase.getInstance().updateBookSourceLoginRuntime(request.source.bookSourceUrl,
         request.source.variable || '', request.source.loginHeader || '', request.source.loginInfo || '');
+      console.info(`[StageWebRuntime] step${stepIndex} persist: updateBookSourceLoginRuntime done`);
       if (request.stage === SourceRuntimeStage.EXPLORE && diagnosticLines.length > 0) {
         if (httpDiagCount > 12) diagnosticLines.push(`[http] ... 另有 ${httpDiagCount - 12} 个请求未逐条列出`);
         step.diagnostic = diagnosticLines.join('\n');
       }
+      console.info(`[StageWebRuntime] step${stepIndex} persist: RETURN step ok`);
       return step;
     }
     throw new Error('书源脚本执行步骤过多');
@@ -705,6 +719,8 @@ export class BookSourceStageWebRuntime {
       Math.min(request.maxResponseBytes || 8 * 1024 * 1024, 8 * 1024 * 1024));
     const client = new HttpClient(timeout);
     this.activeHttpClients.push(client);
+    console.info(`[StageWebRuntime] fetch begin ${this.shortDiagUrl(requestUrl)} headersRawLen=${String(runtimeHeadersRaw || '').length} configCache=${configCacheUrl ? 'yes' : 'no'}`);
+    const fetchStart = Date.now();
     try {
       let runtimeHeaders: Record<string, string> = {};
       try {
@@ -722,6 +738,7 @@ export class BookSourceStageWebRuntime {
       }
       const response = await new AnalyzeUrl(request.source, client, runtimeHeaders).fetch(requestUrl, responseLimit,
         request.debugContext);
+      console.info(`[StageWebRuntime] fetch ${this.shortDiagUrl(requestUrl)} -> ${response.statusCode} ${(response.body || '').length}B ${Date.now() - fetchStart}ms`);
       if (configCacheUrl && response.success && response.body) {
         BookSourceStageWebRuntime.configCache.set(configCacheUrl, {
           body: response.body,
@@ -746,10 +763,12 @@ export class BookSourceStageWebRuntime {
     const concurrency = Math.max(1, batchSize);
     for (let offset = 0; offset < urls.length; offset += concurrency) {
       const slice = urls.slice(offset, offset + concurrency);
+      const batchStart = Date.now();
       const batch = await Promise.all(slice.map(
         (url: string): Promise<HttpResponse> => this.fetch(request, url, runtimeHeadersRaw)));
       for (let index = 0; index < batch.length; index++) results[offset + index] = batch[index];
       this.ensureNotCancelled(request);
+      console.info(`[StageWebRuntime] ajaxAll batch offset=${offset} done=${Math.min(offset + batch.length, urls.length)}/${urls.length} cost=${Date.now() - batchStart}ms`);
     }
     return results;
   }

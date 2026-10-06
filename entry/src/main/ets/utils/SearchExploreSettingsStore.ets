@@ -3,6 +3,7 @@ import preferences from '@ohos.data.preferences';
 
 export class SearchExploreSettings {
   showResultCover: boolean = true;
+  adBlockEnabled: boolean = true;
   useBookshelfCoverGallery: boolean = false;
   showResultTags: boolean = true;
   aggregateSearchResults: boolean = true;
@@ -48,6 +49,8 @@ export class SearchExploreSettingsStore {
     const settings = new SearchExploreSettings();
     settings.showResultCover = await SearchExploreSettingsStore.getBoolean(
       store, SearchExploreSettingsStore.KEY_SHOW_RESULT_COVER, true);
+    settings.adBlockEnabled = await SearchExploreSettingsStore.getBoolean(
+      store, SearchExploreSettingsStore.KEY_AD_BLOCK_ENABLED, true);
     settings.useBookshelfCoverGallery = await SearchExploreSettingsStore.getBoolean(
       store, SearchExploreSettingsStore.KEY_USE_BOOKSHELF_COVER_GALLERY, false);
     settings.showResultTags = await SearchExploreSettingsStore.getBoolean(
@@ -90,6 +93,7 @@ export class SearchExploreSettingsStore {
     SearchExploreSettingsStore.cachedSettings = SearchExploreSettingsStore.clone(settings);
     const store = await preferences.getPreferences(context, SearchExploreSettingsStore.STORE_NAME);
     await store.put(SearchExploreSettingsStore.KEY_SHOW_RESULT_COVER, settings.showResultCover);
+    await store.put(SearchExploreSettingsStore.KEY_AD_BLOCK_ENABLED, settings.adBlockEnabled);
     await store.put(SearchExploreSettingsStore.KEY_USE_BOOKSHELF_COVER_GALLERY, settings.useBookshelfCoverGallery);
     await store.put(SearchExploreSettingsStore.KEY_SHOW_RESULT_TAGS, settings.showResultTags);
     await store.put(SearchExploreSettingsStore.KEY_AGGREGATE_SEARCH_RESULTS, settings.aggregateSearchResults);
@@ -187,6 +191,7 @@ export class SearchExploreSettingsStore {
   private static clone(source: SearchExploreSettings): SearchExploreSettings {
     const settings = new SearchExploreSettings();
     settings.showResultCover = source.showResultCover;
+    settings.adBlockEnabled = source.adBlockEnabled;
     settings.useBookshelfCoverGallery = source.useBookshelfCoverGallery;
     settings.showResultTags = source.showResultTags;
     settings.aggregateSearchResults = source.aggregateSearchResults !== false;
@@ -232,6 +237,7 @@ export class SearchExploreSettingsStore {
 
   private static syncFieldsChanged(left: SearchExploreSettings, right: SearchExploreSettings): boolean {
     return left.showResultCover !== right.showResultCover ||
+      left.adBlockEnabled !== right.adBlockEnabled ||
       left.useBookshelfCoverGallery !== right.useBookshelfCoverGallery ||
       left.showResultTags !== right.showResultTags ||
       left.aggregateSearchResults !== right.aggregateSearchResults ||

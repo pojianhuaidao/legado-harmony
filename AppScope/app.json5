@@ -16,6 +16,48 @@
     "distributedNotificationEnabled": true,
     "keepAlive": false,
     "minAPIVersion": 12,
-    "targetAPIVersion": 26
+    "targetAPIVersion": 26,
+    "alternateIcons": [
+      {
+        "name": "ic_app_warm_book",
+        "icon": "$media:ic_app_warm_book"
+      },
+      {
+        "name": "ic_app_night_neon",
+        "icon": "$media:ic_app_night_neon"
+      },
+      {
+        "name": "ic_app_minimal_line",
+        "icon": "$media:ic_app_minimal_line"
+      },
+      {
+        "name": "ic_app_ink_wash",
+        "icon": "$media:ic_app_ink_wash"
+      },
+      {
+        "name": "ic_app_pixel_retro",
+        "icon": "$media:ic_app_pixel_retro"
+      },
+      {
+        "name": "ic_app_theme_classic_blue",
+        "icon": "$media:ic_app_theme_classic_blue"
+      },
+      {
+        "name": "ic_app_theme_warm_paper",
+        "icon": "$media:ic_app_theme_warm_paper"
+      },
+      {
+        "name": "ic_app_theme_forest_mist",
+        "icon": "$media:ic_app_theme_forest_mist"
+      },
+      {
+        "name": "ic_app_theme_ink_wash",
+        "icon": "$media:ic_app_theme_ink_wash"
+      },
+      {
+        "name": "ic_app_theme_neon_night",
+        "icon": "$media:ic_app_theme_neon_night"
+      }
+    ]
   }
 }

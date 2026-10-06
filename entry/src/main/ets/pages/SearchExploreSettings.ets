@@ -8,6 +8,7 @@ import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 @Component
 struct SearchExploreSettingsPage {
   @StorageLink('searchExploreShowResultCover') searchExploreShowResultCover: boolean = true;
+  @StorageLink('searchExploreAdBlockEnabled') searchExploreAdBlockEnabled: boolean = true;
   @StorageLink('searchExploreUseBookshelfCoverGallery') searchExploreUseBookshelfCoverGallery: boolean = false;
   @StorageLink('searchExploreShowResultTags') searchExploreShowResultTags: boolean = true;
   @StorageLink('searchExploreAggregateResults') searchExploreAggregateResults: boolean = true;
@@ -37,6 +38,20 @@ struct SearchExploreSettingsPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column() {
+          this.sectionTitle('订阅源浏览器')
+          Column() {
+          this.switchItem('去广告', '开启后拦截订阅源网页中的广告请求与广告弹窗；书山等订阅源自身的更新公告弹窗不受影响',
+            this.searchExploreAdBlockEnabled, (value: boolean) => {
+              this.searchExploreAdBlockEnabled = value;
+              this.onSettingChanged();
+            })
+          }
+          .width('calc(100% - 24vp)')
+          .margin({ left: 12, right: 12 })
+          .borderRadius(16)
+          .clip(true)
+          .backgroundColor(this.cardColor())
+
           this.sectionTitle('结果展示')
           Column() {
           this.switchItem('显示结果封面', '开启后搜索和发现结果展示书籍封面',
@@ -132,6 +147,7 @@ struct SearchExploreSettingsPage {
     try {
       const settings = await SearchExploreSettingsStore.load(getContext(this));
       this.searchExploreShowResultCover = settings.showResultCover;
+      this.searchExploreAdBlockEnabled = settings.adBlockEnabled;
       this.searchExploreUseBookshelfCoverGallery = settings.useBookshelfCoverGallery;
       this.searchExploreShowResultTags = settings.showResultTags;
       this.searchExploreAggregateResults = settings.aggregateSearchResults;
@@ -148,6 +164,7 @@ struct SearchExploreSettingsPage {
   onSettingChanged(): void {
     SearchExploreSettingsStore.load(getContext(this)).then((settings: SearchExploreSettings) => {
       settings.showResultCover = this.searchExploreShowResultCover;
+      settings.adBlockEnabled = this.searchExploreAdBlockEnabled;
       settings.useBookshelfCoverGallery = this.searchExploreUseBookshelfCoverGallery;
       settings.showResultTags = this.searchExploreShowResultTags;
       settings.aggregateSearchResults = this.searchExploreAggregateResults;

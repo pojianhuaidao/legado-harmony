@@ -1,6 +1,6 @@
 import { BookSource } from '../../model/data/Book';
 import { SourceRuntimeStage } from './BookSourceRuntimeRouter';
-import { BookSourceStageWebRuntime, StageWebRuntimeRequest } from './BookSourceStageWebRuntime';
+import { BookSourceStageWebRuntime, StageWebRuntimeRequest, StageWebRuntimeResult } from './BookSourceStageWebRuntime';
 
 interface BookSourceHeaderRuntimeEntry {
   headers: Record<string, string>;
@@ -41,16 +41,35 @@ export class BookSourceHeaderRuntime {
 
   private static async evaluate(source: BookSource, raw: string): Promise<Record<string, string>> {
     const runtime = BookSourceStageWebRuntime.get();
+    console.info(`[HeaderRuntime] evaluate entry isAvailable=${runtime.isAvailable()}`);
     if (!runtime.isAvailable() && !await runtime.waitUntilAvailable(1500)) return {};
+    // Nested execution deadlock guard: the serial queue would hold a header task until the
+    // outer explore/login task finishes, but the outer task is itself waiting on this header
+    // resolution (AnalyzeUrl.fetch -> resolve). That self-wait stalls the explore page until
+    // an outer watchdog fires (~2 minutes). Sources that only read local state (getVariable/
+    // loginHeader) do not need the stage runtime at all; bail to the static header fallback.
+    if (runtime.isBusy()) {
+      console.info('[HeaderRuntime] runtime busy, fallback to static headers');
+      return {};
+    }
+    console.info('[HeaderRuntime] evaluating header via stage runtime');
     const request = new StageWebRuntimeRequest();
     request.applyStageBudget(SourceRuntimeStage.URL);
     request.source = source;
     request.baseUrl = source.bookSourceUrl || '';
     request.code = raw.replace(/^@?js\s*:/i, '');
     try {
-      const result = await runtime.execute(request);
+      const result = await Promise.race([
+        runtime.execute(request),
+        new Promise<StageWebRuntimeResult>((resolve) => setTimeout(() => {
+          console.info('[HeaderRuntime] header evaluation timed out, fallback to static headers');
+          resolve(new StageWebRuntimeResult());
+        }, 3000))
+      ]);
+      console.info('[HeaderRuntime] header evaluated value=' + String(result.value || '').substring(0, 160));
       return BookSourceHeaderRuntime.parseHeaderJson(result.value || '');
-    } catch (_) {
+    } catch (error) {
+      console.info('[HeaderRuntime] header evaluation failed, fallback to static headers: ' + String(error));
       return {};
     }
   }

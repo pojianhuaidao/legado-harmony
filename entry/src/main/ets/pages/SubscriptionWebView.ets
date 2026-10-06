@@ -163,6 +163,7 @@ struct SubscriptionWebViewPage {
   @StorageLink('appDarkMode') appDarkMode: boolean = false;
   @StorageLink('themeRevision') themeRevision: number = 0;
   @StorageLink('systemUa') @Watch('onSystemUaChanged') systemUa: number = 0;
+  @StorageLink('searchExploreAdBlockEnabled') adBlockEnabled: boolean = true;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navBarHeight') navBarHeight: number = 0;
   @State sourceUrl: string = '';
@@ -468,6 +469,28 @@ struct SubscriptionWebViewPage {
           if (this.progress === 100) {
             this.updateNavState();
           }
+        })
+        .onInterceptRequest((event?: OnInterceptRequestEvent): WebResourceResponse | null => {
+          // 去广告开关开启时，拦截命中黑名单的广告请求（主框架请求放行，避免误伤整页）
+          if (this.adBlockEnabled && event && event.request) {
+            const requestUrl = event.request.getRequestUrl();
+            if (requestUrl && !event.request.isMainFrame() && AdBlocker.shouldBlockRequest(requestUrl)) {
+              const blocked = new webview.WebResourceResponse();
+              blocked.setResponseMimeType('text/html');
+              blocked.setResponseEncoding('UTF-8');
+              blocked.setResponseData('');
+              return blocked;
+            }
+          }
+          return null;
+        })
+        .onAlert((event?: OnAlertEvent): boolean => {
+          // 去广告开关开启时，广告弹窗取消；非广告弹窗（如书山源更新公告）放行走默认展示
+          if (this.adBlockEnabled && event && AdBlocker.shouldBlockAlert(event.url, event.message)) {
+            event.result.handleCancel();
+            return true;
+          }
+          return false;
         })
         .onErrorReceive((event?: OnErrorReceiveEvent) => {
           const code = event ? event.error.getErrorCode() : -1;
