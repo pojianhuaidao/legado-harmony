@@ -1,8 +1,9 @@
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
 import { syncSystemBars } from '../utils/SystemBars';
 import { SearchExploreSettings, SearchExploreSettingsStore } from '../utils/SearchExploreSettingsStore';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
+import { AdRuleUpdater, AdRulesBundle } from '../utils/AdRuleUpdater';
 
 @Entry
 @Component
@@ -23,10 +24,13 @@ struct SearchExploreSettingsPage {
   @StorageLink('appDarkButtonColor') appDarkButtonColor: string = '#3F8CFF';
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navBarHeight') navBarHeight: number = 0;
+  @State adRuleUpdating: boolean = false;
+  @State adRuleInfo: string = '';
 
   aboutToAppear(): void {
     this.reloadSettings();
     this.syncBars();
+    this.loadAdRulesAsync();
   }
 
   onPageShow(): void {
@@ -45,6 +49,9 @@ struct SearchExploreSettingsPage {
               this.searchExploreAdBlockEnabled = value;
               this.onSettingChanged();
             })
+          this.actionItem('更新广告规则', '从 AdGuard / EasyList 规则源抓取并解析，写入本地拦截规则（域名黑名单 / 白名单 / CSS 选择器）',
+            this.adRuleUpdating ? '更新中…' : (this.adRuleInfo.length > 0 ? this.adRuleInfo : '点击更新'),
+            () => { this.updateAdRules(); })
           }
           .width('calc(100% - 24vp)')
           .margin({ left: 12, right: 12 })
@@ -180,6 +187,40 @@ struct SearchExploreSettingsPage {
     });
   }
 
+  async loadAdRulesAsync(): Promise<void> {
+    try {
+      await AdRuleUpdater.ensureLoaded(getContext(this));
+      const bundle = AdRuleUpdater.getLastBundle();
+      if (bundle && bundle.updatedAt > 0) {
+        this.adRuleInfo = this.describeBundle(bundle);
+      }
+    } catch (e) {
+      this.adRuleInfo = '';
+    }
+  }
+
+  async updateAdRules(): Promise<void> {
+    if (this.adRuleUpdating) {
+      return;
+    }
+    this.adRuleUpdating = true;
+    this.adRuleInfo = '更新中…';
+    try {
+      const bundle = await AdRuleUpdater.update(getContext(this));
+      this.adRuleInfo = this.describeBundle(bundle);
+      promptAction.showToast({ message: `广告规则已更新（${this.adRuleInfo}）` });
+    } catch (e) {
+      this.adRuleInfo = '更新失败，请检查网络';
+      promptAction.showToast({ message: '广告规则更新失败，请检查网络后重试' });
+    } finally {
+      this.adRuleUpdating = false;
+    }
+  }
+
+  describeBundle(bundle: AdRulesBundle): string {
+    return `${bundle.hostSuffixes.length} 域名 / ${bundle.cssSelectors.length} 样式 / ${bundle.whitelistSuffixes.length} 白名单`;
+  }
+
   pageColor(): string {
     return ThemeRuntime.pageColor(this.appDarkMode);
   }
@@ -261,6 +302,36 @@ struct SearchExploreSettingsPage {
     .backgroundColor(Color.Transparent)
     .border({ width: { bottom: 0.5 }, color: this.appDarkMode ? '#24FFFFFF' : '#14000000' })
     .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  actionItem(title: string, desc: string, status: string, action: () => void) {
+    Row() {
+      Column() {
+        Text(title)
+          .fontSize(16)
+          .fontColor(this.primaryTextColor())
+        Text(desc)
+          .fontSize(12)
+          .fontColor(this.subTextColor())
+          .margin({ top: 4 })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Text(status)
+        .fontSize(12)
+        .fontColor(this.adRuleUpdating ? this.buttonColor() : this.subTextColor())
+        .margin({ right: 4 })
+    }
+    .width('calc(100% - 32vp)')
+    .constraintSize({ minHeight: 64 })
+    .padding({ left: 0, right: 0, top: 10, bottom: 10 })
+    .margin({ left: 16, right: 16 })
+    .backgroundColor(Color.Transparent)
+    .border({ width: { bottom: 0.5 }, color: this.appDarkMode ? '#24FFFFFF' : '#14000000' })
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => { action(); })
   }
 
   @Builder

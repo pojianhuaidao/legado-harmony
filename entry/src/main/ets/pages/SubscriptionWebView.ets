@@ -8,6 +8,10 @@
  *  4) sourceUrl 为空时兜底加载，避免空白页与打开失败；
  *  5) onErrorReceive 展示错误码与错误描述，便于定位失败原因；
  *  6) 返回 / 历史回退后触发 rssSourcesVersion 自增，订阅列表自动刷新。
+ *
+ * 去广告（方案B 动态规则）：
+ *  - 进入页面时通过 AdRuleUpdater.ensureLoaded 从沙箱恢复动态规则并注入 AdBlocker；
+ *  - onPageEnd 时注入 CSS 隐藏脚本（AdBlocker.buildCssHideScript），隐藏页面内广告元素。
  */
 import { router, promptAction } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
@@ -15,6 +19,7 @@ import pasteboard from '@ohos.pasteboard';
 import { common, Want } from '@kit.AbilityKit';
 import { syncSystemBars } from '../utils/SystemBars';
 import { AdBlocker } from '../utils/AdBlocker';
+import { AdRuleUpdater } from '../utils/AdRuleUpdater';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { AppDatabase } from '../model/data/AppDatabase';
@@ -233,6 +238,9 @@ struct SubscriptionWebViewPage {
     this.currentUrl = this.sourceUrl;
     this.applyUserAgent();
     this.refreshCollectedState();
+    // 从沙箱恢复动态去广告规则并注入 AdBlocker（内置静态规则始终兜底）
+    AdRuleUpdater.ensureLoaded(getContext(this)).catch(() => {
+    });
   }
 
   onPageShow(): void {
@@ -340,6 +348,21 @@ struct SubscriptionWebViewPage {
   notifyListRefresh(): void {
     const version = AppStorage.get<number>('rssSourcesVersion') ?? 0;
     AppStorage.setOrCreate('rssSourcesVersion', version + 1);
+  }
+
+  injectCssHideScript(url: string): void {
+    if (!this.adBlockEnabled) {
+      return;
+    }
+    const script = AdBlocker.buildCssHideScript(url);
+    if (script.length === 0) {
+      return;
+    }
+    try {
+      this.controller.runJavaScript(script).catch((error: Object): void => {
+      });
+    } catch (e) {
+    }
   }
 
   pageColor(): string {
@@ -464,6 +487,8 @@ struct SubscriptionWebViewPage {
           this.mainFrameLoaded = true;
           this.pendingMainFrameError = '';
           this.updateNavState();
+          // 页面加载完成后注入 CSS 隐藏脚本（命中动态 CSS 选择器规则时生效）
+          this.injectCssHideScript(this.currentUrl);
         })
         .onProgressChange((event?: OnProgressChangeEvent) => {
           this.progress = event ? event.newProgress : 0;
@@ -529,4 +554,3 @@ struct SubscriptionWebViewPage {
     }
   }
 }
-
