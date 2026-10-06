@@ -21,6 +21,7 @@ export class SearchExploreSettings {
 
 export class SearchExploreSettingsStore {
   static readonly KEY_SHOW_RESULT_COVER: string = 'searchExploreShowResultCover';
+  static readonly KEY_AD_BLOCK_ENABLED: string = 'searchExploreAdBlockEnabled';
   static readonly KEY_USE_BOOKSHELF_COVER_GALLERY: string = 'searchExploreUseBookshelfCoverGallery';
   static readonly KEY_SHOW_RESULT_TAGS: string = 'searchExploreShowResultTags';
   static readonly KEY_AGGREGATE_SEARCH_RESULTS: string = 'searchExploreAggregateResults';
@@ -248,3 +249,4 @@ export class SearchExploreSettingsStore {
       left.selectedSourceUrlsRaw !== right.selectedSourceUrlsRaw;
   }
 }
+

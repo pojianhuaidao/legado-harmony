@@ -10,10 +10,11 @@
  *  6) 返回 / 历史回退后触发 rssSourcesVersion 自增，订阅列表自动刷新。
  */
 import { router, promptAction } from '@kit.ArkUI';
-import { webview } from '@kit.ArkWeb';
+import { webview, WebResourceResponse } from '@kit.ArkWeb';
 import pasteboard from '@ohos.pasteboard';
 import { common, Want } from '@kit.AbilityKit';
 import { syncSystemBars } from '../utils/SystemBars';
+import { AdBlocker } from '../utils/AdBlocker';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { AppDatabase } from '../model/data/AppDatabase';
@@ -475,7 +476,7 @@ struct SubscriptionWebViewPage {
           if (this.adBlockEnabled && event && event.request) {
             const requestUrl = event.request.getRequestUrl();
             if (requestUrl && !event.request.isMainFrame() && AdBlocker.shouldBlockRequest(requestUrl)) {
-              const blocked = new webview.WebResourceResponse();
+              const blocked = new WebResourceResponse();
               blocked.setResponseMimeType('text/html');
               blocked.setResponseEncoding('UTF-8');
               blocked.setResponseData('');
@@ -528,3 +529,4 @@ struct SubscriptionWebViewPage {
     }
   }
 }
+
