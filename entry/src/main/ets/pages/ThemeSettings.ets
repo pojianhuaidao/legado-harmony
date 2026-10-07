@@ -142,6 +142,9 @@ struct ThemeSettingsPage {
         ListItem() {
           this.sectionTitle('全部主题')
         }
+        ListItem() {
+          this.customThemeSectionTitle()
+        }
         ForEach(this.gridRows(this.customSchemes), (row: CustomThemeScheme[]) => {
           ListItem() {
             Row({ space: 12 }) {
