@@ -11534,19 +11534,19 @@ struct SettingsPage {
 
           Column() {
             Row({ space: 12 }) {
-              this.gridItem($r('sys.symbol.externaldrive'), '书源管理', () => {
+              this.gridItem($r('app.media.ic_mine_booksource'), '书源管理', () => {
                 router.pushUrl({ url: 'pages/BookSource' });
               })
-              this.gridItem($r('sys.symbol.book'), '阅读设置', () => {
+              this.gridItem($r('app.media.ic_mine_readsettings'), '阅读设置', () => {
                 router.pushUrl({ url: 'pages/Settings' });
               })
-              this.gridItem($r('sys.symbol.speaker_wave_3'), '朗读设置', () => {
+              this.gridItem($r('app.media.ic_mine_ttssettings'), '朗读设置', () => {
                 router.pushUrl({ url: 'pages/TtsSettings' });
               })
-              this.gridItem($r('sys.symbol.bookshelf'), '书架设置', () => {
+              this.gridItem($r('app.media.ic_mine_shelfsettings'), '书架设置', () => {
                 router.pushUrl({ url: 'pages/BookshelfSettings' });
               })
-              this.gridItem($r('sys.symbol.magnifyingglass'), '源设置', () => {
+              this.gridItem($r('app.media.ic_mine_sourcesettings'), '源设置', () => {
                 router.pushUrl({ url: 'pages/SearchExploreSettings' });
               })
             }
@@ -11612,11 +11612,11 @@ struct SettingsPage {
   @Builder
   gridItem(icon: Resource, title: string, onClick: () => void) {
     Column({ space: 6 }) {
-      SymbolGlyph(icon)
-        .fontSize(26)
-        .fontColor([this.accentColor()])
+      Image(icon)
         .width(46)
         .height(46)
+        .fillColor(this.accentColor())
+        .objectFit(ImageFit.Contain)
         .backgroundColor(this.buttonBackgroundColor())
         .borderRadius(13)
 

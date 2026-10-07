@@ -1085,7 +1085,24 @@ struct TtsSettingsPage {
     return entry.n;
   }
 
+  // 分角色朗读要求音色已下载到本地（available 且非 downloadable），
+  // 在线音质角色若未下载，实机播放会被系统引擎回退默认音色。
+  roleVoiceUsable(entry: RoleTtsVoiceEntry | undefined): boolean {
+    if (!entry) {
+      return true;
+    }
+    return this.voices.some((v: TtsVoiceOption) => v.available && !v.downloadable && v.id === entry.p);
+  }
+
+  roleVoicePickerVoices(): TtsVoiceOption[] {
+    return this.voices.filter((v: TtsVoiceOption) => v.available && !v.downloadable);
+  }
+
   selectRoleVoice(name: string, voice: TtsVoiceOption): void {
+    if (!voice.available || voice.downloadable) {
+      promptAction.showToast({ message: '该音色未下载到本地，请先下载后再指定给角色' });
+      return;
+    }
     const map = this.parseRoleVoiceMap();
     map[name] = { p: voice.id, n: this.voiceTitle(voice) };
     this.roleMapDraftJson = JSON.stringify(map);
@@ -1164,7 +1181,8 @@ struct TtsSettingsPage {
                 .fontSize(15)
                 .fontColor(this.primaryTextColor())
                 .layoutWeight(1)
-              Text(this.roleVoiceTitle(this.parseRoleVoiceMap()[name]))
+              Text(this.roleVoiceTitle(this.parseRoleVoiceMap()[name]) +
+                (this.roleVoiceUsable(this.parseRoleVoiceMap()[name]) ? '' : '（需重新选择）'))
                 .fontSize(13)
                 .fontColor(this.subTextColor())
               Text('删除')
@@ -1214,10 +1232,14 @@ struct TtsSettingsPage {
         Text(`${this.rolePickTarget} 音色`)
           .fontSize(15)
           .fontColor(this.primaryTextColor())
-          .padding({ left: 16, right: 16, top: 14, bottom: 8 })
+          .padding({ left: 16, right: 16, top: 14, bottom: 2 })
+        Text('仅列出已下载到本地的音色；在线音质音色需先在「系统音色」中下载')
+          .fontSize(11)
+          .fontColor(this.subTextColor())
+          .padding({ left: 16, right: 16, bottom: 8 })
         Scroll() {
           Column() {
-            ForEach(this.voices, (voice: TtsVoiceOption) => {
+            ForEach(this.roleVoicePickerVoices(), (voice: TtsVoiceOption) => {
               Row() {
                 Text(this.voiceTitle(voice))
                   .fontSize(15)

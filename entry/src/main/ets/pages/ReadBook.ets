@@ -336,6 +336,8 @@ struct ReadBookPage {
   private ttsReader: SystemTtsReader = new SystemTtsReader();
   private roleTtsDriver: RoleTtsDriver | null = null;
   private roleTtsRunning: boolean = false;
+  private roleTtsTagging: boolean = false;
+  private roleTtsPanelSentence: string = '';
   private ttsAutoContinue: boolean = false;
   private ttsReadToken: number = 0;
   private ttsChapterSwitching: boolean = false;
@@ -13453,7 +13455,7 @@ struct ReadBookPage {
     ReaderTtsFloatingSession.updateCatalogIndex(this.ttsFloatingSessionOwnerId, this.currentChapterIndex);
     ReaderTtsFloatingSession.updateDetails(
       this.ttsFloatingSessionOwnerId,
-      this.ttsPanelFollowingText() || this.ttsQuickSentencePreview(),
+      this.roleTtsPanelSentence || this.ttsPanelFollowingText() || this.ttsQuickSentencePreview(),
       this.ttsPanelTextBefore(),
       this.ttsCurrentSentence(),
       this.ttsPanelTextAfter(),
@@ -13703,7 +13705,10 @@ struct ReadBookPage {
       return;
     }
     this.isTtsSpeaking = true;
+    this.roleTtsTagging = true;
+    this.roleTtsPanelSentence = '';
     promptAction.showToast({ message: '正在标注角色…' });
+    AppStorage.setOrCreate('globalTtsCurrentText', '正在标注角色…');
     let result: RoleTagResult;
     try {
       const options: RoleTaggerOptions = {
@@ -13718,6 +13723,7 @@ struct ReadBookPage {
       const isTimeout = errMsg.indexOf('超时') >= 0;
       console.warn('角色标注失败:', error);
       if (token === this.ttsReadToken) {
+        this.roleTtsTagging = false;
         this.finishTtsReading();
         promptAction.showToast({ message: isTimeout ? '角色标注超时，已停止朗读，请重试' : '角色标注失败，已停止朗读' });
       }
@@ -13726,6 +13732,7 @@ struct ReadBookPage {
     if (token !== this.ttsReadToken) {
       return;
     }
+    this.roleTtsTagging = false;
     const map = await this.resolveRoleVoiceMap(result);
     this.persistRoleVoiceMap(map);
     const items = this.buildRoleTtsItems(result, map);
@@ -13741,10 +13748,14 @@ struct ReadBookPage {
     this.roleTtsDriver = new RoleTtsDriver();
     this.roleTtsDriver.start(items, {
       onSegmentStart: (item: RoleTtsPlayItem, index: number, total: number) => {
-        // 预留：可在此接逐段高亮/浮窗进度
+        if (token === this.ttsReadToken) {
+          this.roleTtsPanelSentence = item.text;
+          this.updateTtsFloatingSession();
+        }
       },
       onAllFinished: () => {
         this.roleTtsRunning = false;
+        this.roleTtsPanelSentence = '';
         if (token === this.ttsReadToken) {
           this.continueTtsReading(token).catch((e: Error) => {
             console.warn('连续朗读续播失败:', e);
@@ -13756,6 +13767,7 @@ struct ReadBookPage {
       },
       onError: (message: string) => {
         this.roleTtsRunning = false;
+        this.roleTtsPanelSentence = '';
         if (token === this.ttsReadToken) {
           this.finishTtsReading();
           promptAction.showToast({ message: message });
@@ -13799,23 +13811,66 @@ struct ReadBookPage {
     }
   }
 
+  private normalizeRoleMapKey(name: string): string {
+    return (name || '').trim().replace(/[\s\u3000]+/g, '').replace(/[“”"「」『』]/g, '');
+  }
+
+  private findRoleMapEntry(map: Record<string, RoleVoiceEntry>, roleName: string): RoleVoiceEntry | undefined {
+    const normalized = this.normalizeRoleMapKey(roleName);
+    if (!normalized) {
+      return undefined;
+    }
+    const keys = Object.keys(map);
+    for (const key of keys) {
+      if (this.normalizeRoleMapKey(key) === normalized) {
+        return map[key];
+      }
+    }
+    // LLM 标注的角色名与用户配置的角色名可能不完全一致（如「旁白」vs「叙述者」），
+    // 退一步做互相包含的模糊匹配，确保用户指定音色优先生效。
+    for (const key of keys) {
+      const normalizedKey = this.normalizeRoleMapKey(key);
+      if (normalizedKey && (normalizedKey.indexOf(normalized) >= 0 || normalized.indexOf(normalizedKey) >= 0)) {
+        return map[key];
+      }
+    }
+    return undefined;
+  }
+
   private async resolveRoleVoiceMap(result: RoleTagResult): Promise<Record<string, RoleVoiceEntry>> {
     const map = this.parseRoleVoiceMap();
-    const needAuto: string[] = [];
-    for (const role of result.roles) {
-      if (role.name === RoleTagger.NARRATOR || map[role.name]) {
-        continue;
-      }
-      needAuto.push(role.name);
-    }
-    if (needAuto.length === 0) {
-      return map;
-    }
     let voices: TtsVoiceOption[] = [];
     try {
       voices = await SystemTtsReader.listAvailableVoices();
     } catch (_) {
       voices = [];
+    }
+    const isLocalUsable = (person: number): boolean => {
+      return voices.some((v: TtsVoiceOption) => v.available && !v.downloadable && v.id === person);
+    };
+    // 清理用户映射中不可用的音色（在线/未下载音色在实机播放时会导致引擎回退默认音色），
+    // 重建对象以避免 ArkTS 对 delete 的限制。
+    const sanitized: Record<string, RoleVoiceEntry> = {};
+    const keys = Object.keys(map);
+    for (const key of keys) {
+      if (isLocalUsable(map[key].p)) {
+        sanitized[key] = { p: map[key].p, n: map[key].n };
+      }
+    }
+    const needAuto: string[] = [];
+    for (const role of result.roles) {
+      if (role.name === RoleTagger.NARRATOR) {
+        // 旁白：有可用用户映射则沿用（buildRoleTtsItems 会命中）；无映射时沿用当前音色，不自动分配。
+        continue;
+      }
+      const entry = this.findRoleMapEntry(sanitized, role.name);
+      if (entry) {
+        continue;
+      }
+      needAuto.push(role.name);
+    }
+    if (needAuto.length === 0) {
+      return sanitized;
     }
     const candidates = voices.filter((v: TtsVoiceOption) =>
       v.available && !v.downloadable && (v.language || 'zh-CN').toLowerCase().indexOf('zh') === 0);
@@ -13834,9 +13889,9 @@ struct ReadBookPage {
           return g.indexOf('male') === 0 && g.indexOf('female') !== 0;
         }) || null;
       }
-      map[name] = chosen ? { p: chosen.id, n: chosen.name } : { p: this.ttsPerson, n: '默认音色' };
+      sanitized[name] = chosen ? { p: chosen.id, n: chosen.name } : { p: this.ttsPerson, n: '默认音色' };
     }
-    return map;
+    return sanitized;
   }
 
   private buildRoleTtsItems(result: RoleTagResult,
@@ -13845,7 +13900,7 @@ struct ReadBookPage {
     let offset = 0;
     for (const seg of result.segments) {
       let person = this.ttsPerson;
-      const entry = map[seg.role];
+      const entry = this.findRoleMapEntry(map, seg.role);
       if (entry) {
         person = entry.p;
       }
@@ -13861,6 +13916,8 @@ struct ReadBookPage {
       this.roleTtsDriver = null;
     }
     this.roleTtsRunning = false;
+    this.roleTtsTagging = false;
+    this.roleTtsPanelSentence = '';
   }
 
   /** Return the last source position that can belong to an audible TTS chunk. */
