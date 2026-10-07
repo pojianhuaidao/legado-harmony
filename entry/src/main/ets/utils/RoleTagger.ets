@@ -178,16 +178,24 @@ export class RoleTagger {
     };
     const httpRequest = http.createHttp();
     try {
-      const response = await httpRequest.request(url, {
-        method: http.RequestMethod.POST,
-        header: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey
-        },
-        extraData: JSON.stringify(payload),
-        connectTimeout: 20000,
-        readTimeout: 180000
-      });
+      const response = await RoleTagger.withTimeout(
+        httpRequest.request(url, {
+          method: http.RequestMethod.POST,
+          header: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey
+          },
+          extraData: JSON.stringify(payload),
+          connectTimeout: 20000,
+          readTimeout: 60000
+        }),
+        70000,
+        '角色标注请求超时（70s 无响应）',
+        () => {
+          // 超时兜底：主动销毁底层请求，避免连接悬挂导致 UI 一直停在"正在标注角色…"
+          httpRequest.destroy();
+        }
+      );
       if (response.responseCode !== 200) {
         const bodyText = typeof response.result === 'string' ? response.result : '';
         throw new Error('LLM HTTP ' + response.responseCode + ': ' + bodyText.substring(0, 500));

@@ -13714,10 +13714,12 @@ struct ReadBookPage {
       };
       result = await RoleTagger.tag(text, options);
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const isTimeout = errMsg.indexOf('超时') >= 0;
       console.warn('角色标注失败:', error);
       if (token === this.ttsReadToken) {
         this.finishTtsReading();
-        promptAction.showToast({ message: '角色标注失败，已停止朗读' });
+        promptAction.showToast({ message: isTimeout ? '角色标注超时，已停止朗读，请重试' : '角色标注失败，已停止朗读' });
       }
       return;
     }
