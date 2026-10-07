@@ -14481,6 +14481,7 @@ struct ReadBookPage {
     this.ttsChapterSwitching = true;
     try {
       const shouldResume = this.isTtsSpeaking || this.ttsReader.isSpeaking() ||
+        this.roleTtsRunning || this.roleTtsTagging ||
         ReaderTtsFloatingSession.isOwner(this.ttsFloatingSessionOwnerId);
       console.info(`[TTS] media next chapter: source=${sourceChapterIndex},target=${targetChapterIndex},` +
         `resume=${shouldResume}`);
@@ -14533,6 +14534,7 @@ struct ReadBookPage {
     this.ttsChapterSwitching = true;
     try {
       const shouldResume = this.isTtsSpeaking || this.ttsReader.isSpeaking() ||
+        this.roleTtsRunning || this.roleTtsTagging ||
         ReaderTtsFloatingSession.isOwner(this.ttsFloatingSessionOwnerId);
       console.info(`[TTS] media previous chapter: source=${sourceChapterIndex},target=${targetChapterIndex},` +
         `resume=${shouldResume}`);
@@ -14587,6 +14589,7 @@ struct ReadBookPage {
     this.ttsChapterSwitching = true;
     try {
       const shouldResume = this.isTtsSpeaking || this.ttsReader.isSpeaking() ||
+        this.roleTtsRunning || this.roleTtsTagging ||
         ReaderTtsFloatingSession.isOwner(this.ttsFloatingSessionOwnerId);
       console.info(`[TTS] floating position: source=${sourceChapterIndex}/${sourcePageIndex},` +
         `target=${normalizedChapterIndex}/${normalizedPageIndex},resume=${shouldResume}`);
@@ -23967,7 +23970,8 @@ struct ReadBookPage {
       return;
     }
 
-    const shouldResumeTts = this.isTtsSpeaking || this.ttsReader.isSpeaking();
+    const shouldResumeTts = this.isTtsSpeaking || this.ttsReader.isSpeaking() ||
+      this.roleTtsRunning || this.roleTtsTagging;
     if (shouldResumeTts) {
       this.stopTtsReaderForChapterSwitch();
       await this.updateTtsAvSessionPlaybackState(avSession.PlaybackState.PLAYBACK_STATE_BUFFERING);
