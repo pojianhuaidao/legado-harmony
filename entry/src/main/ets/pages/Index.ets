@@ -11543,11 +11543,6 @@ struct SettingsPage {
               this.gridItem($r('sys.symbol.speaker_wave_3'), '朗读设置', () => {
                 router.pushUrl({ url: 'pages/TtsSettings' });
               })
-            }
-            .width('100%')
-            .padding({ left: 12, right: 12, top: 16, bottom: 4 })
-
-            Row({ space: 12 }) {
               this.gridItem($r('sys.symbol.bookshelf'), '书架设置', () => {
                 router.pushUrl({ url: 'pages/BookshelfSettings' });
               })
@@ -11556,7 +11551,8 @@ struct SettingsPage {
               })
             }
             .width('100%')
-            .padding({ left: 12, right: 12, top: 4, bottom: 12 })
+            .justifyContent(FlexAlign.Center)
+            .padding({ left: 12, right: 12, top: 16, bottom: 16 })
 
             Divider()
               .strokeWidth(0.5)
@@ -11631,7 +11627,6 @@ struct SettingsPage {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
-    .layoutWeight(1)
     .padding({ top: 16, bottom: 12 })
     .borderRadius(14)
     .onClick(onClick)

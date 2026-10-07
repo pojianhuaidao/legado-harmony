@@ -207,6 +207,23 @@ export class RoleTagger {
     }
   }
 
+  private static withTimeout<T>(promise: Promise<T>, ms: number, message: string,
+    onTimeout: () => void): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        onTimeout();
+        reject(new Error(message));
+      }, ms);
+      promise.then((value: T) => {
+        clearTimeout(timer);
+        resolve(value);
+      }, (reason: Object) => {
+        clearTimeout(timer);
+        reject(reason);
+      });
+    });
+  }
+
   private static parseJson(content: string): RoleTagResult {
     let value = content.trim();
     if (value.startsWith('```')) {

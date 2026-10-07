@@ -13614,9 +13614,15 @@ struct ReadBookPage {
         return;
       }
       this.publishTtsFloatingSession();
-      if (this.ttsRoleEnabled && (this.ttsRoleApiKey || '').trim().length > 0) {
-        await this.startRoleTtsReading(text, token, focusGeneration, focusChapterIndex,
-          focusSourceIdentity, showToast);
+      if (this.ttsRoleEnabled) {
+        const roleApiKey = (this.ttsRoleApiKey || '').trim();
+        if (roleApiKey.length > 0) {
+          await this.startRoleTtsReading(text, token, focusGeneration, focusChapterIndex,
+            focusSourceIdentity, showToast);
+        } else {
+          promptAction.showToast({ message: '已启用分角色朗读，请先在朗读设置中填写 API Key' });
+          this.finishTtsReading();
+        }
         return;
       }
       await this.ttsReader.start(text, {
@@ -13837,11 +13843,9 @@ struct ReadBookPage {
     let offset = 0;
     for (const seg of result.segments) {
       let person = this.ttsPerson;
-      if (seg.role !== RoleTagger.NARRATOR) {
-        const entry = map[seg.role];
-        if (entry) {
-          person = entry.p;
-        }
+      const entry = map[seg.role];
+      if (entry) {
+        person = entry.p;
       }
       items.push({ role: seg.role, text: seg.text, sourceStart: offset, person: person });
       offset += seg.text.length;

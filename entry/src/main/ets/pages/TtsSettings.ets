@@ -51,7 +51,9 @@ struct TtsSettingsPage {
   @State showRoleMapSheet: boolean = false;
   @State rolePickTarget: string = '';
   @State roleMapDraftJson: string = '{}';
+  @State newRoleName: string = '';
   private speedSaveTimerId: number = -1;
+  private roleFieldSaveTimerId: number = -1;
   private context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
 
   aboutToAppear(): void {
@@ -66,6 +68,7 @@ struct TtsSettingsPage {
 
   aboutToDisappear(): void {
     this.flushPendingSpeedSettings();
+    this.flushRoleFieldSettings();
     this.previewReader.shutdown();
     this.isPreviewing = false;
   }
@@ -199,6 +202,7 @@ struct TtsSettingsPage {
                   .borderRadius(8)
                   .onChange((value: string) => {
                     this.ttsRoleBaseUrl = value.trim();
+                    this.scheduleRoleFieldSave();
                   })
               }
               .width('100%')
@@ -217,6 +221,7 @@ struct TtsSettingsPage {
                   .borderRadius(8)
                   .onChange((value: string) => {
                     this.ttsRoleModel = value.trim();
+                    this.scheduleRoleFieldSave();
                   })
               }
               .width('100%')
@@ -236,6 +241,7 @@ struct TtsSettingsPage {
                   .type(InputType.Password)
                   .onChange((value: string) => {
                     this.ttsRoleApiKey = value.trim();
+                    this.scheduleRoleFieldSave();
                   })
               }
               .width('100%')
@@ -1005,6 +1011,69 @@ struct TtsSettingsPage {
     }
   }
 
+  addRoleToMap(): void {
+    const name = this.newRoleName.trim();
+    if (!name) {
+      promptAction.showToast({ message: '请输入角色名' });
+      return;
+    }
+    const map = this.parseRoleVoiceMap();
+    if (map[name]) {
+      promptAction.showToast({ message: '该角色已存在，可直接点击选择音色' });
+      return;
+    }
+    const current = this.findCurrentVoice() || TtsSettingsPage.defaultVoice();
+    map[name] = { p: current.id, n: this.voiceTitle(current) };
+    this.roleMapDraftJson = JSON.stringify(map);
+    this.newRoleName = '';
+    this.persistRoleMap(map);
+    promptAction.showToast({ message: `已添加角色「${name}」，点击可为它指定音色` });
+  }
+
+  removeRoleFromMap(name: string): void {
+    promptAction.showDialog({
+      title: '删除角色',
+      message: `确定删除角色「${name}」的音色映射吗？删除后朗读时该角色将按性别自动分配音色。`,
+      buttons: [
+        { text: '取消', color: this.subTextColor() },
+        { text: '删除', color: '#E53935' }
+      ]
+    }).then((result: promptAction.ShowDialogSuccessResponse) => {
+      if (result.index === 1) {
+        const map = this.parseRoleVoiceMap();
+        const next: Record<string, RoleTtsVoiceEntry> = {};
+        const keys = Object.keys(map);
+        for (const k of keys) {
+          if (k !== name) {
+            next[k] = map[k];
+          }
+        }
+        this.roleMapDraftJson = JSON.stringify(next);
+        this.persistRoleMap(next);
+        promptAction.showToast({ message: `已删除角色「${name}」的音色映射` });
+      }
+    }).catch(() => {
+    });
+  }
+
+  scheduleRoleFieldSave(): void {
+    if (this.roleFieldSaveTimerId >= 0) {
+      clearTimeout(this.roleFieldSaveTimerId);
+    }
+    this.roleFieldSaveTimerId = setTimeout(() => {
+      this.roleFieldSaveTimerId = -1;
+      this.saveSettings();
+    }, 300);
+  }
+
+  flushRoleFieldSettings(): void {
+    if (this.roleFieldSaveTimerId >= 0) {
+      clearTimeout(this.roleFieldSaveTimerId);
+      this.roleFieldSaveTimerId = -1;
+      this.saveSettings();
+    }
+  }
+
   roleMapRoleNames(): string[] {
     return Object.keys(this.parseRoleVoiceMap());
   }
@@ -1060,8 +1129,31 @@ struct TtsSettingsPage {
         .width('100%')
         .padding({ left: 16, right: 16, top: 14, bottom: 8 })
 
+        Row({ space: 8 }) {
+          TextInput({ placeholder: '新增角色名，如：旁白、小明', text: this.newRoleName })
+            .layoutWeight(1)
+            .height(36)
+            .fontSize(14)
+            .fontColor(this.primaryTextColor())
+            .backgroundColor(this.inputColor())
+            .borderRadius(8)
+            .onChange((value: string) => {
+              this.newRoleName = value;
+            })
+          Button('添加')
+            .height(36)
+            .fontSize(14)
+            .backgroundColor(this.accentColor())
+            .fontColor('#FFFFFF')
+            .onClick(() => {
+              this.addRoleToMap();
+            })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 2, bottom: 6 })
+
         if (this.roleMapRoleNames().length === 0) {
-          Text('暂无角色，朗读时会按性别自动分配音色')
+          Text('暂无角色。可先朗读一次自动生成，或在上方输入角色名添加（含旁白）并指定音色')
             .fontSize(13)
             .fontColor(this.subTextColor())
             .padding({ left: 16, right: 16, bottom: 16 })
@@ -1075,6 +1167,13 @@ struct TtsSettingsPage {
               Text(this.roleVoiceTitle(this.parseRoleVoiceMap()[name]))
                 .fontSize(13)
                 .fontColor(this.subTextColor())
+              Text('删除')
+                .fontSize(12)
+                .fontColor('#E53935')
+                .margin({ left: 10, right: 2 })
+                .onClick(() => {
+                  this.removeRoleFromMap(name);
+                })
               SymbolGlyph($r('sys.symbol.chevron_right'))
                 .fontSize(13)
                 .fontColor([this.subTextColor()])

@@ -51,7 +51,7 @@ struct SearchExploreSettingsPage {
               this.onSettingChanged();
             })
           this.actionItem('更新广告规则', '从 AdGuard / EasyList 规则源抓取并解析，写入本地拦截规则（域名黑名单 / 白名单 / CSS 选择器）',
-            this.adRuleUpdating ? '更新中…' : (this.adRuleInfo.length > 0 ? this.adRuleInfo : '在线更新'),
+            this.adRuleUpdating ? '更新中…' : '更新规则',
             () => { this.updateAdRules(); })
           }
           .width('calc(100% - 24vp)')
@@ -199,12 +199,10 @@ struct SearchExploreSettingsPage {
   }
 
   async loadAdRulesAsync(): Promise<void> {
+    // 仅确保本地拦截规则已加载（供 Web 拦截生效），不把旧统计文本回填到按钮上；
+    // 统计提示只在点击"更新规则"成功后才通过 toast 展示。
     try {
       await AdRuleUpdater.ensureLoaded(getContext(this));
-      const bundle = AdRuleUpdater.getLastBundle();
-      if (bundle && bundle.updatedAt > 0) {
-        this.adRuleInfo = this.describeBundle(bundle);
-      }
     } catch (e) {
       this.adRuleInfo = '';
     }
