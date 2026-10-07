@@ -10,6 +10,12 @@ export class TtsSettings {
   installedVoiceKeys: string = '';
   customVoiceId: string = '';
   customVoices: string = '';
+  roleTtsEnabled: boolean = false;
+  roleTtsProvider: string = 'zhipu';
+  roleTtsBaseUrl: string = '';
+  roleTtsModel: string = '';
+  roleTtsApiKey: string = '';
+  roleVoiceMap: string = '{}';
 }
 
 export class TtsSettingsStore {
@@ -21,6 +27,12 @@ export class TtsSettingsStore {
   static readonly KEY_INSTALLED_VOICE_KEYS: string = 'ttsInstalledVoiceKeys';
   static readonly KEY_CUSTOM_VOICE_ID: string = 'ttsCustomVoiceId';
   static readonly KEY_CUSTOM_VOICES: string = 'ttsCustomVoices';
+  static readonly KEY_ROLE_TTS_ENABLED: string = 'ttsRoleEnabled';
+  static readonly KEY_ROLE_TTS_PROVIDER: string = 'ttsRoleProvider';
+  static readonly KEY_ROLE_TTS_BASE_URL: string = 'ttsRoleBaseUrl';
+  static readonly KEY_ROLE_TTS_MODEL: string = 'ttsRoleModel';
+  static readonly KEY_ROLE_TTS_API_KEY: string = 'ttsRoleApiKey';
+  static readonly KEY_ROLE_VOICE_MAP: string = 'ttsRoleVoiceMap';
   private static readonly STORE_NAME: string = 'tts_settings';
   private static cachedSettings: TtsSettings | null = null;
 
@@ -46,6 +58,18 @@ export class TtsSettingsStore {
       store, TtsSettingsStore.KEY_CUSTOM_VOICE_ID, storageSettings.customVoiceId);
     settings.customVoices = await TtsSettingsStore.getString(
       store, TtsSettingsStore.KEY_CUSTOM_VOICES, storageSettings.customVoices);
+    settings.roleTtsEnabled = await TtsSettingsStore.getBoolean(
+      store, TtsSettingsStore.KEY_ROLE_TTS_ENABLED, storageSettings.roleTtsEnabled);
+    settings.roleTtsProvider = await TtsSettingsStore.getString(
+      store, TtsSettingsStore.KEY_ROLE_TTS_PROVIDER, storageSettings.roleTtsProvider);
+    settings.roleTtsBaseUrl = await TtsSettingsStore.getString(
+      store, TtsSettingsStore.KEY_ROLE_TTS_BASE_URL, storageSettings.roleTtsBaseUrl);
+    settings.roleTtsModel = await TtsSettingsStore.getString(
+      store, TtsSettingsStore.KEY_ROLE_TTS_MODEL, storageSettings.roleTtsModel);
+    settings.roleTtsApiKey = await TtsSettingsStore.getString(
+      store, TtsSettingsStore.KEY_ROLE_TTS_API_KEY, storageSettings.roleTtsApiKey);
+    settings.roleVoiceMap = await TtsSettingsStore.getString(
+      store, TtsSettingsStore.KEY_ROLE_VOICE_MAP, storageSettings.roleVoiceMap);
     TtsSettingsStore.cachedSettings = TtsSettingsStore.clone(settings);
     return settings;
   }
@@ -63,6 +87,12 @@ export class TtsSettingsStore {
     await store.put(TtsSettingsStore.KEY_INSTALLED_VOICE_KEYS, normalized.installedVoiceKeys);
     await store.put(TtsSettingsStore.KEY_CUSTOM_VOICE_ID, normalized.customVoiceId);
     await store.put(TtsSettingsStore.KEY_CUSTOM_VOICES, normalized.customVoices);
+    await store.put(TtsSettingsStore.KEY_ROLE_TTS_ENABLED, normalized.roleTtsEnabled);
+    await store.put(TtsSettingsStore.KEY_ROLE_TTS_PROVIDER, normalized.roleTtsProvider);
+    await store.put(TtsSettingsStore.KEY_ROLE_TTS_BASE_URL, normalized.roleTtsBaseUrl);
+    await store.put(TtsSettingsStore.KEY_ROLE_TTS_MODEL, normalized.roleTtsModel);
+    await store.put(TtsSettingsStore.KEY_ROLE_TTS_API_KEY, normalized.roleTtsApiKey);
+    await store.put(TtsSettingsStore.KEY_ROLE_VOICE_MAP, normalized.roleVoiceMap);
     await store.flush();
   }
 
@@ -77,6 +107,12 @@ export class TtsSettingsStore {
     AppStorage.setOrCreate(TtsSettingsStore.KEY_INSTALLED_VOICE_KEYS, normalized.installedVoiceKeys);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CUSTOM_VOICE_ID, normalized.customVoiceId);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CUSTOM_VOICES, normalized.customVoices);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_ROLE_TTS_ENABLED, normalized.roleTtsEnabled);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_ROLE_TTS_PROVIDER, normalized.roleTtsProvider);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_ROLE_TTS_BASE_URL, normalized.roleTtsBaseUrl);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_ROLE_TTS_MODEL, normalized.roleTtsModel);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_ROLE_TTS_API_KEY, normalized.roleTtsApiKey);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_ROLE_VOICE_MAP, normalized.roleVoiceMap);
   }
 
   static fromStorage(): TtsSettings {
@@ -89,6 +125,12 @@ export class TtsSettingsStore {
     settings.installedVoiceKeys = AppStorage.get<string>(TtsSettingsStore.KEY_INSTALLED_VOICE_KEYS) || '';
     settings.customVoiceId = AppStorage.get<string>(TtsSettingsStore.KEY_CUSTOM_VOICE_ID) || '';
     settings.customVoices = AppStorage.get<string>(TtsSettingsStore.KEY_CUSTOM_VOICES) || '';
+    settings.roleTtsEnabled = AppStorage.get<boolean>(TtsSettingsStore.KEY_ROLE_TTS_ENABLED) ?? false;
+    settings.roleTtsProvider = AppStorage.get<string>(TtsSettingsStore.KEY_ROLE_TTS_PROVIDER) || 'zhipu';
+    settings.roleTtsBaseUrl = AppStorage.get<string>(TtsSettingsStore.KEY_ROLE_TTS_BASE_URL) || '';
+    settings.roleTtsModel = AppStorage.get<string>(TtsSettingsStore.KEY_ROLE_TTS_MODEL) || '';
+    settings.roleTtsApiKey = AppStorage.get<string>(TtsSettingsStore.KEY_ROLE_TTS_API_KEY) || '';
+    settings.roleVoiceMap = AppStorage.get<string>(TtsSettingsStore.KEY_ROLE_VOICE_MAP) || '{}';
     return TtsSettingsStore.clone(settings);
   }
 
@@ -107,6 +149,24 @@ export class TtsSettingsStore {
       if (!Number.isNaN(parsed)) {
         return TtsSettingsStore.normalizeNumber(parsed, type, fallback);
       }
+    }
+    return fallback;
+  }
+
+  private static async getBoolean(
+    store: preferences.Preferences,
+    key: string,
+    fallback: boolean
+  ): Promise<boolean> {
+    const value = await store.get(key, fallback);
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+    if (typeof value === 'string') {
+      return value === 'true' || value === '1';
     }
     return fallback;
   }
@@ -160,6 +220,12 @@ export class TtsSettingsStore {
     settings.installedVoiceKeys = source.installedVoiceKeys || '';
     settings.customVoiceId = source.customVoiceId || '';
     settings.customVoices = source.customVoices || '';
+    settings.roleTtsEnabled = source.roleTtsEnabled === true;
+    settings.roleTtsProvider = source.roleTtsProvider || 'zhipu';
+    settings.roleTtsBaseUrl = source.roleTtsBaseUrl || '';
+    settings.roleTtsModel = source.roleTtsModel || '';
+    settings.roleTtsApiKey = source.roleTtsApiKey || '';
+    settings.roleVoiceMap = source.roleVoiceMap || '{}';
     return settings;
   }
 }

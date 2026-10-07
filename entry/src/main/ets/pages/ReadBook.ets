@@ -31,6 +31,8 @@ import { ReaderInteractionProviderRegistry } from '../core/book/ReaderInteractio
 import { RecentReadShortcut } from '../utils/RecentReadShortcut';
 import { RecentReadCardUpdater } from '../utils/RecentReadCardUpdater';
 import { SystemTtsReader, TtsChunk, TtsVoiceOption } from '../utils/SystemTtsReader';
+import { RoleTagger, RoleTagResult, RoleTaggerOptions } from '../utils/RoleTagger';
+import { RoleTtsDriver, RoleTtsPlayItem } from '../utils/RoleTtsDriver';
 import { ReaderTtsFloatingSession } from '../utils/ReaderTtsFloatingSession';
 import { ReaderProgressCheckpoint } from '../utils/ReaderProgressCheckpoint';
 import { ReaderSettings, ReaderSettingsStore } from '../utils/ReaderSettingsStore';
@@ -97,6 +99,12 @@ import { ReaderComicPageDataSource } from '../core/reader/ReaderDataSources';
 import { ReaderCustomFontItem, ReaderCustomFontData, ReaderTxtCharsetOption } from '../core/reader/ReaderSettingsModels';
 import { PageTurnPreview, ReaderParagraphMetrics, ReaderInlineActionBoundsTask, ReaderMergedActionBoundsTask, ReaderTextParagraph, ReadTextSlice, ReaderPaginationResult, ReaderViewportSize, ReaderTextParagraphGroup, ReaderParagraphMeasureFallback, ReaderV2HighlightRect, ReaderContinuousSelectionChunk } from '../core/reader/ReaderPageModels';
 import { ReaderEyeCalibrationPoint } from '../core/reader/ReaderEyeModels';
+
+/** 角色音色映射条目：p 为 TTS 音色 person id，n 为音色显示名（仅供设置页展示）。 */
+interface RoleVoiceEntry {
+  p: number;
+  n: string;
+}
 
 // Three-point fixation calibration: centre, then the bottom turn zone, then the top turn
 // zone. Sampling each zone with the gaze held still (instead of a moving dot the iris
@@ -326,6 +334,8 @@ struct ReadBookPage {
   private readerComicBoundaryPullOriginY: number = 0;
   private readerComicSuppressClickUntil: number = 0;
   private ttsReader: SystemTtsReader = new SystemTtsReader();
+  private roleTtsDriver: RoleTtsDriver | null = null;
+  private roleTtsRunning: boolean = false;
   private ttsAutoContinue: boolean = false;
   private ttsReadToken: number = 0;
   private ttsChapterSwitching: boolean = false;
@@ -639,6 +649,12 @@ struct ReadBookPage {
   @StorageLink('ttsLanguage') ttsLanguage: string = 'zh-CN';
   @StorageLink('ttsSpeed') ttsSpeed: number = 1;
   @StorageLink('ttsInstalledVoiceKeys') ttsInstalledVoiceKeys: string = '';
+  @StorageLink('ttsRoleEnabled') ttsRoleEnabled: boolean = false;
+  @StorageLink('ttsRoleProvider') ttsRoleProvider: string = 'zhipu';
+  @StorageLink('ttsRoleBaseUrl') ttsRoleBaseUrl: string = '';
+  @StorageLink('ttsRoleModel') ttsRoleModel: string = '';
+  @StorageLink('ttsRoleApiKey') ttsRoleApiKey: string = '';
+  @StorageLink('ttsRoleVoiceMap') ttsRoleVoiceMap: string = '{}';
   @StorageLink('launchShortcutNonce') @Watch('onLaunchShortcutChanged') launchShortcutNonce: number = 0;
   @StorageLink('fullTextCacheCancelNonce') @Watch('onFullTextCacheCancelNonceChanged') fullTextCacheCancelNonce: number = 0;
   @State ttsVoices: TtsVoiceOption[] = [ReadBookPage.defaultTtsVoice()];
@@ -13598,6 +13614,11 @@ struct ReadBookPage {
         return;
       }
       this.publishTtsFloatingSession();
+      if (this.ttsRoleEnabled && (this.ttsRoleApiKey || '').trim().length > 0) {
+        await this.startRoleTtsReading(text, token, focusGeneration, focusChapterIndex,
+          focusSourceIdentity, showToast);
+        return;
+      }
       await this.ttsReader.start(text, {
         onFinished: () => {
           this.continueTtsReading(token).catch((e: Error) => {
@@ -13663,6 +13684,179 @@ struct ReadBookPage {
     }
   }
 
+  /** 分角色朗读：调用云端 LLM 标注当前章文本，然后按段链式朗读（每段携带角色音色）。 */
+  private async startRoleTtsReading(text: string, token: number, focusGeneration: number,
+    focusChapterIndex: number, focusSourceIdentity: string, showToast: boolean): Promise<void> {
+    if (this.roleTtsRunning) {
+      return;
+    }
+    const apiKey = (this.ttsRoleApiKey || '').trim();
+    if (!apiKey) {
+      this.finishTtsReading();
+      promptAction.showToast({ message: '请先在朗读设置中填写角色朗读 API Key' });
+      return;
+    }
+    this.isTtsSpeaking = true;
+    promptAction.showToast({ message: '正在标注角色…' });
+    let result: RoleTagResult;
+    try {
+      const options: RoleTaggerOptions = {
+        provider: this.ttsRoleProvider || RoleTagger.PROVIDER_ZHIPU,
+        baseUrl: this.ttsRoleBaseUrl,
+        model: this.ttsRoleModel,
+        apiKey: apiKey
+      };
+      result = await RoleTagger.tag(text, options);
+    } catch (error) {
+      console.warn('角色标注失败:', error);
+      if (token === this.ttsReadToken) {
+        this.finishTtsReading();
+        promptAction.showToast({ message: '角色标注失败，已停止朗读' });
+      }
+      return;
+    }
+    if (token !== this.ttsReadToken) {
+      return;
+    }
+    const map = await this.resolveRoleVoiceMap(result);
+    this.persistRoleVoiceMap(map);
+    const items = this.buildRoleTtsItems(result, map);
+    if (items.length === 0) {
+      this.finishTtsReading();
+      promptAction.showToast({ message: '角色标注结果为空' });
+      return;
+    }
+    if (showToast && token === this.ttsReadToken) {
+      promptAction.showToast({ message: '开始连续朗读（分角色）' });
+    }
+    this.roleTtsRunning = true;
+    this.roleTtsDriver = new RoleTtsDriver();
+    this.roleTtsDriver.start(items, {
+      onSegmentStart: (item: RoleTtsPlayItem, index: number, total: number) => {
+        // 预留：可在此接逐段高亮/浮窗进度
+      },
+      onAllFinished: () => {
+        this.roleTtsRunning = false;
+        if (token === this.ttsReadToken) {
+          this.continueTtsReading(token).catch((e: Error) => {
+            console.warn('连续朗读续播失败:', e);
+            if (token === this.ttsReadToken) {
+              this.finishTtsReading();
+            }
+          });
+        }
+      },
+      onError: (message: string) => {
+        this.roleTtsRunning = false;
+        if (token === this.ttsReadToken) {
+          this.finishTtsReading();
+          promptAction.showToast({ message: message });
+        }
+      }
+    }, (item: RoleTtsPlayItem, done: () => void, fail: (message: string) => void) => {
+      this.ttsReader.start(item.text, {
+        onFinished: done,
+        onSpeechless: done,
+        onError: (message: string) => fail(message),
+        person: item.person,
+        online: this.ttsOnline,
+        style: this.ttsStyle,
+        language: this.ttsLanguage,
+        speed: this.ttsSpeed,
+        keepAudioOutputOnFinish: true
+      }).catch((e: Error) => {
+        fail(String(e && e.message ? e.message : e));
+      });
+    });
+  }
+
+  private parseRoleVoiceMap(): Record<string, RoleVoiceEntry> {
+    try {
+      const raw = (this.ttsRoleVoiceMap || '{}').trim();
+      if (!raw) {
+        return {};
+      }
+      return JSON.parse(raw) as Record<string, RoleVoiceEntry>;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  private persistRoleVoiceMap(map: Record<string, RoleVoiceEntry>): void {
+    try {
+      const json = JSON.stringify(map);
+      AppStorage.setOrCreate('ttsRoleVoiceMap', json);
+      this.ttsRoleVoiceMap = json;
+    } catch (_) {
+    }
+  }
+
+  private async resolveRoleVoiceMap(result: RoleTagResult): Promise<Record<string, RoleVoiceEntry>> {
+    const map = this.parseRoleVoiceMap();
+    const needAuto: string[] = [];
+    for (const role of result.roles) {
+      if (role.name === RoleTagger.NARRATOR || map[role.name]) {
+        continue;
+      }
+      needAuto.push(role.name);
+    }
+    if (needAuto.length === 0) {
+      return map;
+    }
+    let voices: TtsVoiceOption[] = [];
+    try {
+      voices = await SystemTtsReader.listAvailableVoices();
+    } catch (_) {
+      voices = [];
+    }
+    const candidates = voices.filter((v: TtsVoiceOption) =>
+      v.available && !v.downloadable && (v.language || 'zh-CN').toLowerCase().indexOf('zh') === 0);
+    for (const name of needAuto) {
+      const roleDef = result.roles.find((r) => r.name === name);
+      const gender = roleDef ? (roleDef.gender || 'unknown').toLowerCase() : 'unknown';
+      let chosen: TtsVoiceOption | null = null;
+      if (gender.indexOf('female') === 0) {
+        chosen = candidates.find((v) => {
+          const g = (v.gender || '').toLowerCase();
+          return g.indexOf('female') === 0;
+        }) || null;
+      } else if (gender.indexOf('male') === 0) {
+        chosen = candidates.find((v) => {
+          const g = (v.gender || '').toLowerCase();
+          return g.indexOf('male') === 0 && g.indexOf('female') !== 0;
+        }) || null;
+      }
+      map[name] = chosen ? { p: chosen.id, n: chosen.name } : { p: this.ttsPerson, n: '默认音色' };
+    }
+    return map;
+  }
+
+  private buildRoleTtsItems(result: RoleTagResult,
+    map: Record<string, RoleVoiceEntry>): RoleTtsPlayItem[] {
+    const items: RoleTtsPlayItem[] = [];
+    let offset = 0;
+    for (const seg of result.segments) {
+      let person = this.ttsPerson;
+      if (seg.role !== RoleTagger.NARRATOR) {
+        const entry = map[seg.role];
+        if (entry) {
+          person = entry.p;
+        }
+      }
+      items.push({ role: seg.role, text: seg.text, sourceStart: offset, person: person });
+      offset += seg.text.length;
+    }
+    return items;
+  }
+
+  private stopRoleTtsReading(): void {
+    if (this.roleTtsDriver) {
+      this.roleTtsDriver.stop();
+      this.roleTtsDriver = null;
+    }
+    this.roleTtsRunning = false;
+  }
+
   /** Return the last source position that can belong to an audible TTS chunk. */
   ttsSpeechTextEnd(text: string): number {
     const source = text || '';
@@ -13705,6 +13899,7 @@ struct ReadBookPage {
       this.setTtsPagedScrollOverride(false);
       return;
     }
+    this.stopRoleTtsReading();
     this.ttsReader.stop();
     this.isTtsSpeaking = false;
     this.updateVolumeKeySubscription();
@@ -13730,6 +13925,7 @@ struct ReadBookPage {
     this.ttsReadingExpectedSourceEnd = -1;
     this.ttsChapterCompletionRetryCount = 0;
     this.ttsPageTurnSerial++;
+    this.stopRoleTtsReading();
     this.ttsReader.stop();
     this.isTtsSpeaking = false;
     this.clearTtsHighlight();
@@ -13987,6 +14183,7 @@ struct ReadBookPage {
     ReaderTtsFloatingSession.clear(this.ttsFloatingSessionOwnerId);
     this.updateVolumeKeySubscription();
     this.ttsMediaControlsExpanded = false;
+    this.stopRoleTtsReading();
     this.ttsReader.stop();
     this.invalidateTtsFocusSession();
     this.stopTtsBackgroundRunning();

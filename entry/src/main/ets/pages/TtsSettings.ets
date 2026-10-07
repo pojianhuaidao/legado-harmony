@@ -7,6 +7,13 @@ import { AdaptiveIconButton } from '../components/AdaptiveIconButton';
 import { TtsSettings, TtsSettingsStore } from '../utils/TtsSettingsStore';
 import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
+import { RoleTagger } from '../utils/RoleTagger';
+
+/** 角色音色映射条目（与 ReadBook.ets 内定义一致）：p 为 TTS 音色 person id，n 为音色显示名。 */
+interface RoleTtsVoiceEntry {
+  p: number;
+  n: string;
+}
 
 @Entry
 @Component
@@ -17,6 +24,12 @@ struct TtsSettingsPage {
   @StorageLink('ttsLanguage') ttsLanguage: string = 'zh-CN';
   @StorageLink('ttsSpeed') ttsSpeed: number = 1;
   @StorageLink('ttsInstalledVoiceKeys') ttsInstalledVoiceKeys: string = '';
+  @StorageLink('ttsRoleEnabled') ttsRoleEnabled: boolean = false;
+  @StorageLink('ttsRoleProvider') ttsRoleProvider: string = 'zhipu';
+  @StorageLink('ttsRoleBaseUrl') ttsRoleBaseUrl: string = '';
+  @StorageLink('ttsRoleModel') ttsRoleModel: string = '';
+  @StorageLink('ttsRoleApiKey') ttsRoleApiKey: string = '';
+  @StorageLink('ttsRoleVoiceMap') ttsRoleVoiceMap: string = '{}';
   @StorageLink('appDarkMode') appDarkMode: boolean = false;
   @StorageLink('themeRevision') themeRevision: number = 0;
   @StorageLink('appLightAccentColor') appLightAccentColor: string = '#007DFF';
@@ -35,6 +48,9 @@ struct TtsSettingsPage {
   @State downloadingVoiceKey: string = '';
   @State downloadProgressText: string = '';
   @State showVoiceDropdown: boolean = false;
+  @State showRoleMapSheet: boolean = false;
+  @State rolePickTarget: string = '';
+  @State roleMapDraftJson: string = '{}';
   private speedSaveTimerId: number = -1;
   private context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
 
@@ -134,6 +150,117 @@ struct TtsSettingsPage {
           .clip(true)
           .backgroundColor(this.cardColor())
 
+          this.sectionTitle('分角色朗读')
+          Column({ space: 12 }) {
+            Row() {
+              Text('启用分角色朗读')
+                .fontSize(16)
+                .fontColor(this.primaryTextColor())
+                .layoutWeight(1)
+              Toggle({ type: ToggleType.Switch, isOn: this.ttsRoleEnabled })
+                .selectedColor(this.accentColor())
+                .onChange((on: boolean) => {
+                  this.ttsRoleEnabled = on;
+                  this.saveSettings();
+                })
+            }
+            .width('100%')
+
+            if (this.ttsRoleEnabled) {
+              Row() {
+                Text('服务厂商')
+                  .fontSize(15)
+                  .fontColor(this.primaryTextColor())
+                  .layoutWeight(1)
+                Text(this.roleProviderLabel())
+                  .fontSize(14)
+                  .fontColor(this.subTextColor())
+                SymbolGlyph($r('sys.symbol.chevron_right'))
+                  .fontSize(14)
+                  .fontColor([this.subTextColor()])
+                  .width(14)
+              }
+              .width('100%')
+              .onClick(() => {
+                this.showRoleProviderPicker();
+              })
+
+              Row() {
+                Text('接口地址')
+                  .fontSize(15)
+                  .fontColor(this.primaryTextColor())
+                  .width(72)
+                TextInput({ placeholder: '留空使用厂商默认', text: this.ttsRoleBaseUrl })
+                  .layoutWeight(1)
+                  .height(38)
+                  .fontSize(14)
+                  .fontColor(this.primaryTextColor())
+                  .backgroundColor(this.inputColor())
+                  .borderRadius(8)
+                  .onChange((value: string) => {
+                    this.ttsRoleBaseUrl = value.trim();
+                  })
+              }
+              .width('100%')
+
+              Row() {
+                Text('模型')
+                  .fontSize(15)
+                  .fontColor(this.primaryTextColor())
+                  .width(72)
+                TextInput({ placeholder: '留空使用厂商默认', text: this.ttsRoleModel })
+                  .layoutWeight(1)
+                  .height(38)
+                  .fontSize(14)
+                  .fontColor(this.primaryTextColor())
+                  .backgroundColor(this.inputColor())
+                  .borderRadius(8)
+                  .onChange((value: string) => {
+                    this.ttsRoleModel = value.trim();
+                  })
+              }
+              .width('100%')
+
+              Row() {
+                Text('API Key')
+                  .fontSize(15)
+                  .fontColor(this.primaryTextColor())
+                  .width(72)
+                TextInput({ placeholder: '必填，用于调用标注接口', text: this.ttsRoleApiKey })
+                  .layoutWeight(1)
+                  .height(38)
+                  .fontSize(14)
+                  .fontColor(this.primaryTextColor())
+                  .backgroundColor(this.inputColor())
+                  .borderRadius(8)
+                  .type(InputType.Password)
+                  .onChange((value: string) => {
+                    this.ttsRoleApiKey = value.trim();
+                  })
+              }
+              .width('100%')
+
+              Button('角色音色映射')
+                .width('100%')
+                .height(40)
+                .backgroundColor(this.buttonColor())
+                .fontColor('#FFFFFF')
+                .onClick(() => {
+                  this.openRoleMapSheet();
+                })
+              Text('旁白沿用当前音色；其余角色自动按性别分配，可在此手动调整。')
+                .fontSize(12)
+                .fontColor(this.subTextColor())
+                .width('100%')
+            }
+          }
+          .width('calc(100% - 24vp)')
+          .padding(16)
+          .margin({ left: 12, right: 12 })
+          .borderRadius(16)
+          .clip(true)
+          .backgroundColor(this.cardColor())
+
           }
           .width('100%')
           .padding({ top: 56 + this.statusBarHeight, bottom: this.navBarHeight + 32 })
@@ -147,6 +274,13 @@ struct TtsSettingsPage {
 
       if (this.showVoiceDropdown) {
         this.voiceDropdownMenu()
+      }
+
+      if (this.showRoleMapSheet) {
+        this.roleMapSheetBuilder()
+        if (this.rolePickTarget.length > 0) {
+          this.roleMapVoicePicker()
+        }
       }
     }
     .width('100%')
@@ -335,6 +469,12 @@ struct TtsSettingsPage {
     this.ttsLanguage = settings.language;
     this.ttsSpeed = settings.speed;
     this.ttsInstalledVoiceKeys = settings.installedVoiceKeys;
+    this.ttsRoleEnabled = settings.roleTtsEnabled;
+    this.ttsRoleProvider = settings.roleTtsProvider || 'zhipu';
+    this.ttsRoleBaseUrl = settings.roleTtsBaseUrl || '';
+    this.ttsRoleModel = settings.roleTtsModel || '';
+    this.ttsRoleApiKey = settings.roleTtsApiKey || '';
+    this.ttsRoleVoiceMap = settings.roleVoiceMap || '{}';
   }
 
   currentSettings(): TtsSettings {
@@ -345,6 +485,12 @@ struct TtsSettingsPage {
     settings.language = this.ttsLanguage;
     settings.speed = this.ttsSpeed;
     settings.installedVoiceKeys = this.ttsInstalledVoiceKeys;
+    settings.roleTtsEnabled = this.ttsRoleEnabled;
+    settings.roleTtsProvider = this.ttsRoleProvider || 'zhipu';
+    settings.roleTtsBaseUrl = this.ttsRoleBaseUrl || '';
+    settings.roleTtsModel = this.ttsRoleModel || '';
+    settings.roleTtsApiKey = this.ttsRoleApiKey || '';
+    settings.roleVoiceMap = this.ttsRoleVoiceMap || '{}';
     return settings;
   }
 
@@ -807,6 +953,208 @@ struct TtsSettingsPage {
       this.speedSaveTimerId = -1;
       this.saveSettings();
     }
+  }
+
+  roleProviderLabel(): string {
+    const p = RoleTagger.PROVIDERS[this.ttsRoleProvider];
+    return p ? p.label : (this.ttsRoleProvider || 'zhipu');
+  }
+
+  showRoleProviderPicker(): void {
+    ActionSheet.show({
+      title: '选择服务厂商',
+      message: '均为 OpenAI 兼容接口，阿里/小米等端口已预留',
+      confirm: { value: '取消', action: () => { } },
+      sheets: [
+        { title: '智谱', action: () => { this.setRoleProvider('zhipu'); } },
+        { title: '阿里百炼', action: () => { this.setRoleProvider('aliyun'); } },
+        { title: '小米', action: () => { this.setRoleProvider('xiaomi'); } },
+        { title: 'DeepSeek', action: () => { this.setRoleProvider('deepseek'); } },
+        { title: '硅基流动', action: () => { this.setRoleProvider('siliconflow'); } }
+      ]
+    });
+  }
+
+  setRoleProvider(provider: string): void {
+    this.ttsRoleProvider = provider;
+    this.saveSettings();
+    const p = RoleTagger.PROVIDERS[provider];
+    promptAction.showToast({ message: '已切换到' + (p ? p.label : provider) });
+  }
+
+  openRoleMapSheet(): void {
+    this.roleMapDraftJson = this.ttsRoleVoiceMap || '{}';
+    this.rolePickTarget = '';
+    this.showRoleMapSheet = true;
+  }
+
+  closeRoleMapSheet(): void {
+    this.showRoleMapSheet = false;
+    this.rolePickTarget = '';
+  }
+
+  parseRoleVoiceMap(): Record<string, RoleTtsVoiceEntry> {
+    try {
+      const raw = (this.roleMapDraftJson || '{}').trim();
+      if (!raw) {
+        return {};
+      }
+      return JSON.parse(raw) as Record<string, RoleTtsVoiceEntry>;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  roleMapRoleNames(): string[] {
+    return Object.keys(this.parseRoleVoiceMap());
+  }
+
+  roleVoiceTitle(entry: RoleTtsVoiceEntry | undefined): string {
+    if (!entry || !entry.n) {
+      return '默认音色';
+    }
+    return entry.n;
+  }
+
+  selectRoleVoice(name: string, voice: TtsVoiceOption): void {
+    const map = this.parseRoleVoiceMap();
+    map[name] = { p: voice.id, n: this.voiceTitle(voice) };
+    this.roleMapDraftJson = JSON.stringify(map);
+    this.rolePickTarget = '';
+    this.persistRoleMap(map);
+  }
+
+  persistRoleMap(map?: Record<string, RoleTtsVoiceEntry>): void {
+    try {
+      const json = JSON.stringify(map ? map : this.parseRoleVoiceMap());
+      AppStorage.setOrCreate('ttsRoleVoiceMap', json);
+      this.ttsRoleVoiceMap = json;
+      this.saveSettings();
+    } catch (_) {
+    }
+  }
+
+  @Builder
+  roleMapSheetBuilder() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .onClick(() => {
+          this.closeRoleMapSheet();
+        })
+
+      Column() {
+        Row() {
+          Text('角色音色映射')
+            .fontSize(16)
+            .fontColor(this.primaryTextColor())
+            .layoutWeight(1)
+          Text('完成')
+            .fontSize(14)
+            .fontColor(this.accentColor())
+            .onClick(() => {
+              this.closeRoleMapSheet();
+            })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 14, bottom: 8 })
+
+        if (this.roleMapRoleNames().length === 0) {
+          Text('暂无角色，朗读时会按性别自动分配音色')
+            .fontSize(13)
+            .fontColor(this.subTextColor())
+            .padding({ left: 16, right: 16, bottom: 16 })
+        } else {
+          ForEach(this.roleMapRoleNames(), (name: string) => {
+            Row() {
+              Text(name)
+                .fontSize(15)
+                .fontColor(this.primaryTextColor())
+                .layoutWeight(1)
+              Text(this.roleVoiceTitle(this.parseRoleVoiceMap()[name]))
+                .fontSize(13)
+                .fontColor(this.subTextColor())
+              SymbolGlyph($r('sys.symbol.chevron_right'))
+                .fontSize(13)
+                .fontColor([this.subTextColor()])
+                .width(13)
+            }
+            .width('100%')
+            .height(44)
+            .padding({ left: 16, right: 16 })
+            .onClick(() => {
+              this.rolePickTarget = name;
+            })
+          }, (name: string) => name)
+        }
+      }
+      .width('calc(100% - 24vp)')
+      .constraintSize({ maxWidth: 560 })
+      .padding({ top: 6, bottom: 12 })
+      .backgroundColor(this.cardColor())
+      .borderRadius(16)
+      .border({ width: 1, color: this.appDarkMode ? '#3A3A3C' : '#E5E5EA' })
+      .position({ x: 12, y: this.statusBarHeight + 120 })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  roleMapVoicePicker() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .onClick(() => {
+          this.rolePickTarget = '';
+        })
+
+      Column() {
+        Text(`${this.rolePickTarget} 音色`)
+          .fontSize(15)
+          .fontColor(this.primaryTextColor())
+          .padding({ left: 16, right: 16, top: 14, bottom: 8 })
+        Scroll() {
+          Column() {
+            ForEach(this.voices, (voice: TtsVoiceOption) => {
+              Row() {
+                Text(this.voiceTitle(voice))
+                  .fontSize(15)
+                  .fontColor(this.primaryTextColor())
+                  .layoutWeight(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                if (this.roleVoiceTitle(this.parseRoleVoiceMap()[this.rolePickTarget]) === this.voiceTitle(voice)) {
+                  Text('当前')
+                    .fontSize(12)
+                    .fontColor(this.accentColor())
+                }
+              }
+              .width('100%')
+              .height(44)
+              .padding({ left: 16, right: 16 })
+              .onClick(() => {
+                this.selectRoleVoice(this.rolePickTarget, voice);
+              })
+            }, (voice: TtsVoiceOption) => this.voiceKey(voice))
+          }
+          .width('100%')
+        }
+        .constraintSize({ maxHeight: 380 })
+        .width('100%')
+      }
+      .width('calc(100% - 24vp)')
+      .constraintSize({ maxWidth: 560 })
+      .padding({ bottom: 8 })
+      .backgroundColor(this.cardColor())
+      .borderRadius(16)
+      .border({ width: 1, color: this.appDarkMode ? '#3A3A3C' : '#E5E5EA' })
+      .position({ x: 12, y: this.statusBarHeight + 120 })
+    }
+    .width('100%')
+    .height('100%')
   }
 
 }
