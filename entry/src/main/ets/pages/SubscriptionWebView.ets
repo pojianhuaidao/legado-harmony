@@ -38,6 +38,7 @@ struct WebMenuDialog {
   onCopyUrl: () => void = () => {}
   onOpenBrowser: () => void = () => {}
   onOpenUa: () => void = () => {}
+  onRename: () => void = () => {}
   primaryTextColor: string = '#000000'
   cardColor: string = '#FFFFFF'
 
@@ -57,6 +58,11 @@ struct WebMenuDialog {
         this.menuRow('系统浏览器打开', () => {
           this.controller?.close()
           this.onOpenBrowser()
+        })
+        Divider().color('#1A000000').margin({ left: 20, right: 20 })
+        this.menuRow('修改收藏名', () => {
+          this.controller?.close()
+          this.onRename()
         })
         Divider().color('#1A000000').margin({ left: 20, right: 20 })
         this.menuRow('UA 设置', () => {
@@ -180,6 +186,8 @@ struct SubscriptionWebViewPage {
   @State progress: number = 0;
   @State canGoBack: boolean = false;
   @State isCollected: boolean = false;
+  @State showRenameDialog: boolean = false;
+  @State renameSourceName: string = '';
   private mainFrameLoaded: boolean = false;
   private pendingMainFrameError: string = '';
   private lastErrorNotifiedUrl: string = '';
@@ -200,6 +208,9 @@ struct SubscriptionWebViewPage {
       },
       onOpenUa: (): void => {
         this.uaSetupDialog?.open();
+      },
+      onRename: (): void => {
+        this.openRenameDialog();
       }
     }),
     autoCancel: true,
@@ -350,6 +361,53 @@ struct SubscriptionWebViewPage {
     AppStorage.setOrCreate('rssSourcesVersion', version + 1);
   }
 
+  openRenameDialog(): void {
+    if (!this.isCollected) {
+      promptAction.showToast({ message: '请先收藏该页面' });
+      return;
+    }
+    AppDatabase.getInstance().getRssSourcesByUrl(this.sourceUrl).then((item: rssSources | null) => {
+      if (!item) {
+        promptAction.showToast({ message: '收藏不存在或已变更' });
+        return;
+      }
+      this.renameSourceName = item.sourceName;
+      this.showRenameDialog = true;
+    }).catch(() => {
+      promptAction.showToast({ message: '操作失败' });
+    });
+  }
+
+  confirmRenameSource(): void {
+    const name = this.renameSourceName.trim();
+    if (name.length === 0) {
+      promptAction.showToast({ message: '请输入收藏名' });
+      return;
+    }
+    AppDatabase.getInstance().getRssSourcesByUrl(this.sourceUrl).then((item: rssSources | null) => {
+      if (!item) {
+        this.showRenameDialog = false;
+        promptAction.showToast({ message: '收藏不存在或已变更' });
+        return null;
+      }
+      item.sourceName = name;
+      item.customizeTitle = name;
+      return AppDatabase.getInstance().updateRssSource(item);
+    }).then((ok: boolean | null) => {
+      this.showRenameDialog = false;
+      if (ok) {
+        this.sourceName = name;
+        this.notifyListRefresh();
+        promptAction.showToast({ message: '已修改收藏名' });
+      } else {
+        promptAction.showToast({ message: '修改失败' });
+      }
+    }).catch(() => {
+      this.showRenameDialog = false;
+      promptAction.showToast({ message: '修改失败' });
+    });
+  }
+
   injectCssHideScript(url: string): void {
     if (!this.adBlockEnabled) {
       return;
@@ -386,7 +444,8 @@ struct SubscriptionWebViewPage {
   }
 
   build() {
-    Column() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
       Row() {
         ImmersiveBackButton({
           iconColor: this.primaryTextColor(),
@@ -538,6 +597,57 @@ struct SubscriptionWebViewPage {
             promptAction.showToast({ message: message });
           }, 900);
         })
+      }
+
+      if (this.showRenameDialog) {
+        Column() {
+          Text('修改收藏名')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.primaryTextColor())
+            .width('100%')
+            .textAlign(TextAlign.Center)
+
+          TextInput({ placeholder: '请输入收藏名', text: this.renameSourceName })
+            .width('100%')
+            .height(44)
+            .fontSize(15)
+            .fontColor(this.primaryTextColor())
+            .placeholderColor(this.subTextColor())
+            .backgroundColor(this.cardColor())
+            .borderRadius(10)
+            .margin({ top: 16 })
+            .onChange((value: string) => {
+              this.renameSourceName = value;
+            })
+
+          Row({ space: 12 }) {
+            Button('取消')
+              .layoutWeight(1)
+              .height(40)
+              .fontSize(15)
+              .backgroundColor(this.subTextColor())
+              .opacity(0.2)
+              .fontColor(this.primaryTextColor())
+              .onClick(() => {
+                this.showRenameDialog = false;
+              })
+            Button('确认')
+              .layoutWeight(1)
+              .height(40)
+              .fontSize(15)
+              .backgroundColor(this.accentColor())
+              .fontColor('#FFFFFF')
+              .onClick(() => this.confirmRenameSource())
+          }
+          .width('100%')
+          .margin({ top: 16 })
+        }
+        .width('86%')
+        .padding(20)
+        .borderRadius(16)
+        .backgroundColor(this.cardColor())
+      }
     }
     .width('100%')
     .height('100%')

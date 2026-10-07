@@ -1,4 +1,5 @@
 import { router, promptAction } from '@kit.ArkUI';
+import { AppDatabase } from '../model/data/AppDatabase';
 import { syncSystemBars } from '../utils/SystemBars';
 import { SearchExploreSettings, SearchExploreSettingsStore } from '../utils/SearchExploreSettingsStore';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
@@ -133,6 +134,16 @@ struct SearchExploreSettingsPage {
           .clip(true)
           .backgroundColor(this.cardColor())
 
+          this.sectionTitle('访问记录')
+          Column() {
+            this.deleteVisitRecordsItem()
+          }
+          .width('calc(100% - 24vp)')
+          .margin({ left: 12, right: 12 })
+          .borderRadius(16)
+          .clip(true)
+          .backgroundColor(this.cardColor())
+
         }
         .width('100%')
         .padding({ top: 56 + this.statusBarHeight, bottom: 32 + this.navBarHeight })
@@ -251,7 +262,7 @@ struct SearchExploreSettingsPage {
       ImmersiveBackButton({ iconColor: this.primaryTextColor(), darkMode: this.appDarkMode,
         buttonSize: 40, containerWidth: 56, materialScale: 0.83, compactLayout: true,
         onBack: () => router.back() })
-      Text('搜索/发现配置')
+      Text('源设置')
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.primaryTextColor())
@@ -419,4 +430,60 @@ struct SearchExploreSettingsPage {
     })
   }
 
+  @Builder
+  deleteVisitRecordsItem() {
+    Row() {
+      Text('删除访问记录')
+        .fontSize(16)
+        .fontColor(this.accentColor())
+        .layoutWeight(1)
+      Text('清空订阅源的最近使用记录')
+        .fontSize(12)
+        .fontColor(this.subTextColor())
+        .margin({ right: 8 })
+    }
+    .width('calc(100% - 32vp)')
+    .constraintSize({ minHeight: 64 })
+    .padding({ left: 0, right: 0, top: 12, bottom: 12 })
+    .margin({ left: 16, right: 16 })
+    .backgroundColor(Color.Transparent)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.confirmDeleteVisitRecords();
+    })
+  }
+
+  confirmDeleteVisitRecords(): void {
+    promptAction.showDialog({
+      title: '删除访问记录',
+      message: '确定清空订阅源的全部最近使用记录吗？',
+      buttons: [
+        { text: '取消', color: this.subTextColor() },
+        { text: '删除', color: this.accentColor() }
+      ]
+    }).then((result: promptAction.ShowDialogSuccessResponse) => {
+      if (result.index === 1) {
+        this.deleteVisitRecords();
+      }
+    }).catch(() => {
+    });
+  }
+
+  deleteVisitRecords(): void {
+    AppDatabase.getInstance().clearRssSourcesHistory().then((ok: boolean) => {
+      if (ok) {
+        const version = AppStorage.get<number>('rssSourcesVersion') ?? 0;
+        AppStorage.setOrCreate('rssSourcesVersion', version + 1);
+        promptAction.showToast({ message: '已清空访问记录' });
+      } else {
+        promptAction.showToast({ message: '操作失败' });
+      }
+    }).catch(() => {
+      promptAction.showToast({ message: '操作失败' });
+    });
+  }
+
+  accentColor(): string {
+    return ThemeRuntime.accentColor(this.appDarkMode);
+  }
 }

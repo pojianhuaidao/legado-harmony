@@ -11,6 +11,7 @@ import { GlassSettingsStore } from '../utils/GlassSettingsStore';
 import { AppThemeModeStore } from '../utils/AppThemeModeStore';
 import { AppIconSettingsStore } from '../utils/AppIconSettingsStore';
 import { ReaderFontBootstrap } from '../utils/ReaderFontBootstrap';
+import { BuiltinFontManager } from '../utils/BuiltinFontManager';
 import { ReaderSystemFontHelper } from '../utils/ReaderSystemFontHelper';
 import { TtsSettingsStore } from '../utils/TtsSettingsStore';
 import { ReaderProgressCheckpoint } from '../utils/ReaderProgressCheckpoint';
@@ -265,6 +266,7 @@ export default class EntryAbility extends UIAbility {
         hilog.warn(0x0000, 'QuickJS', 'Migration initialization failed: %{public}s', error.message);
       });
       this.readerBootstrapPromise
+        .then((): Promise<void> => BuiltinFontManager.ensure(this.context))
         .then(() => ReaderFontBootstrap.registerFromSettings(
           this.context, null, 'ability-after-first-content'))
         .catch((e: Error) => {

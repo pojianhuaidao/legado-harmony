@@ -1,4 +1,4 @@
-import { bundleManager } from '@kit.AbilityKit';
+import { bundleManager, common, Want } from '@kit.AbilityKit';
 import { promptAction, router } from '@kit.ArkUI';
 import { syncSystemBars } from '../utils/SystemBars';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
@@ -58,8 +58,10 @@ struct AboutPage {
 
           this.licenseCard()
 
+          this.releaseCard()
+
           this.infoCard('致谢',
-            '感谢 @南破万卷墙 @一个人吃二二 @jueyaocaptain @茶安安安 @相思界 @一程 @奔四老男人 为App开发提出的建议和支持。')
+            '感谢 开源轻页 提供开源代码。')
 
           Column() {
             Text('请仅使用自有、授权或明确允许访问的内容与规则。')
@@ -162,6 +164,45 @@ struct AboutPage {
     .onClick(() => {
       router.pushUrl({ url: 'pages/OpenSourceLicenses' });
     })
+  }
+
+  @Builder
+  releaseCard() {
+    Column() {
+      Text('项目地址')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.primaryTextColor())
+        .width('100%')
+      Text('https://github.com/pojianhuaidao/legado3-harmony/releases')
+        .fontSize(14)
+        .fontColor(this.accentColor())
+        .lineHeight(22)
+        .width('100%')
+        .margin({ top: 8 })
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor(this.cardColor())
+    .borderRadius(10)
+    .margin({ left: 16, right: 16, bottom: 12 })
+    .alignItems(HorizontalAlign.Start)
+    .onClick(() => {
+      this.openReleases();
+    })
+  }
+
+  openReleases(): void {
+    const ctx = getContext(this) as common.UIAbilityContext;
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      entities: ['entity.system.browsable'],
+      uri: 'https://github.com/pojianhuaidao/legado3-harmony/releases'
+    };
+    ctx.startAbility(want).then(() => {
+    }).catch(() => {
+      promptAction.showToast({ message: '打开浏览器失败' });
+    });
   }
 
   cardColor(): string {

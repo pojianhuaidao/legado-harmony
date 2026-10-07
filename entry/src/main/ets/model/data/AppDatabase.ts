@@ -2755,6 +2755,19 @@ export class AppDatabase {
       return false;
     }
   }
+
+  // 清空全部订阅源访问记录
+  async clearRssSourcesHistory(): Promise<boolean> {
+    if (!this.store) return false;
+    try {
+      const predicates = new relationalStore.RdbPredicates('rss_sources_history');
+      await this.store.delete(predicates);
+      return true;
+    } catch (e) {
+      console.error('清空订阅源访问记录失败', e);
+      return false;
+    }
+  }
 }
 
 export const appDb = AppDatabase.getInstance();

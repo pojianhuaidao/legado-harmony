@@ -11533,21 +11533,36 @@ struct SettingsPage {
             .height(56 + this.statusBarHeight)
 
           Column() {
-            this.menuItem($r('sys.symbol.externaldrive'), '书源管理', true, () => {
-              router.pushUrl({ url: 'pages/BookSource' });
-            })
-            this.menuItem($r('sys.symbol.book'), '阅读设置', true, () => {
-              router.pushUrl({ url: 'pages/Settings' });
-            })
-            this.menuItem($r('sys.symbol.speaker_wave_3'), '朗读设置', true, () => {
-              router.pushUrl({ url: 'pages/TtsSettings' });
-            })
-            this.menuItem($r('sys.symbol.bookshelf'), '书架设置', true, () => {
-              router.pushUrl({ url: 'pages/BookshelfSettings' });
-            })
-            this.menuItem($r('sys.symbol.magnifyingglass'), '搜索/发现配置', true, () => {
-              router.pushUrl({ url: 'pages/SearchExploreSettings' });
-            })
+            Row({ space: 12 }) {
+              this.gridItem($r('sys.symbol.externaldrive'), '书源管理', () => {
+                router.pushUrl({ url: 'pages/BookSource' });
+              })
+              this.gridItem($r('sys.symbol.book'), '阅读设置', () => {
+                router.pushUrl({ url: 'pages/Settings' });
+              })
+              this.gridItem($r('sys.symbol.speaker_wave_3'), '朗读设置', () => {
+                router.pushUrl({ url: 'pages/TtsSettings' });
+              })
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 16, bottom: 4 })
+
+            Row({ space: 12 }) {
+              this.gridItem($r('sys.symbol.bookshelf'), '书架设置', () => {
+                router.pushUrl({ url: 'pages/BookshelfSettings' });
+              })
+              this.gridItem($r('sys.symbol.magnifyingglass'), '源设置', () => {
+                router.pushUrl({ url: 'pages/SearchExploreSettings' });
+              })
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 4, bottom: 12 })
+
+            Divider()
+              .strokeWidth(0.5)
+              .color(this.dividerColor())
+              .margin({ left: 16, right: 16 })
+
             this.menuItem($r('sys.symbol.circle_lefthalf_inset_filled'), '主题', true, () => {
               router.pushUrl({ url: 'pages/ThemeSettings' });
             })
@@ -11596,6 +11611,30 @@ struct SettingsPage {
     .height('100%')
     .backgroundColor(this.pageColor())
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+  }
+
+  @Builder
+  gridItem(icon: Resource, title: string, onClick: () => void) {
+    Column({ space: 6 }) {
+      SymbolGlyph(icon)
+        .fontSize(26)
+        .fontColor([this.accentColor()])
+        .width(46)
+        .height(46)
+        .backgroundColor(this.buttonBackgroundColor())
+        .borderRadius(13)
+
+      Text(title)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.primaryTextColor())
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .layoutWeight(1)
+    .padding({ top: 16, bottom: 12 })
+    .borderRadius(14)
+    .onClick(onClick)
   }
 
   @Builder
@@ -11652,6 +11691,11 @@ struct SettingsPage {
 
   glassCardColor(): string {
     return ThemeRuntime.cardColor(this.appDarkMode);
+  }
+
+  buttonBackgroundColor(): string {
+    const normalized = AppThemeSettingsStore.normalizeColor(this.accentColor(), AppThemeSettingsStore.DEFAULT_LIGHT_BUTTON_COLOR);
+    return `#${this.appDarkMode ? '33' : '1A'}${normalized.substring(1)}`;
   }
 
   dividerColor(): string {

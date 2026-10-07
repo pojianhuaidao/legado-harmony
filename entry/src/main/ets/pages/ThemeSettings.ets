@@ -140,46 +140,36 @@ struct ThemeSettingsPage {
             .height(this.statusBarHeight + 58)
         }
         ListItem() {
-          this.sectionTitle('默认主题')
-        }
-        ListItem() {
-          this.themeCard(BuiltinThemeRegistry.findById(ThemeIds.PLAIN_DEFAULT))
-        }
-        ListItem() {
-          this.customThemeSectionTitle()
-        }
-        ForEach(this.customSchemes, (scheme: CustomThemeScheme) => {
-          if (deviceInfo.sdkApiVersion >= 26) {
-            HdsListItem({
-              customItemBuilder: () => {
-                this.themeCard(this.customTheme(scheme), scheme.id)
-              },
-              swipeActionOptions: this.themeSwipeActions(scheme)
-            })
-          } else {
-            ListItem() {
-              this.themeCard(this.customTheme(scheme), scheme.id)
-            }
-            .swipeAction({
-              end: {
-                builder: () => {
-                  this.customThemeDeleteSwipeAction(scheme)
-                },
-                actionAreaDistance: 64,
-                onAction: () => this.deleteCustomThemeFromSwipe(scheme)
-              },
-              edgeEffect: SwipeEdgeEffect.Spring
-            })
-          }
-        }, (scheme: CustomThemeScheme) => `${scheme.id}_${scheme.revision}`)
-        ListItem() {
           this.sectionTitle('全部主题')
         }
-        ForEach(this.purchasedThemes(), (theme: ThemePack) => {
+        ForEach(this.gridRows(this.customSchemes), (row: CustomThemeScheme[]) => {
           ListItem() {
-            this.themeCard(theme)
+            Row({ space: 12 }) {
+              ForEach(row, (scheme: CustomThemeScheme) => {
+                this.compactThemeCard(this.customTheme(scheme), scheme.id)
+              }, (scheme: CustomThemeScheme) => `grid_custom_${scheme.id}_${scheme.revision}`)
+              if (row.length === 1) {
+                Column()
+                  .layoutWeight(1)
+              }
+            }
+            .width('100%')
           }
-        }, (theme: ThemePack) => `${theme.id}_${this.accountEntitlementsRevision}`)
+        }, (row: CustomThemeScheme[]) => `grid_custom_row_${row.map((s: CustomThemeScheme) => s.id).join('_')}`)
+        ForEach(this.gridRows(this.purchasedThemes()), (row: ThemePack[]) => {
+          ListItem() {
+            Row({ space: 12 }) {
+              ForEach(row, (theme: ThemePack) => {
+                this.compactThemeCard(theme)
+              }, (theme: ThemePack) => `grid_theme_${theme.id}_${this.accountEntitlementsRevision}`)
+              if (row.length === 1) {
+                Column()
+                  .layoutWeight(1)
+              }
+            }
+            .width('100%')
+          }
+        }, (row: ThemePack[]) => `grid_theme_row_${row.map((t: ThemePack) => t.id).join('_')}_${this.accountEntitlementsRevision}`)
         ListItem() {
           Row() {
           }
@@ -503,7 +493,6 @@ struct ThemeSettingsPage {
         .fontWeight(FontWeight.Bold)
         .fontColor(this.primaryTextColor())
         .layoutWeight(1)
-      this.themeStoreEntryButton()
     }
     .width('100%')
     // The status-bar inset belongs to the pinned title itself, avoiding an
@@ -523,25 +512,6 @@ struct ThemeSettingsPage {
       .fontColor(this.subTextColor())
       .width('100%')
       .padding({ left: 2, top: 6, bottom: 0 })
-  }
-
-  @Builder
-  themeStoreEntryButton() {
-    Row({ space: 5 }) {
-      SymbolGlyph($r('sys.symbol.bag'))
-        .fontSize(14)
-        .fontColor([this.accentColor()])
-      Text('主题商店')
-        .fontSize(12)
-        .fontColor(this.accentColor())
-    }
-    .height(30)
-    .padding({ left: 10, right: 10 })
-    .borderRadius(15)
-    .backgroundColor(ThemeRuntime.inputColor(this.appDarkMode))
-    .alignItems(VerticalAlign.Center)
-    .accessibilityText('打开主题商店')
-    .onClick(() => this.openThemeStore())
   }
 
   /** Full-screen store: one themed showcase page per swipe. */
@@ -1445,6 +1415,83 @@ struct ThemeSettingsPage {
     .alignItems(VerticalAlign.Center)
     .borderRadius(theme.radius.medium)
     .backgroundColor(this.activeVariant(theme).colors.inputColor)
+  }
+
+  gridRows<T>(items: T[]): T[][] {
+    const rows: T[][] = [];
+    for (let i = 0; i < items.length; i += 2) {
+      rows.push(items.slice(i, i + 2));
+    }
+    return rows;
+  }
+
+  @Builder
+  compactThemeCard(theme: ThemePack, customSchemeId: string = '') {
+    Column({ space: 8 }) {
+      Row() {
+        Image(ThemeAssetRegistry.themeLogo(theme.id))
+          .width(46)
+          .height(46)
+          .borderRadius(theme.radius.medium)
+          .objectFit(ImageFit.Contain)
+          .draggable(false)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+
+      Text(theme.name)
+        .fontSize(14)
+        .fontWeight(FontWeight.Bold)
+        .fontFamily(theme.typography.appFontFamily)
+        .fontColor(this.activeVariant(theme).colors.primaryTextColor)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Text(theme.description)
+        .fontSize(10)
+        .fontColor(this.activeVariant(theme).colors.subTextColor)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .height(30)
+
+      if (this.isSelected(theme, customSchemeId)) {
+        Text('已启用')
+          .fontSize(10)
+          .fontColor('#FFFFFF')
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .borderRadius(9)
+          .backgroundColor(this.activeVariant(theme).colors.accentColor)
+      } else if (this.applyingThemeId === (customSchemeId || theme.id)) {
+        Text('应用中')
+          .fontSize(10)
+          .fontColor(this.activeVariant(theme).colors.accentColor)
+      } else {
+        Text('未启用')
+          .fontSize(10)
+          .fontColor(this.activeVariant(theme).colors.subTextColor)
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .borderRadius(9)
+          .backgroundColor(this.activeVariant(theme).colors.inputColor)
+      }
+    }
+    .layoutWeight(1)
+    .padding(12)
+    .alignItems(HorizontalAlign.Center)
+    .borderRadius(theme.radius.card)
+    .backgroundColor(this.activeVariant(theme).colors.cardColor)
+    .border({
+      width: this.isSelected(theme, customSchemeId) ? 2 : 1,
+      color: this.isSelected(theme, customSchemeId) ? this.activeVariant(theme).colors.accentColor :
+        this.activeVariant(theme).colors.dividerColor
+    })
+    .onClick(() => {
+      this.selectTheme(customSchemeId.length > 0 ? ThemeIds.CUSTOM : theme.id, customSchemeId);
+    })
+    .gesture(LongPressGesture().onAction(() => {
+      if (customSchemeId.length > 0) {
+        this.openCustomThemeActions(customSchemeId);
+      }
+    }))
   }
 
   @Builder

@@ -61,6 +61,8 @@ export struct SubscriptionTab {
   @State showHistory: boolean = true;
   @State listVersion: number = 0;
   @State showEditDialog: boolean = false;
+  @State showRenameDialog: boolean = false;
+  @State renameSourceName: string = '';
   @State editSourceId: number = 0;
   @State editSourceUrl: string = '';
   @State editSourceName: string = '';
@@ -486,6 +488,108 @@ export struct SubscriptionTab {
     });
   }
 
+  openRenameDialog(): void {
+    const item = this.menuItemSource();
+    if (!item) {
+      return;
+    }
+    this.renameSourceName = item.sourceName;
+    this.showItemMenu = false;
+    this.showRenameDialog = true;
+  }
+
+  confirmRenameSource(): void {
+    const name = this.renameSourceName.trim();
+    if (name.length === 0) {
+      promptAction.showToast({ message: '请输入收藏名' });
+      return;
+    }
+    const item = this.menuItemSource();
+    if (!item) {
+      promptAction.showToast({ message: '源不存在或已变更' });
+      return;
+    }
+    const upd = item;
+    upd.sourceName = name;
+    AppDatabase.getInstance().updateRssSource(upd).then((ok: boolean) => {
+      this.showRenameDialog = false;
+      if (ok) {
+        this.refresh();
+        promptAction.showToast({ message: '已修改收藏名' });
+      } else {
+        promptAction.showToast({ message: '修改失败' });
+      }
+    }).catch(() => {
+      this.showRenameDialog = false;
+      promptAction.showToast({ message: '修改失败' });
+    });
+  }
+
+  confirmDeleteHistoryItem(sourceUrl: string): void {
+    promptAction.showDialog({
+      title: '删除访问记录',
+      message: '确定删除该条最近使用记录吗？',
+      buttons: [
+        { text: '取消', color: this.secondaryTextColor() },
+        { text: '删除', color: this.accentColor() }
+      ]
+    }).then((result: promptAction.ShowDialogSuccessResponse) => {
+      if (result.index === 1) {
+        this.deleteHistoryItemNow(sourceUrl);
+      }
+    }).catch(() => {
+    });
+  }
+
+  deleteHistoryItemNow(sourceUrl: string): void {
+    AppDatabase.getInstance().deleteRssSourcesHistory(sourceUrl).then((ok: boolean) => {
+      if (ok) {
+        this.refreshHistory();
+        promptAction.showToast({ message: '已删除该条记录' });
+      } else {
+        promptAction.showToast({ message: '删除失败' });
+      }
+    }).catch(() => {
+      promptAction.showToast({ message: '删除失败' });
+    });
+  }
+
+  refreshHistory(): void {
+    AppDatabase.getInstance().getRssSourcesHistory().then((rows: rssSourcesHistory[]) => {
+      this.history = rows;
+    }).catch(() => {
+    });
+  }
+
+  confirmClearHistory(): void {
+    promptAction.showDialog({
+      title: '清空访问记录',
+      message: '确定清空最近使用记录吗？',
+      buttons: [
+        { text: '取消', color: this.secondaryTextColor() },
+        { text: '清空', color: ThemeRuntime.dangerColor(this.appDarkMode) }
+      ]
+    }).then((result: promptAction.ShowDialogSuccessResponse) => {
+      if (result.index === 1) {
+        this.clearHistoryNow();
+      }
+    }).catch(() => {
+    });
+  }
+
+  clearHistoryNow(): void {
+    AppDatabase.getInstance().clearRssSourcesHistory().then((ok: boolean) => {
+      if (ok) {
+        this.history = [];
+        promptAction.showToast({ message: '已清空访问记录' });
+      } else {
+        promptAction.showToast({ message: '清空失败' });
+      }
+    }).catch(() => {
+      promptAction.showToast({ message: '清空失败' });
+    });
+  }
+
   statusBarTop(): number {
     return this.statusBarHeight > 0 ? this.statusBarHeight : this.statusBarHeightProp;
   }
@@ -755,9 +859,20 @@ export struct SubscriptionTab {
             .fontWeight(FontWeight.Medium)
             .fontColor(this.primaryTextColor())
           Blank()
-          SymbolGlyph($r('sys.symbol.chevron_right'))
-            .fontSize(13)
-            .fontColor([this.secondaryTextColor()])
+          Row({ space: 4 }) {
+            SymbolGlyph($r('sys.symbol.trash'))
+              .fontSize(14)
+              .fontColor([this.secondaryTextColor()])
+            Text('清空')
+              .fontSize(13)
+              .fontColor(this.secondaryTextColor())
+          }
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .borderRadius(12)
+          .backgroundColor(this.inputColor())
+          .onClick(() => {
+            this.confirmClearHistory();
+          })
         }
         .width('100%')
 
@@ -784,6 +899,9 @@ export struct SubscriptionTab {
                   .textAlign(TextAlign.Center)
               }
               .onClick(() => this.openHistory(item))
+              .gesture(LongPressGesture().onAction(() => {
+                this.confirmDeleteHistoryItem(item.sourceUrl);
+              }))
             })
           }
         }
@@ -1208,6 +1326,7 @@ export struct SubscriptionTab {
         .width('100%')
         .padding({ left: 16, right: 16, top: 8, bottom: 8 })
 
+      this.sheetItem('修改收藏名', () => this.openRenameDialog())
       this.sheetItem('编辑', () => this.openEditDialog())
       this.sheetItem('移动至分组', () => this.openMoveGroupDialog())
       this.sheetItem('批量管理', () => {
@@ -1439,6 +1558,53 @@ export struct SubscriptionTab {
   }
 
   @Builder
+  renameSourceDialog() {
+    Column({ space: 12 }) {
+      Text('修改收藏名')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.primaryTextColor())
+        .width('100%')
+        .textAlign(TextAlign.Center)
+
+      TextInput({ placeholder: '请输入收藏名', text: this.renameSourceName })
+        .width('100%')
+        .height(44)
+        .fontSize(15)
+        .fontColor(this.primaryTextColor())
+        .placeholderColor(this.placeholderTextColor())
+        .backgroundColor(this.inputColor())
+        .borderRadius(10)
+        .onChange((value: string) => {
+          this.renameSourceName = value;
+        })
+
+      Row({ space: 12 }) {
+        Button('取消')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(15)
+          .backgroundColor(this.inputColor())
+          .fontColor(this.primaryTextColor())
+          .onClick(() => {
+            this.showRenameDialog = false;
+          })
+        Button('确认')
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(15)
+          .backgroundColor(this.accentColor())
+          .fontColor('#FFFFFF')
+          .onClick(() => this.confirmRenameSource())
+      }
+      .width('100%')
+      .margin({ top: 8 })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 20, bottom: 20 })
+  }
+
+  @Builder
   newGroupDialog() {
     Column({ space: 12 }) {
       Text('新建分组')
@@ -1606,6 +1772,16 @@ export struct SubscriptionTab {
       backgroundColor: ThemeRuntime.dropdownPanelColor(this.appDarkMode, '', 'overlay'),
       onDisappear: () => {
         this.showEditDialog = false;
+      }
+    })
+    .bindSheet($$this.showRenameDialog, this.renameSourceDialog(), {
+      height: 260,
+      dragBar: false,
+      showClose: false,
+      backgroundColor: ThemeRuntime.dropdownPanelColor(this.appDarkMode, '', 'overlay'),
+      onDisappear: () => {
+        this.showRenameDialog = false;
+        this.renameSourceName = '';
       }
     })
     .bindSheet($$this.showNewGroupDialog, this.newGroupDialog(), {
