@@ -27,6 +27,7 @@ export struct ReaderTtsPlayerPanel {
   @StorageLink('globalTtsContent') globalTtsContent: string = '';
   @StorageLink('globalTtsTextBefore') globalTtsTextBefore: string = '';
   @StorageLink('globalTtsCurrentText') @Watch('onCurrentTextChanged') globalTtsCurrentText: string = '';
+  @StorageLink('globalTtsTaggingText') globalTtsTaggingText: string = '';
   @StorageLink('globalTtsTextAfter') globalTtsTextAfter: string = '';
   @StorageLink('globalTtsChapterProgress') globalTtsChapterProgress: string = '';
   @StorageLink('globalTtsProgress') globalTtsProgress: number = 0;
@@ -153,7 +154,7 @@ export struct ReaderTtsPlayerPanel {
               .width('100%')
           }
           ListItem() {
-            Text(this.globalTtsCurrentText || '正在定位当前朗读内容…')
+            Text(this.globalTtsTaggingText || this.globalTtsCurrentText || '正在定位当前朗读内容…')
               .fontSize(16)
               .fontWeight(FontWeight.Medium)
               .lineHeight(26)

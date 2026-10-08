@@ -409,6 +409,7 @@ export class ReaderTtsFloatingSession {
     AppStorage.setOrCreate('globalTtsContent', '');
     AppStorage.setOrCreate('globalTtsTextBefore', '');
     AppStorage.setOrCreate('globalTtsCurrentText', '');
+    AppStorage.setOrCreate('globalTtsTaggingText', '');
     AppStorage.setOrCreate('globalTtsTextAfter', '');
     AppStorage.setOrCreate('globalTtsChapterProgress', '');
     AppStorage.setOrCreate('globalTtsProgress', 0);

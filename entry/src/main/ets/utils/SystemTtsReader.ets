@@ -114,6 +114,7 @@ export class SystemTtsReader {
   // so HarmonyOS sees this app's audioPlayback task as idle and freezes it.
   private ttsPcmPlayType: number = 0;
   private speakWatchdogId: number = -1;
+  private startWatchdogId: number = -1;
   private suppressEngineStopEvent: boolean = false;
   private enginePerson: number = -1;
   private engineOnline: number = -1;
@@ -413,11 +414,16 @@ export class SystemTtsReader {
     this.chunkIndex = 0;
     this.active = true;
     this.resetSystemPcmPipeline();
+    // Guard the pre-speak phase (ensureEngine / audio-session acquire). These awaits
+    // can stall without any engine callback, leaving the player panel stuck on
+    // "正在定位当前朗读内容…". The speak watchdog only covers the speech phase.
+    this.armStartWatchdog(generation);
     let engine: textToSpeech.TextToSpeechEngine;
     try {
       engine = await this.ensureEngine();
     } catch (error) {
       this.active = false;
+      this.clearStartWatchdog();
       const message = `TTS初始化失败：${this.currentVoiceLabel()} ${this.formatError(error)}`;
       console.error('[TTS] ensure engine failed:', message);
       if (this.onError) {
@@ -433,6 +439,7 @@ export class SystemTtsReader {
     this.systemAudioSessionOwner = audioSessionOwner;
     await TtsAudioSession.acquire(audioSessionOwner);
     if (!this.active || this.readGeneration !== generation || this.systemAudioSessionOwner !== audioSessionOwner) {
+      this.clearStartWatchdog();
       TtsAudioSession.release(audioSessionOwner);
       if (this.systemAudioSessionOwner === audioSessionOwner) {
         this.systemAudioSessionOwner = '';
@@ -440,6 +447,7 @@ export class SystemTtsReader {
       return;
     }
     this.bindEngineListener(generation, engine);
+    this.clearStartWatchdog();
     this.speakNext(generation);
   }
 
@@ -609,6 +617,7 @@ export class SystemTtsReader {
     this.ttsPcmPlayType = 0;
     this.resetSystemPcmPipeline();
     this.clearSpeakWatchdog();
+    this.clearStartWatchdog();
     this.pcmPlayer.stop();
     this.releaseSystemAudioSession();
     try {
@@ -772,6 +781,7 @@ export class SystemTtsReader {
     this.currentFocusRetryCount = 0;
     this.resetSystemPcmPipeline();
     this.clearSpeakWatchdog();
+    this.clearStartWatchdog();
     if (keepPcmOutput) {
       // Continuous reading restarts with the next chapter. Keep the same
       // AudioRenderer and audio-session owner across that short handoff so the
@@ -1204,6 +1214,42 @@ export class SystemTtsReader {
     this.currentFocusQueued = true;
     if (this.onChunkStart) {
       this.onChunkStart(this.currentFocusChunk, this.currentFocusChunkIndex);
+    }
+  }
+
+  private armStartWatchdog(generation: number): void {
+    this.clearStartWatchdog();
+    this.startWatchdogId = setTimeout(() => {
+      this.recoverStalledStart(generation);
+    }, 30000);
+  }
+
+  private clearStartWatchdog(): void {
+    if (this.startWatchdogId < 0) {
+      return;
+    }
+    clearTimeout(this.startWatchdogId);
+    this.startWatchdogId = -1;
+  }
+
+  private recoverStalledStart(generation: number): void {
+    if (this.readGeneration !== generation || !this.active || this.audioStarted) {
+      return;
+    }
+    this.currentRequestId = '';
+    this.active = false;
+    this.clearStartWatchdog();
+    this.clearSpeakWatchdog();
+    this.pcmPlayer.stop();
+    this.releaseSystemAudioSession();
+    try {
+      this.engine?.stop();
+    } catch (_) {
+    }
+    const message = `系统朗读启动超时：${this.currentVoiceLabel()}`;
+    console.warn('[TTS] start watchdog fired:', message);
+    if (this.onError) {
+      this.onError(message);
     }
   }
 

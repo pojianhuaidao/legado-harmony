@@ -341,6 +341,7 @@ struct ReadBookPage {
   private roleTtsDriver: RoleTtsDriver | null = null;
   private roleTtsRunning: boolean = false;
   private roleTtsTagging: boolean = false;
+  private roleTtsTaggingText: string = '';
   private roleTtsPanelSentence: string = '';
   private cloudTtsDriver: CloudTtsDriver | null = null;
   private cloudTtsRunning: boolean = false;
@@ -5290,6 +5291,10 @@ struct ReadBookPage {
   }
 
   ttsCurrentSentence(): string {
+    // 分角色朗读：当前句直接取当前段文本，普通高亮切片链路不适用于链式段落。
+    if (this.roleTtsRunning && this.roleTtsPanelSentence) {
+      return this.roleTtsPanelSentence;
+    }
     if (this.ttsHighlightStart < 0 || this.ttsHighlightEnd <= this.ttsHighlightStart || !this.ttsDisplayText) {
       return '';
     }
@@ -13871,7 +13876,10 @@ struct ReadBookPage {
     this.roleTtsTagging = true;
     this.roleTtsPanelSentence = '';
     promptAction.showToast({ message: '正在标注角色…' });
-    AppStorage.setOrCreate('globalTtsCurrentText', '正在标注角色…');
+    // 标注文案走独立状态变量并在播放面板单独展示，避免被 updateTtsFloatingSession
+    // 用空的当前句文本覆盖回"定位占位"。
+    this.roleTtsTaggingText = '正在标注角色…';
+    AppStorage.setOrCreate('globalTtsTaggingText', '正在标注角色…');
     let result: RoleTagResult;
     try {
       const options: RoleTaggerOptions = {
@@ -13887,6 +13895,8 @@ struct ReadBookPage {
       console.warn('角色标注失败:', error);
       if (token === this.ttsReadToken) {
         this.roleTtsTagging = false;
+        this.roleTtsTaggingText = '';
+        AppStorage.setOrCreate('globalTtsTaggingText', '');
         this.finishTtsReading();
         promptAction.showToast({ message: isTimeout ? '角色标注超时，已停止朗读，请重试' : '角色标注失败，已停止朗读' });
       }
@@ -13896,6 +13906,8 @@ struct ReadBookPage {
       return;
     }
     this.roleTtsTagging = false;
+    this.roleTtsTaggingText = '';
+    AppStorage.setOrCreate('globalTtsTaggingText', '');
     const map = await this.resolveRoleVoiceMap(result);
     this.persistRoleVoiceMap(map);
     const items = this.buildRoleTtsItems(result, map);
@@ -13912,7 +13924,9 @@ struct ReadBookPage {
     this.roleTtsDriver.start(items, {
       onSegmentStart: (item: RoleTtsPlayItem, index: number, total: number) => {
         if (token === this.ttsReadToken) {
+          // 当前段开始：写当前句到全局状态并同步定位信息，播放面板随段推进。
           this.roleTtsPanelSentence = item.text;
+          this.applyRoleTtsSegmentFocus(item);
           this.updateTtsFloatingSession();
         }
       },
@@ -14169,7 +14183,24 @@ struct ReadBookPage {
     }
     this.roleTtsRunning = false;
     this.roleTtsTagging = false;
+    this.roleTtsTaggingText = '';
     this.roleTtsPanelSentence = '';
+  }
+
+  /** 分角色段开始：把当前段映射到整章绝对偏移，同步高亮/进度/持久化定位。 */
+  private applyRoleTtsSegmentFocus(item: RoleTtsPlayItem): void {
+    // item.sourceStart 相对整章文本；直接叠加章节起点得到整章绝对偏移。
+    // 不走 readerV2TtsSourceOffset，避免 readerV2ActiveSpeechText 的页内映射把段偏移错算。
+    const absoluteStart = this.ttsTextStartOffset + item.sourceStart;
+    if (this.ttsLastAppliedSourceOffset >= 0 && absoluteStart < this.ttsLastAppliedSourceOffset) {
+      // 段回退（如暂停续播从头重放）不重写定位，避免进度倒退。
+      return;
+    }
+    this.ttsLastAppliedSourceOffset = absoluteStart;
+    this.readerV2TtsSourceStart = absoluteStart;
+    this.readerV2TtsSourceEnd = absoluteStart + item.text.length;
+    this.refreshReaderV2TtsOverlay();
+    this.persistTtsReadPosition(this.readerV2TtsSourceStart, this.readerV2TtsSourceEnd);
   }
 
   /** Return the last source position that can belong to an audible TTS chunk. */

@@ -51,6 +51,7 @@ export default class EntryAbility extends UIAbility {
     AppStorage.setOrCreate('globalTtsCapsulePositionY', -1);
     AppStorage.setOrCreate('globalTtsTextBefore', '');
     AppStorage.setOrCreate('globalTtsCurrentText', '');
+    AppStorage.setOrCreate('globalTtsTaggingText', '');
     AppStorage.setOrCreate('globalTtsTextAfter', '');
     TlsTrustStore.load(this.context).catch((e: Error) => {
       hilog.warn(0x0000, 'testTag', 'Load TLS trust settings failed: %{public}s', JSON.stringify(e));
