@@ -765,11 +765,12 @@ struct TtsSettingsPage {
       return;
     }
     const provider = this.ttsCloudProvider || 'aliyun';
+    const baseUrl = (this.ttsCloudBaseUrl || '').trim() || CloudTtsVoiceProvider.providerInfo(provider).baseUrl;
     this.cloudImporting = true;
     this.cloudImportMessage = '';
     this.cloudImportError = '';
     try {
-      const voices = await CloudTtsVoiceProvider.fetchVoices(provider, apiKey, this.ttsCloudBaseUrl);
+      const voices = await CloudTtsVoiceProvider.fetchVoices(provider, apiKey, baseUrl);
       if (voices.length === 0) {
         this.cloudImportError = '未获取到可用音色，请检查接口地址/模型后重试';
         return;
