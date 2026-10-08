@@ -148,6 +148,7 @@ export class TtsSettingsStore {
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_MODEL, normalized.cloudTtsModel);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_API_KEY, normalized.cloudTtsApiKey);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_VOICES, normalized.cloudTtsVoices);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE, normalized.cloudTtsActiveVoice);
   }
 
   static fromStorage(): TtsSettings {
@@ -171,6 +172,7 @@ export class TtsSettingsStore {
     settings.cloudTtsModel = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_MODEL) || '';
     settings.cloudTtsApiKey = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_API_KEY) || '';
     settings.cloudTtsVoices = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_VOICES) || '[]';
+    settings.cloudTtsActiveVoice = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE) || '';
     return TtsSettingsStore.clone(settings);
   }
 
@@ -266,6 +268,12 @@ export class TtsSettingsStore {
     settings.roleTtsModel = source.roleTtsModel || '';
     settings.roleTtsApiKey = source.roleTtsApiKey || '';
     settings.roleVoiceMap = source.roleVoiceMap || '{}';
+    settings.cloudTtsProvider = source.cloudTtsProvider || '';
+    settings.cloudTtsBaseUrl = source.cloudTtsBaseUrl || '';
+    settings.cloudTtsModel = source.cloudTtsModel || '';
+    settings.cloudTtsApiKey = source.cloudTtsApiKey || '';
+    settings.cloudTtsVoices = source.cloudTtsVoices || '[]';
+    settings.cloudTtsActiveVoice = source.cloudTtsActiveVoice || '';
     return settings;
   }
 }
