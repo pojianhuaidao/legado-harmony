@@ -102,10 +102,12 @@ import { ReaderCustomFontItem, ReaderCustomFontData, ReaderTxtCharsetOption } fr
 import { PageTurnPreview, ReaderParagraphMetrics, ReaderInlineActionBoundsTask, ReaderMergedActionBoundsTask, ReaderTextParagraph, ReadTextSlice, ReaderPaginationResult, ReaderViewportSize, ReaderTextParagraphGroup, ReaderParagraphMeasureFallback, ReaderV2HighlightRect, ReaderContinuousSelectionChunk } from '../core/reader/ReaderPageModels';
 import { ReaderEyeCalibrationPoint } from '../core/reader/ReaderEyeModels';
 
-/** 角色音色映射条目：p 为 TTS 音色 person id，n 为音色显示名（仅供设置页展示）。 */
+/** 角色音色映射条目：p 为系统 TTS 音色 person id，n 为音色显示名（仅供设置页展示）。
+ * cloud 为云端音色 key（provider:voice），存在时该角色使用云端在线音色，p 无效。 */
 interface RoleVoiceEntry {
   p: number;
   n: string;
+  cloud?: string;
 }
 
 // Three-point fixation calibration: centre, then the bottom turn zone, then the top turn
@@ -13740,6 +13742,15 @@ struct ReadBookPage {
     return null;
   }
 
+  /** 解析 ttsCloudVoices JSON 为云端音色数据列表。 */
+  private cloudVoiceDataList(): CloudTtsVoiceData[] {
+    try {
+      return JSON.parse(this.ttsCloudVoices || '[]') as CloudTtsVoiceData[];
+    } catch (_) {
+      return [];
+    }
+  }
+
   /** 按标点切分长文本为较短的语音段落，避免单次云端合成文本过长。 */
   private splitCloudTtsSegments(text: string): string[] {
     const parts = (text || '').split(/(?<=[。！？!?；;\n])/g);
@@ -13926,6 +13937,10 @@ struct ReadBookPage {
         }
       }
     }, (item: RoleTtsPlayItem, done: () => void, fail: (message: string) => void) => {
+      if ((item.cloudKey || '').length > 0) {
+        this.playCloudRoleSegment(item, done, fail);
+        return;
+      }
       this.ttsReader.start(item.text, {
         onFinished: done,
         onSpeechless: done,
@@ -13939,6 +13954,42 @@ struct ReadBookPage {
       }).catch((e: Error) => {
         fail(String(e && e.message ? e.message : e));
       });
+    });
+  }
+
+  /** 分角色朗读中播放云端音色段落：按 cloudKey 查找云端音色并走 CloudTtsDriver.speak。 */
+  private playCloudRoleSegment(item: RoleTtsPlayItem, done: () => void, fail: (message: string) => void): void {
+    const cloudKey = item.cloudKey || '';
+    const voices = this.cloudVoiceDataList();
+    let target: CloudTtsVoiceData | null = null;
+    for (const v of voices) {
+      if ((v.provider + ':' + v.voice) === cloudKey) {
+        target = v;
+        break;
+      }
+    }
+    if (!target) {
+      fail('云端音色不存在或已失效');
+      return;
+    }
+    if (!this.cloudTtsDriver) {
+      this.cloudTtsDriver = new CloudTtsDriver(getContext(this) as common.UIAbilityContext);
+    }
+    const apiKey = (this.ttsCloudApiKey || '').trim();
+    const appId = (this.ttsCloudAppId || '').trim();
+    this.cloudTtsDriver.speak({
+      text: item.text,
+      provider: target.provider,
+      baseUrl: target.baseUrl,
+      model: target.model,
+      apiKey: target.provider === 'edge' ? '' : apiKey,
+      appId: appId,
+      voice: target.voice,
+      speed: this.ttsSpeed,
+      onFinished: done,
+      onError: (message: string) => fail(message)
+    }).catch((e: Error) => {
+      fail(String(e && e.message ? e.message : e));
     });
   }
 
@@ -13997,16 +14048,25 @@ struct ReadBookPage {
     } catch (_) {
       voices = [];
     }
+    const cloudVoices = this.cloudVoiceDataList();
     const isLocalUsable = (person: number): boolean => {
       return voices.some((v: TtsVoiceOption) => v.available && !v.downloadable && v.id === person);
     };
-    // 清理用户映射中不可用的音色（在线/未下载音色在实机播放时会导致引擎回退默认音色），
-    // 重建对象以避免 ArkTS 对 delete 的限制。
+    const isCloudUsable = (key: string): boolean => {
+      return cloudVoices.some((c: CloudTtsVoiceData) => (c.provider + ':' + c.voice) === key);
+    };
+    // 清理用户映射中不可用的音色（系统未下载音色在实机播放时会导致引擎回退默认音色；
+    // 云端音色需仍存在于 ttsCloudVoices），重建对象以避免 ArkTS 对 delete 的限制。
     const sanitized: Record<string, RoleVoiceEntry> = {};
     const keys = Object.keys(map);
     for (const key of keys) {
-      if (isLocalUsable(map[key].p)) {
-        sanitized[key] = { p: map[key].p, n: map[key].n };
+      const entry = map[key];
+      if ((entry.cloud || '').length > 0) {
+        if (isCloudUsable(entry.cloud || '')) {
+          sanitized[key] = { p: entry.p, n: entry.n, cloud: entry.cloud };
+        }
+      } else if (isLocalUsable(entry.p)) {
+        sanitized[key] = { p: entry.p, n: entry.n };
       }
     }
     const needAuto: string[] = [];
@@ -14026,22 +14086,48 @@ struct ReadBookPage {
     }
     const candidates = voices.filter((v: TtsVoiceOption) =>
       v.available && !v.downloadable && (v.language || 'zh-CN').toLowerCase().indexOf('zh') === 0);
+    const cloudCandidates = cloudVoices.filter((c: CloudTtsVoiceData) =>
+      (c.language || 'zh-CN').toLowerCase().indexOf('zh') === 0);
     for (const name of needAuto) {
       const roleDef = result.roles.find((r) => r.name === name);
       const gender = roleDef ? (roleDef.gender || 'unknown').toLowerCase() : 'unknown';
+      // 优先系统本地音色，系统无可用中文音色时回退云端在线音色。
       let chosen: TtsVoiceOption | null = null;
+      let chosenCloud: CloudTtsVoiceData | null = null;
       if (gender.indexOf('female') === 0) {
         chosen = candidates.find((v) => {
           const g = (v.gender || '').toLowerCase();
           return g.indexOf('female') === 0;
         }) || null;
+        if (!chosen) {
+          chosenCloud = cloudCandidates.find((c) => {
+            const g = (c.gender || '').toLowerCase();
+            return g.indexOf('female') === 0;
+          }) || null;
+        }
       } else if (gender.indexOf('male') === 0) {
         chosen = candidates.find((v) => {
           const g = (v.gender || '').toLowerCase();
           return g.indexOf('male') === 0 && g.indexOf('female') !== 0;
         }) || null;
+        if (!chosen) {
+          chosenCloud = cloudCandidates.find((c) => {
+            const g = (c.gender || '').toLowerCase();
+            return g.indexOf('male') === 0 && g.indexOf('female') !== 0;
+          }) || null;
+        }
       }
-      sanitized[name] = chosen ? { p: chosen.id, n: chosen.name } : { p: this.ttsPerson, n: '默认音色' };
+      if (chosen) {
+        sanitized[name] = { p: chosen.id, n: chosen.name };
+      } else if (chosenCloud) {
+        sanitized[name] = {
+          p: 0,
+          n: `${chosenCloud.name}（云端）`,
+          cloud: `${chosenCloud.provider}:${chosenCloud.voice}`
+        };
+      } else {
+        sanitized[name] = { p: this.ttsPerson, n: '默认音色' };
+      }
     }
     return sanitized;
   }
@@ -14052,11 +14138,25 @@ struct ReadBookPage {
     let offset = 0;
     for (const seg of result.segments) {
       let person = this.ttsPerson;
+      let cloudKey = '';
       const entry = this.findRoleMapEntry(map, seg.role);
       if (entry) {
-        person = entry.p;
+        if ((entry.cloud || '').length > 0) {
+          cloudKey = entry.cloud || '';
+        } else {
+          person = entry.p;
+        }
       }
-      items.push({ role: seg.role, text: seg.text, sourceStart: offset, person: person });
+      const item: RoleTtsPlayItem = {
+        role: seg.role,
+        text: seg.text,
+        sourceStart: offset,
+        person: person
+      };
+      if (cloudKey.length > 0) {
+        item.cloudKey = cloudKey;
+      }
+      items.push(item);
       offset += seg.text.length;
     }
     return items;

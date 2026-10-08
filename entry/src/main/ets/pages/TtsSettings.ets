@@ -12,10 +12,12 @@ import { RoleTagger } from '../utils/RoleTagger';
 import { CloudTtsVoiceProvider, CloudTtsVoiceData, CloudTtsPresetVoice } from '../utils/CloudTtsVoiceProvider';
 import { CloudTtsDriver } from '../utils/CloudTtsDriver';
 
-/** 角色音色映射条目（与 ReadBook.ets 内定义一致）：p 为 TTS 音色 person id，n 为音色显示名。 */
+/** 角色音色映射条目（与 ReadBook.ets 内定义一致）：p 为系统 TTS 音色 person id，n 为音色显示名。
+ * cloud 为云端音色 key（provider:voice，如 edge:zh-CN-XiaoxiaoNeural），存在时表示该角色使用云端在线音色。 */
 interface RoleTtsVoiceEntry {
   p: number;
   n: string;
+  cloud?: string;
 }
 
 /** 云端音色连接条目（由 ttsCloudVoices JSON 解析而来，key = provider:voice）。 */
@@ -27,6 +29,15 @@ interface CloudVoiceEntry {
   model: string;
   voice: string;
   name: string;
+  gender: string;
+  language: string;
+}
+
+/** 角色音色选择器统一选项：系统音色或云端在线音色。 */
+interface RoleVoicePickOption {
+  key: string;
+  title: string;
+  isCloud: boolean;
   gender: string;
   language: string;
 }
@@ -1751,11 +1762,14 @@ struct TtsSettingsPage {
     return entry.n;
   }
 
-  // 分角色朗读要求音色已下载到本地（available 且非 downloadable），
-  // 在线音质角色若未下载，实机播放会被系统引擎回退默认音色。
+  // 分角色朗读要求音色可用：系统音色需已下载到本地（available 且非 downloadable），
+  // 云端在线音色需已成功导入（parsedCloudVoices 中存在对应 key）。
   roleVoiceUsable(entry: RoleTtsVoiceEntry | undefined): boolean {
     if (!entry) {
       return true;
+    }
+    if ((entry.cloud || '').length > 0) {
+      return this.parsedCloudVoices().some((c: CloudVoiceEntry) => c.key === entry.cloud);
     }
     return this.voices.some((v: TtsVoiceOption) => v.available && !v.downloadable && v.id === entry.p);
   }
@@ -1764,8 +1778,48 @@ struct TtsSettingsPage {
     return this.voices.filter((v: TtsVoiceOption) => v.available && !v.downloadable);
   }
 
-  selectRoleVoice(name: string, voice: TtsVoiceOption): void {
-    if (!voice.available || voice.downloadable) {
+  /** 角色音色选择器统一列表：系统本地音色 + 云端在线音色。 */
+  roleVoicePickerOptions(): RoleVoicePickOption[] {
+    const options: RoleVoicePickOption[] = [];
+    for (const v of this.roleVoicePickerVoices()) {
+      const option: RoleVoicePickOption = {
+        key: 'sys:' + v.id,
+        title: this.voiceTitle(v),
+        isCloud: false,
+        gender: '',
+        language: ''
+      };
+      options.push(option);
+    }
+    for (const c of this.parsedCloudVoices()) {
+      const option: RoleVoicePickOption = {
+        key: c.key,
+        title: `${c.name}（${this.cloudProviderLabel(c.provider)}·云端）`,
+        isCloud: true,
+        gender: c.gender,
+        language: c.language
+      };
+      options.push(option);
+    }
+    return options;
+  }
+
+  selectRoleVoice(name: string, option: RoleVoicePickOption): void {
+    if (option.isCloud) {
+      const found = this.parsedCloudVoices().some((c: CloudVoiceEntry) => c.key === option.key);
+      if (!found) {
+        promptAction.showToast({ message: '云端音色已失效，请重新导入后再指定给角色' });
+        return;
+      }
+      const map = this.parseRoleVoiceMap();
+      map[name] = { p: 0, n: option.title, cloud: option.key };
+      this.roleMapDraftJson = JSON.stringify(map);
+      this.rolePickTarget = '';
+      this.persistRoleMap(map);
+      return;
+    }
+    const voice = this.roleVoicePickerVoices().find((v: TtsVoiceOption) => ('sys:' + v.id) === option.key);
+    if (!voice || !voice.available || voice.downloadable) {
       promptAction.showToast({ message: '该音色未下载到本地，请先下载后再指定给角色' });
       return;
     }
@@ -1899,21 +1953,21 @@ struct TtsSettingsPage {
           .fontSize(15)
           .fontColor(this.primaryTextColor())
           .padding({ left: 16, right: 16, top: 14, bottom: 2 })
-        Text('仅列出已下载到本地的音色；在线音质音色需先在「系统音色」中下载')
+        Text('支持已下载的系统本地音色与云端在线音色（云端音色带厂商标识，需先完成导入）')
           .fontSize(11)
           .fontColor(this.subTextColor())
           .padding({ left: 16, right: 16, bottom: 8 })
         Scroll() {
           Column() {
-            ForEach(this.roleVoicePickerVoices(), (voice: TtsVoiceOption) => {
+            ForEach(this.roleVoicePickerOptions(), (option: RoleVoicePickOption) => {
               Row() {
-                Text(this.voiceTitle(voice))
+                Text(option.title)
                   .fontSize(15)
                   .fontColor(this.primaryTextColor())
                   .layoutWeight(1)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-                if (this.roleVoiceTitle(this.parseRoleVoiceMap()[this.rolePickTarget]) === this.voiceTitle(voice)) {
+                if (this.roleVoiceTitle(this.parseRoleVoiceMap()[this.rolePickTarget]) === option.title) {
                   Text('当前')
                     .fontSize(12)
                     .fontColor(this.accentColor())
@@ -1923,9 +1977,9 @@ struct TtsSettingsPage {
               .height(44)
               .padding({ left: 16, right: 16 })
               .onClick(() => {
-                this.selectRoleVoice(this.rolePickTarget, voice);
+                this.selectRoleVoice(this.rolePickTarget, option);
               })
-            }, (voice: TtsVoiceOption) => this.voiceKey(voice))
+            }, (option: RoleVoicePickOption) => option.key)
           }
           .width('100%')
         }

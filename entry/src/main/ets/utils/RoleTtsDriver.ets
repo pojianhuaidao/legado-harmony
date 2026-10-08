@@ -13,8 +13,10 @@ export interface RoleTtsPlayItem {
   text: string;
   /** 相对整章朗读文本起点的源偏移（用于将来高亮/进度定位） */
   sourceStart: number;
-  /** 该角色使用的 TTS 音色 person id */
+  /** 该角色使用的 TTS 音色 person id（cloudKey 存在时无效） */
   person: number;
+  /** 云端音色 key（provider:voice），存在时该段改走 CloudTtsDriver 播放 */
+  cloudKey?: string;
 }
 
 export interface RoleTtsDriverOptions {
