@@ -14084,6 +14084,11 @@ struct ReadBookPage {
     } catch (_) {
       voices = [];
     }
+    // 本地兜底：系统音色枚举超时返回空列表时，用已知本地音色（默认/聆小珊/凌飞哲）作为自动分配候选；
+    // 禁止把角色自动分配到云端音色（尤其免 Key 常驻的 edge），云端音色仅用户显式引用时可用。
+    if (voices.length === 0) {
+      voices = this.localFallbackVoiceOptions();
+    }
     const cloudVoices = this.cloudVoiceDataList();
     const isLocalUsable = (person: number): boolean => {
       return voices.some((v: TtsVoiceOption) => v.available && !v.downloadable && v.id === person);
@@ -14122,50 +14127,53 @@ struct ReadBookPage {
     }
     const candidates = voices.filter((v: TtsVoiceOption) =>
       v.available && !v.downloadable && (v.language || 'zh-CN').toLowerCase().indexOf('zh') === 0);
-    const cloudCandidates = cloudVoices.filter((c: CloudTtsVoiceData) =>
-      (c.language || 'zh-CN').toLowerCase().indexOf('zh') === 0);
     for (const name of needAuto) {
       const roleDef = result.roles.find((r) => r.name === name);
       const gender = roleDef ? (roleDef.gender || 'unknown').toLowerCase() : 'unknown';
-      // 优先系统本地音色，系统无可用中文音色时回退云端在线音色。
+      // 自动分配只允许本地音色；云端音色仅由用户显式映射/当前音色引用（sanitized 已保留），
+      // 自动分配绝不静默选用云端音色（尤其免 Key 常驻的 edge）。
       let chosen: TtsVoiceOption | null = null;
-      let chosenCloud: CloudTtsVoiceData | null = null;
       if (gender.indexOf('female') === 0) {
         chosen = candidates.find((v) => {
           const g = (v.gender || '').toLowerCase();
           return g.indexOf('female') === 0;
         }) || null;
-        if (!chosen) {
-          chosenCloud = cloudCandidates.find((c) => {
-            const g = (c.gender || '').toLowerCase();
-            return g.indexOf('female') === 0;
-          }) || null;
-        }
       } else if (gender.indexOf('male') === 0) {
         chosen = candidates.find((v) => {
           const g = (v.gender || '').toLowerCase();
           return g.indexOf('male') === 0 && g.indexOf('female') !== 0;
         }) || null;
-        if (!chosen) {
-          chosenCloud = cloudCandidates.find((c) => {
-            const g = (c.gender || '').toLowerCase();
-            return g.indexOf('male') === 0 && g.indexOf('female') !== 0;
-          }) || null;
-        }
       }
       if (chosen) {
         sanitized[name] = { p: chosen.id, n: chosen.name };
-      } else if (chosenCloud) {
-        sanitized[name] = {
-          p: 0,
-          n: `${chosenCloud.name}（云端）`,
-          cloud: `${chosenCloud.provider}:${chosenCloud.voice}`
-        };
       } else {
+        // 本地音色实在不可用（如枚举超时且无性别匹配）时回退系统默认音色，不得分配云端音色。
         sanitized[name] = { p: this.ttsPerson, n: '默认音色' };
       }
     }
     return sanitized;
+  }
+
+  /** 系统音色枚举超时/失败时的已知本地音色兜底列表（与 SystemTtsReader 内置 knownVoiceOptions 一致）。 */
+  private localFallbackVoiceOptions(): TtsVoiceOption[] {
+    const options: TtsVoiceOption[] = [];
+    options.push(this.createFallbackVoiceOption(0, '默认音色', 'zh-CN', ''));
+    options.push(this.createFallbackVoiceOption(13, '聆小珊', 'zh-CN', 'female'));
+    options.push(this.createFallbackVoiceOption(21, '凌飞哲', 'zh-CN', 'male'));
+    options.push(this.createFallbackVoiceOption(8, 'US Laura', 'en-US', 'female'));
+    return options;
+  }
+
+  private createFallbackVoiceOption(id: number, name: string, language: string,
+    gender: string): TtsVoiceOption {
+    const option = new TtsVoiceOption();
+    option.id = id;
+    option.name = name;
+    option.language = language;
+    option.gender = gender;
+    option.available = true;
+    option.downloadable = false;
+    return option;
   }
 
   private buildRoleTtsItems(result: RoleTagResult,
