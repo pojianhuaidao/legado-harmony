@@ -2051,7 +2051,7 @@ export class SystemTtsReader {
           lastError = error as Object;
           // 超时错误直接短路，避免多个参数变体各自再等 10s 串联成几十秒。
           if (SystemTtsReader.formatStaticError(error as Object).indexOf('超时') >= 0) {
-            throw error;
+            throw new Error(SystemTtsReader.formatStaticError(error as Object) || 'createEngine timeout');
           }
         }
       }
