@@ -9,7 +9,7 @@ import { TtsSettings, TtsSettingsStore } from '../utils/TtsSettingsStore';
 import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { RoleTagger } from '../utils/RoleTagger';
-import { CloudTtsVoiceProvider, CloudTtsVoiceData } from '../utils/CloudTtsVoiceProvider';
+import { CloudTtsVoiceProvider, CloudTtsVoiceData, CloudTtsPresetVoice } from '../utils/CloudTtsVoiceProvider';
 import { CloudTtsDriver } from '../utils/CloudTtsDriver';
 
 /** 角色音色映射条目（与 ReadBook.ets 内定义一致）：p 为 TTS 音色 person id，n 为音色显示名。 */
@@ -674,7 +674,7 @@ struct TtsSettingsPage {
       return existing;
     }
     const info = CloudTtsVoiceProvider.providerInfo('edge');
-    return info.voices.map((preset) => {
+    return info.voices.map((preset: CloudTtsPresetVoice): CloudVoiceEntry => {
       const key = `edge:${preset.voice}`;
       return {
         key: key,
@@ -1036,7 +1036,7 @@ struct TtsSettingsPage {
     if (provider) {
       const info = CloudTtsVoiceProvider.providerInfo(provider);
       if (info.voices && info.voices.length > 0) {
-        const map: Record<string, CloudVoiceEntry> = {};
+        let map: Record<string, CloudVoiceEntry> = {};
         for (const entry of this.parsedCloudVoices()) {
           map[entry.key] = entry;
         }
@@ -1060,13 +1060,16 @@ struct TtsSettingsPage {
             changed = true;
           }
         }
+        const keptMap: Record<string, CloudVoiceEntry> = {};
         for (const key of Object.keys(map)) {
           const entry = map[key];
           if (entry.provider === provider && validVoices.indexOf(entry.voice) < 0) {
-            delete map[key];
             changed = true;
+            continue;
           }
+          keptMap[key] = entry;
         }
+        map = keptMap;
         let activeVoice = this.ttsCloudActiveVoice || '';
         if (activeVoice && !map[activeVoice]) {
           const firstKey = Object.keys(map).find((k: string) => k.startsWith(provider + ':')) || '';

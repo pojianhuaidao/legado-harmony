@@ -59,6 +59,70 @@ export interface CloudTtsSynthesizeOptions {
   appId?: string;
 }
 
+/** 火山豆包 TTS 请求体结构（ArkTS 严格模式显式类型标注）。 */
+interface VolcanoTtsRequestPayload {
+  app: {
+    appid: string;
+    token: string;
+    cluster: string;
+  };
+  user: {
+    uid: string;
+  };
+  audio: {
+    voice_type: string;
+    encoding: string;
+    speed_ratio: number;
+    volume_ratio: number;
+    pitch_ratio: number;
+  };
+  request: {
+    reqid: string;
+    text: string;
+    operation: string;
+  };
+}
+
+/** 微软 Edge speech.config 二进制消息中的 JSON 配置结构。 */
+interface EdgeSpeechConfigPayload {
+  contexts: EdgeSpeechContextPayload[];
+  os: string;
+  app: {
+    name: string;
+  };
+  secmsgecv: string;
+}
+
+interface EdgeSpeechContextPayload {
+  synthesis: {
+    audio: {
+      metadataoptions: {
+        sentenceBoundaryEnabled: string;
+        wordBoundaryEnabled: string;
+      };
+      outputFormat: string;
+    };
+  };
+  tts: {
+    stream: string;
+  };
+}
+
+/** 小米 MiMo chat/completions 请求体结构。 */
+interface ChatTtsRequestPayload {
+  model: string;
+  messages: ChatTtsMessagePayload[];
+  audio: {
+    format: string;
+    voice: string;
+  };
+}
+
+interface ChatTtsMessagePayload {
+  role: string;
+  content: string;
+}
+
 export class CloudTtsVoiceProvider {
   static readonly PROVIDERS: Record<string, CloudTtsProviderInfo> = {
     'aliyun': {
@@ -333,7 +397,7 @@ export class CloudTtsVoiceProvider {
     }
     const reqId = CloudTtsVoiceProvider.randomReqId();
     const cluster = (options.model || '').trim() || 'volcano_tts';
-    const payload: Record<string, Object> = {
+    const payload: VolcanoTtsRequestPayload = {
       'app': {
         'appid': appId,
         'token': accessToken,
@@ -426,11 +490,11 @@ export class CloudTtsVoiceProvider {
           } catch (_) {
           }
         });
-      if (openResult !== 0) {
-        throw new Error('连接微软在线音色服务失败（code=' + openResult + '）');
+      if (!openResult) {
+        throw new Error('连接微软在线音色服务失败（code=' + String(openResult) + '）');
       }
       // 发送 speech.config 二进制消息：4 字节头 + JSON 配置
-      const configJson = JSON.stringify({
+      const config: EdgeSpeechConfigPayload = {
         'contexts': [{
           'synthesis': {
             'audio': {
@@ -450,7 +514,8 @@ export class CloudTtsVoiceProvider {
           'name': 'edge'
         },
         'secmsgecv': 'true'
-      });
+      };
+      const configJson = JSON.stringify(config);
       const configBytes = new ArrayBuffer(4 + configJson.length);
       const configView = new Uint8Array(configBytes);
       configView[0] = 0x01;
@@ -662,7 +727,7 @@ export class CloudTtsVoiceProvider {
   private static async synthesizeViaChat(options: CloudTtsSynthesizeOptions, baseUrl: string,
     httpRequest: http.HttpRequest): Promise<ArrayBuffer> {
     const speedHint = options.speed <= 0.8 ? '语速稍慢' : (options.speed >= 1.2 ? '语速稍快' : '语速适中');
-    const payload: Record<string, Object> = {
+    const payload: ChatTtsRequestPayload = {
       'model': options.model,
       'messages': [
         { 'role': 'user', 'content': speedHint },
