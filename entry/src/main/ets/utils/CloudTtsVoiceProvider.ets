@@ -7,12 +7,12 @@ import util from '@ohos.util';
  * 两家厂商均采用 OpenAI 兼容接口 + Bearer Token 鉴权：
  *  - 阿里百炼：baseUrl https://dashscope.aliyuncs.com/compatible-mode/v1，
  *    TTS 模型 cosyvoice-v2，端点 /audio/speech（OpenAI 兼容语音合成）。
- *  - 小米：baseUrl https://api.xiaomimimo.com/v1，OpenAI 兼容端点 /audio/speech。
+ *  - 小米：baseUrl https://api.xiaomimimo.com/v1，OpenAI 兼容 chat/completions（MiMo-V2.5-TTS）。
  *
  * 校验 API Key：GET {baseUrl}/models（OpenAI 兼容标准端点，两家均支持）。
  * 拉取音色列表：厂商暂未开放公开的“列出可用音色”REST 接口，因此在 Key 校验
- * 通过后返回厂商预设音色列表（阿里 CosyVoice 为官方真实音色 ID；小米以占位
- * 音色 ID 为准，用户可修改音色 ID / 接口地址后重新导入）。
+ * 通过后返回厂商预设音色列表（阿里 CosyVoice 为官方真实音色 ID；小米为官方
+ * 预置音色 mimo_default/茉莉/苏打/白桦/Mia/Chloe/Milo/Dean）。
  */
 
 export interface CloudTtsPresetVoice {
@@ -43,6 +43,7 @@ export interface CloudTtsVoiceData {
 }
 
 export interface CloudTtsSynthesizeOptions {
+  provider: string;
   text: string;
   baseUrl: string;
   model: string;
@@ -73,10 +74,16 @@ export class CloudTtsVoiceProvider {
       provider: 'xiaomi',
       label: '小米',
       baseUrl: 'https://api.xiaomimimo.com/v1',
-      ttsModel: 'tts',
+      ttsModel: 'mimo-v2.5-tts',
       voices: [
-        { voice: 'xiaomi-female', name: '小米女声', gender: 'female', language: 'zh-CN' },
-        { voice: 'xiaomi-male', name: '小米男声', gender: 'male', language: 'zh-CN' }
+        { voice: 'mimo_default', name: '小米默认（冰糖）', gender: 'female', language: 'zh-CN' },
+        { voice: '茉莉', name: '茉莉', gender: 'female', language: 'zh-CN' },
+        { voice: '苏打', name: '苏打', gender: 'male', language: 'zh-CN' },
+        { voice: '白桦', name: '白桦', gender: 'male', language: 'zh-CN' },
+        { voice: 'Mia', name: 'Mia', gender: 'female', language: 'en-US' },
+        { voice: 'Chloe', name: 'Chloe', gender: 'female', language: 'en-US' },
+        { voice: 'Milo', name: 'Milo', gender: 'male', language: 'en-US' },
+        { voice: 'Dean', name: 'Dean', gender: 'male', language: 'en-US' }
       ]
     }
   };
@@ -163,19 +170,26 @@ export class CloudTtsVoiceProvider {
   }
 
   /**
-   * 云端语音合成（OpenAI 兼容 /audio/speech），返回音频二进制数据（wav）。
+   * 云端语音合成，返回音频二进制数据（wav）。
+   * - 小米 MiMo：OpenAI 兼容 chat/completions（文本放 assistant 消息，音色走 audio 参数），
+   *   响应 JSON 的 choices[0].message.audio.data 为 base64 音频。
+   * - 阿里百炼等：OpenAI 兼容 /audio/speech，直接返回音频流。
    */
   static async synthesize(options: CloudTtsSynthesizeOptions): Promise<ArrayBuffer> {
-    const url = CloudTtsVoiceProvider.normalizeBaseUrl(options.baseUrl) + '/audio/speech';
-    const payload: Record<string, string | number> = {
-      'model': options.model,
-      'input': options.text,
-      'voice': options.voice,
-      'response_format': 'wav',
-      'speed': options.speed
-    };
+    const baseUrl = CloudTtsVoiceProvider.normalizeBaseUrl(options.baseUrl);
     const httpRequest = http.createHttp();
     try {
+      if (options.provider === 'xiaomi') {
+        return await CloudTtsVoiceProvider.synthesizeViaChat(options, baseUrl, httpRequest);
+      }
+      const url = baseUrl + '/audio/speech';
+      const payload: Record<string, string | number> = {
+        'model': options.model,
+        'input': options.text,
+        'voice': options.voice,
+        'response_format': 'wav',
+        'speed': options.speed
+      };
       const response = await CloudTtsVoiceProvider.withTimeout(
         httpRequest.request(url, {
           method: http.RequestMethod.POST,
@@ -212,6 +226,63 @@ export class CloudTtsVoiceProvider {
     } finally {
       httpRequest.destroy();
     }
+  }
+
+  /**
+   * 小米 MiMo TTS 合成：POST {baseUrl}/chat/completions，解析 JSON 内嵌 base64 音频。
+   */
+  private static async synthesizeViaChat(options: CloudTtsSynthesizeOptions, baseUrl: string,
+    httpRequest: http.HttpRequest): Promise<ArrayBuffer> {
+    const speedHint = options.speed <= 0.8 ? '语速稍慢' : (options.speed >= 1.2 ? '语速稍快' : '语速适中');
+    const payload: Record<string, Object> = {
+      'model': options.model,
+      'messages': [
+        { 'role': 'user', 'content': speedHint },
+        { 'role': 'assistant', 'content': options.text }
+      ],
+      'audio': {
+        'format': 'wav',
+        'voice': options.voice
+      }
+    };
+    const response = await CloudTtsVoiceProvider.withTimeout(
+      httpRequest.request(baseUrl + '/chat/completions', {
+        method: http.RequestMethod.POST,
+        header: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + options.apiKey
+        },
+        extraData: JSON.stringify(payload),
+        connectTimeout: 20000,
+        readTimeout: 120000
+      }),
+      130000,
+      '云端语音合成超时（120s 无响应）',
+      () => {
+        httpRequest.destroy();
+      }
+    );
+    if (response.responseCode !== 200) {
+      const bodyText = typeof response.result === 'string' ? response.result : '';
+      throw new Error('语音合成失败（HTTP ' + response.responseCode + '）' +
+        (bodyText ? ': ' + bodyText.substring(0, 300) : ''));
+    }
+    if (typeof response.result !== 'string') {
+      throw new Error('语音合成返回数据格式异常');
+    }
+    const json = JSON.parse(response.result) as Record<string, Object>;
+    const choices = json['choices'] as Array<Record<string, Object>>;
+    const message = choices && choices.length > 0 ? choices[0]['message'] as Record<string, Object> : undefined;
+    const audioData = message ? message['audio'] as Record<string, Object> : undefined;
+    const data = audioData ? audioData['data'] as string : undefined;
+    if (typeof data !== 'string' || data.length === 0) {
+      throw new Error('语音合成返回中缺少音频数据');
+    }
+    const base64 = new util.Base64Helper();
+    const bytes = base64.decodeSync(data);
+    const out = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(out).set(bytes);
+    return out;
   }
 
   static normalizeBaseUrl(baseUrl: string): string {

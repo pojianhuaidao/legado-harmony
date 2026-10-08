@@ -48,6 +48,7 @@ export class CloudTtsDriver {
     this.paused = false;
     try {
       const audio = await CloudTtsVoiceProvider.synthesize({
+        provider: options.provider,
         text: options.text,
         baseUrl: options.baseUrl,
         model: options.model,

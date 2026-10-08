@@ -900,9 +900,64 @@ struct TtsSettingsPage {
     } catch (e) {
       console.warn('加载朗读设置失败:', e);
     }
+    this.syncCloudVoicesWithProvider();
     this.normalizeDefaultOnlineVoice();
     this.selectedVoiceKey = this.currentVoiceKey();
     this.loadVoices();
+  }
+
+  /** 同步云端音色列表与厂商预设：清除已失效的旧占位音色、补入新音色，并重置失效的活动音色。 */
+  syncCloudVoicesWithProvider(): void {
+    const provider = this.ttsCloudProvider || '';
+    if (!provider) {
+      return;
+    }
+    const info = CloudTtsVoiceProvider.providerInfo(provider);
+    if (!info.voices || info.voices.length === 0) {
+      return;
+    }
+    const map: Record<string, CloudVoiceEntry> = {};
+    for (const entry of this.parsedCloudVoices()) {
+      map[entry.key] = entry;
+    }
+    const validVoices: string[] = [];
+    let changed = false;
+    for (const preset of info.voices) {
+      validVoices.push(preset.voice);
+      const key = `${provider}:${preset.voice}`;
+      if (!map[key]) {
+        map[key] = {
+          key: key,
+          provider: provider,
+          label: info.label,
+          baseUrl: info.baseUrl,
+          model: info.ttsModel,
+          voice: preset.voice,
+          name: preset.name,
+          gender: preset.gender,
+          language: preset.language
+        };
+        changed = true;
+      }
+    }
+    for (const key of Object.keys(map)) {
+      const entry = map[key];
+      if (entry.provider === provider && validVoices.indexOf(entry.voice) < 0) {
+        delete map[key];
+        changed = true;
+      }
+    }
+    let activeVoice = this.ttsCloudActiveVoice || '';
+    if (activeVoice && !map[activeVoice]) {
+      const firstKey = Object.keys(map).find((k: string) => k.startsWith(provider + ':')) || '';
+      activeVoice = firstKey;
+      changed = true;
+    }
+    if (changed) {
+      this.ttsCloudVoices = JSON.stringify(Object.values(map));
+      this.ttsCloudActiveVoice = activeVoice;
+      this.saveSettings();
+    }
   }
 
   applySettings(settings: TtsSettings): void {
