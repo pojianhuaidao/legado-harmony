@@ -13908,6 +13908,20 @@ struct ReadBookPage {
     this.roleTtsTagging = false;
     this.roleTtsTaggingText = '';
     AppStorage.setOrCreate('globalTtsTaggingText', '');
+    // 加固：标注成功 → 段播放开始 整段 20s 总超时，仍未发声则停止朗读并提示。
+    let roleTtsStartupTimer: number = -1;
+    const clearRoleTtsStartupTimer = (): void => {
+      if (roleTtsStartupTimer !== -1) {
+        clearTimeout(roleTtsStartupTimer);
+        roleTtsStartupTimer = -1;
+      }
+    };
+    roleTtsStartupTimer = setTimeout(() => {
+      if (token === this.ttsReadToken && this.isTtsSpeaking) {
+        this.finishTtsReading();
+        promptAction.showToast({ message: '分角色朗读启动失败' });
+      }
+    }, 20000);
     const map = await this.resolveRoleVoiceMap(result);
     this.persistRoleVoiceMap(map);
     const items = this.buildRoleTtsItems(result, map);
@@ -13923,6 +13937,7 @@ struct ReadBookPage {
     this.roleTtsDriver = new RoleTtsDriver();
     this.roleTtsDriver.start(items, {
       onSegmentStart: (item: RoleTtsPlayItem, index: number, total: number) => {
+        clearRoleTtsStartupTimer();
         if (token === this.ttsReadToken) {
           // 当前段开始：写当前句到全局状态并同步定位信息，播放面板随段推进。
           this.roleTtsPanelSentence = item.text;
@@ -14058,7 +14073,14 @@ struct ReadBookPage {
     const map = this.parseRoleVoiceMap();
     let voices: TtsVoiceOption[] = [];
     try {
-      voices = await SystemTtsReader.listAvailableVoices();
+      // 次修：系统音色枚举包 10s 超时，超时返回空列表，由 resolveRoleVoiceMap 的空列表兜底
+      // （全部角色回退默认音色）保证段播放仍能启动，避免永久挂起导致无声 + 面板占位。
+      voices = await Promise.race([
+        SystemTtsReader.listAvailableVoices(),
+        new Promise<TtsVoiceOption[]>((resolve: (value: TtsVoiceOption[]) => void) => {
+          setTimeout(() => resolve([]), 10000);
+        })
+      ]);
     } catch (_) {
       voices = [];
     }

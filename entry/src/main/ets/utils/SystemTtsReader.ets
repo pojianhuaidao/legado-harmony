@@ -139,6 +139,22 @@ export class SystemTtsReader {
   private keepAudioOutputOnFinish: boolean = false;
   private pcmOutputReleaseTimerId: number = -1;
 
+  /** 给系统 TTS 异步调用加超时兜底：超时后 reject（由调用方 catch 返回空音色列表），避免永久挂起。 */
+  private static raceWithTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(message));
+      }, ms);
+      promise.then((value: T) => {
+        clearTimeout(timer);
+        resolve(value);
+      }, (reason: Object) => {
+        clearTimeout(timer);
+        reject(reason);
+      });
+    });
+  }
+
   static async listAvailableVoices(): Promise<TtsVoiceOption[]> {
     try {
       let voices: TtsVoiceOption[] = [];
@@ -315,10 +331,10 @@ export class SystemTtsReader {
       return SystemTtsReader.listLegacyEngineVoices(online);
     }
     try {
-      const voices = await textToSpeech.listVoices({
+      const voices = await SystemTtsReader.raceWithTimeout(textToSpeech.listVoices({
         requestId: `module_voices_${online}_${Date.now()}`,
         online: online
-      });
+      }), 10000, '系统音色枚举超时');
       console.info(`[TTS] module listVoices online=${online}: ${SystemTtsReader.voiceInfosSummary(voices)}`);
       return SystemTtsReader.parseVoices(voices, online);
     } catch (error) {
@@ -1699,11 +1715,12 @@ export class SystemTtsReader {
   private static async listLegacyEngineVoices(online: number): Promise<TtsVoiceOption[]> {
     let engine: textToSpeech.TextToSpeechEngine | null = null;
     try {
-      engine = await SystemTtsReader.createEngineWithMode(0, online, '', 'zh-CN');
-      const voices = await engine.listVoices({
+      engine = await SystemTtsReader.raceWithTimeout(
+        SystemTtsReader.createEngineWithMode(0, online, '', 'zh-CN'), 10000, '系统引擎创建超时');
+      const voices = await SystemTtsReader.raceWithTimeout(engine.listVoices({
         requestId: `legacy_engine_voices_${online}_${Date.now()}`,
         online: online
-      });
+      }), 10000, '系统引擎音色枚举超时');
       console.info(`[TTS] legacy engine listVoices online=${online}: ` +
         `${SystemTtsReader.voiceInfosSummary(voices)}`);
       return SystemTtsReader.parseVoices(voices, online);
@@ -2028,9 +2045,14 @@ export class SystemTtsReader {
           if (extraParams !== undefined) {
             params.extraParams = extraParams;
           }
-          return await textToSpeech.createEngine(params);
+          return await SystemTtsReader.raceWithTimeout(textToSpeech.createEngine(params),
+            10000, 'createEngine 超时');
         } catch (error) {
           lastError = error as Object;
+          // 超时错误直接短路，避免多个参数变体各自再等 10s 串联成几十秒。
+          if (SystemTtsReader.formatStaticError(error as Object).indexOf('超时') >= 0) {
+            throw error;
+          }
         }
       }
     }
