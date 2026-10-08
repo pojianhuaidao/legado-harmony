@@ -118,6 +118,7 @@ export default class EntryAbility extends UIAbility {
     PersistentStorage.persistProp('ttsCloudBaseUrl', '');
     PersistentStorage.persistProp('ttsCloudModel', '');
     PersistentStorage.persistProp('ttsCloudApiKey', '');
+    PersistentStorage.persistProp('ttsCloudAppId', '');
     PersistentStorage.persistProp('ttsCloudVoices', '[]');
     PersistentStorage.persistProp('ttsCloudActiveVoice', '');
     if (!AppStorage.get<boolean>('ttsOfflineSdkModeMigrated')) {

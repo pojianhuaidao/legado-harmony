@@ -666,6 +666,7 @@ struct ReadBookPage {
   @StorageLink('ttsCloudBaseUrl') ttsCloudBaseUrl: string = '';
   @StorageLink('ttsCloudModel') ttsCloudModel: string = '';
   @StorageLink('ttsCloudApiKey') ttsCloudApiKey: string = '';
+  @StorageLink('ttsCloudAppId') ttsCloudAppId: string = '';
   @StorageLink('ttsCloudVoices') ttsCloudVoices: string = '[]';
   @StorageLink('ttsCloudActiveVoice') ttsCloudActiveVoice: string = '';
   @StorageLink('launchShortcutNonce') @Watch('onLaunchShortcutChanged') launchShortcutNonce: number = 0;
@@ -13769,9 +13770,15 @@ struct ReadBookPage {
       return;
     }
     const apiKey = (this.ttsCloudApiKey || '').trim();
-    if (!apiKey) {
+    const appId = (this.ttsCloudAppId || '').trim();
+    if (voice.provider !== 'edge' && !apiKey) {
       this.finishTtsReading();
       promptAction.showToast({ message: '请先在朗读设置中填写云端音色 API Key' });
+      return;
+    }
+    if (voice.provider === 'volcano' && !appId) {
+      this.finishTtsReading();
+      promptAction.showToast({ message: '请先在朗读设置中填写火山引擎 App ID' });
       return;
     }
     this.isTtsSpeaking = true;
@@ -13796,7 +13803,8 @@ struct ReadBookPage {
           provider: voice.provider,
           baseUrl: voice.baseUrl,
           model: voice.model,
-          apiKey: apiKey,
+          apiKey: voice.provider === 'edge' ? '' : apiKey,
+          appId: appId,
           voice: voice.voice,
           speed: this.ttsSpeed,
           onError: (message: string) => {

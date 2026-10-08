@@ -20,6 +20,7 @@ export class TtsSettings {
   cloudTtsBaseUrl: string = '';
   cloudTtsModel: string = '';
   cloudTtsApiKey: string = '';
+  cloudTtsAppId: string = '';
   cloudTtsVoices: string = '[]';
   cloudTtsActiveVoice: string = '';
 }
@@ -43,6 +44,7 @@ export class TtsSettingsStore {
   static readonly KEY_CLOUD_TTS_BASE_URL: string = 'ttsCloudBaseUrl';
   static readonly KEY_CLOUD_TTS_MODEL: string = 'ttsCloudModel';
   static readonly KEY_CLOUD_TTS_API_KEY: string = 'ttsCloudApiKey';
+  static readonly KEY_CLOUD_TTS_APP_ID: string = 'ttsCloudAppId';
   static readonly KEY_CLOUD_TTS_VOICES: string = 'ttsCloudVoices';
   static readonly KEY_CLOUD_TTS_ACTIVE_VOICE: string = 'ttsCloudActiveVoice';
   private static readonly STORE_NAME: string = 'tts_settings';
@@ -90,6 +92,8 @@ export class TtsSettingsStore {
       store, TtsSettingsStore.KEY_CLOUD_TTS_MODEL, storageSettings.cloudTtsModel);
     settings.cloudTtsApiKey = await TtsSettingsStore.getString(
       store, TtsSettingsStore.KEY_CLOUD_TTS_API_KEY, storageSettings.cloudTtsApiKey);
+    settings.cloudTtsAppId = await TtsSettingsStore.getString(
+      store, TtsSettingsStore.KEY_CLOUD_TTS_APP_ID, storageSettings.cloudTtsAppId);
     settings.cloudTtsVoices = await TtsSettingsStore.getString(
       store, TtsSettingsStore.KEY_CLOUD_TTS_VOICES, storageSettings.cloudTtsVoices);
     settings.cloudTtsActiveVoice = await TtsSettingsStore.getString(
@@ -121,6 +125,7 @@ export class TtsSettingsStore {
     await store.put(TtsSettingsStore.KEY_CLOUD_TTS_BASE_URL, normalized.cloudTtsBaseUrl);
     await store.put(TtsSettingsStore.KEY_CLOUD_TTS_MODEL, normalized.cloudTtsModel);
     await store.put(TtsSettingsStore.KEY_CLOUD_TTS_API_KEY, normalized.cloudTtsApiKey);
+    await store.put(TtsSettingsStore.KEY_CLOUD_TTS_APP_ID, normalized.cloudTtsAppId);
     await store.put(TtsSettingsStore.KEY_CLOUD_TTS_VOICES, normalized.cloudTtsVoices);
     await store.put(TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE, normalized.cloudTtsActiveVoice);
     await store.flush();
@@ -147,6 +152,7 @@ export class TtsSettingsStore {
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_BASE_URL, normalized.cloudTtsBaseUrl);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_MODEL, normalized.cloudTtsModel);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_API_KEY, normalized.cloudTtsApiKey);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_APP_ID, normalized.cloudTtsAppId);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_VOICES, normalized.cloudTtsVoices);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE, normalized.cloudTtsActiveVoice);
   }
@@ -171,6 +177,7 @@ export class TtsSettingsStore {
     settings.cloudTtsBaseUrl = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_BASE_URL) || '';
     settings.cloudTtsModel = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_MODEL) || '';
     settings.cloudTtsApiKey = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_API_KEY) || '';
+    settings.cloudTtsAppId = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_APP_ID) || '';
     settings.cloudTtsVoices = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_VOICES) || '[]';
     settings.cloudTtsActiveVoice = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE) || '';
     return TtsSettingsStore.clone(settings);
@@ -272,6 +279,7 @@ export class TtsSettingsStore {
     settings.cloudTtsBaseUrl = source.cloudTtsBaseUrl || '';
     settings.cloudTtsModel = source.cloudTtsModel || '';
     settings.cloudTtsApiKey = source.cloudTtsApiKey || '';
+    settings.cloudTtsAppId = source.cloudTtsAppId || '';
     settings.cloudTtsVoices = source.cloudTtsVoices || '[]';
     settings.cloudTtsActiveVoice = source.cloudTtsActiveVoice || '';
     return settings;

@@ -1,5 +1,6 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
+import { BusinessError } from '@ohos.base';
 import { syncSystemBars } from '../utils/SystemBars';
 import { SystemTtsReader, TtsVoiceOption } from '../utils/SystemTtsReader';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
@@ -49,6 +50,7 @@ struct TtsSettingsPage {
   @StorageLink('ttsCloudBaseUrl') ttsCloudBaseUrl: string = '';
   @StorageLink('ttsCloudModel') ttsCloudModel: string = '';
   @StorageLink('ttsCloudApiKey') ttsCloudApiKey: string = '';
+  @StorageLink('ttsCloudAppId') ttsCloudAppId: string = '';
   @StorageLink('ttsCloudVoices') ttsCloudVoices: string = '[]';
   @StorageLink('ttsCloudActiveVoice') ttsCloudActiveVoice: string = '';
   @StorageLink('appDarkMode') appDarkMode: boolean = false;
@@ -80,6 +82,10 @@ struct TtsSettingsPage {
   @State cloudImporting: boolean = false;
   @State cloudImportMessage: string = '';
   @State cloudImportError: string = '';
+  @State cloudPromptProvider: string = '';
+  @State cloudCredentialProvider: string = '';
+  @State cloudCredentialAppId: string = '';
+  @State cloudCredentialApiKey: string = '';
 
   aboutToAppear(): void {
     this.syncBars();
@@ -110,9 +116,27 @@ struct TtsSettingsPage {
           Column({ space: 12 }) {
             Row({ space: 8 }) {
               this.cloudProviderChip('xiaomi')
+              this.cloudProviderChip('volcano')
               this.cloudProviderChip('aliyun')
             }
             .width('100%')
+
+            if (this.ttsCloudProvider === 'volcano') {
+              Row() {
+                Text('App ID')
+                  .fontSize(15)
+                  .fontColor(this.primaryTextColor())
+                  .width(84)
+                TextInput({ text: this.ttsCloudAppId, placeholder: '请输入火山引擎应用 App ID' })
+                  .layoutWeight(1)
+                  .fontSize(14)
+                  .onChange((value: string) => {
+                    this.ttsCloudAppId = value.trim();
+                    this.saveSettings();
+                  })
+              }
+              .width('100%')
+            }
 
             Row() {
               Text('接口地址')
@@ -163,7 +187,7 @@ struct TtsSettingsPage {
             Button(this.cloudImporting ? '校验中…' : '校验并一键导入')
               .width('100%')
               .height(42)
-              .enabled(!this.cloudImporting && (this.ttsCloudApiKey || '').trim().length > 0)
+              .enabled(!this.cloudImporting && this.canImportCloudVoices())
               .backgroundColor(this.buttonColor())
               .fontColor('#FFFFFF')
               .onClick(() => {
@@ -467,6 +491,13 @@ struct TtsSettingsPage {
           this.roleMapVoicePicker()
         }
       }
+
+      if (this.cloudPromptProvider) {
+        this.cloudProviderPromptCard()
+      }
+      if (this.cloudCredentialProvider) {
+        this.cloudCredentialDialog()
+      }
     }
     .width('100%')
     .height('100%')
@@ -561,6 +592,11 @@ struct TtsSettingsPage {
             ForEach(this.voices, (voice: TtsVoiceOption) => {
               this.systemVoiceDropdownOption(voice)
             }, (voice: TtsVoiceOption) => this.voiceKey(voice))
+
+            this.voiceDropdownSectionTitle('在线音色（微软·轻悦同款）')
+            ForEach(this.edgeVoiceEntries(), (entry: CloudVoiceEntry) => {
+              this.edgeVoiceDropdownOption(entry)
+            }, (entry: CloudVoiceEntry) => entry.key)
           }
           .width('100%')
         }
@@ -631,6 +667,59 @@ struct TtsSettingsPage {
     })
   }
 
+  /** 微软在线音色条目：优先取已同步的 edge 音色，未同步时回退厂商预设。 */
+  edgeVoiceEntries(): CloudVoiceEntry[] {
+    const existing = this.parsedCloudVoices().filter((entry: CloudVoiceEntry) => entry.provider === 'edge');
+    if (existing.length > 0) {
+      return existing;
+    }
+    const info = CloudTtsVoiceProvider.providerInfo('edge');
+    return info.voices.map((preset) => {
+      const key = `edge:${preset.voice}`;
+      return {
+        key: key,
+        provider: 'edge',
+        label: info.label,
+        baseUrl: info.baseUrl,
+        model: info.ttsModel,
+        voice: preset.voice,
+        name: preset.name,
+        gender: preset.gender,
+        language: preset.language
+      };
+    });
+  }
+
+  @Builder
+  edgeVoiceDropdownOption(entry: CloudVoiceEntry) {
+    Row() {
+      Text(entry.name)
+        .fontSize(15)
+        .fontColor(this.primaryTextColor())
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(`${entry.gender} · ${entry.voice}`)
+        .fontSize(12)
+        .fontColor(this.subTextColor())
+        .margin({ right: 10 })
+      if (this.ttsCloudActiveVoice === entry.key) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(18)
+          .fontColor([this.accentColor()])
+      }
+    }
+    .width('100%')
+    .height(46)
+    .padding({ left: 14, right: 14 })
+    .onClick(() => {
+      this.showVoiceDropdown = false;
+      this.ttsCloudActiveVoice = entry.key;
+      this.saveSettings();
+      promptAction.showToast({ message: '已选择轻悦同款在线音色，无需配置，朗读时自动联网合成' });
+    })
+  }
+
   @Builder
   cloudProviderChip(provider: string) {
     Column() {
@@ -645,8 +734,22 @@ struct TtsSettingsPage {
     .backgroundColor(this.ttsCloudProvider === provider ? this.accentColor() : this.cardColor())
     .border({ width: this.ttsCloudProvider === provider ? 0 : 1, color: this.dividerColor() })
     .onClick(() => {
-      this.selectCloudProvider(provider);
+      this.handleCloudProviderChipClick(provider);
     })
+  }
+
+  /** 芯片点击：未配置凭证时弹轻悦样式提示卡，已配置则保持原有切换逻辑。 */
+  handleCloudProviderChipClick(provider: string): void {
+    if (provider === 'xiaomi' && !(this.ttsCloudApiKey || '').trim()) {
+      this.cloudPromptProvider = 'xiaomi';
+      return;
+    }
+    if (provider === 'volcano' &&
+      (!(this.ttsCloudApiKey || '').trim() || !(this.ttsCloudAppId || '').trim())) {
+      this.cloudPromptProvider = 'volcano';
+      return;
+    }
+    this.selectCloudProvider(provider);
   }
 
   @Builder
@@ -758,19 +861,37 @@ struct TtsSettingsPage {
     this.saveSettings();
   }
 
+  /** 导入按钮可用性：edge 免 Key 始终可导入；volcano 需 App ID + Access Token；其余需 API Key。 */
+  canImportCloudVoices(): boolean {
+    const provider = this.ttsCloudProvider || 'aliyun';
+    if (provider === 'edge') {
+      return !this.cloudImporting;
+    }
+    const apiKeyReady = (this.ttsCloudApiKey || '').trim().length > 0;
+    if (provider === 'volcano') {
+      return apiKeyReady && (this.ttsCloudAppId || '').trim().length > 0;
+    }
+    return apiKeyReady;
+  }
+
   async importCloudVoices(): Promise<void> {
+    const provider = this.ttsCloudProvider || 'aliyun';
     const apiKey = (this.ttsCloudApiKey || '').trim();
-    if (!apiKey) {
+    const appId = (this.ttsCloudAppId || '').trim();
+    if (provider !== 'edge' && !apiKey) {
       this.cloudImportError = '请先输入 API Key';
       return;
     }
-    const provider = this.ttsCloudProvider || 'aliyun';
+    if (provider === 'volcano' && !appId) {
+      this.cloudImportError = '请先输入 App ID';
+      return;
+    }
     const baseUrl = (this.ttsCloudBaseUrl || '').trim() || CloudTtsVoiceProvider.providerInfo(provider).baseUrl;
     this.cloudImporting = true;
     this.cloudImportMessage = '';
     this.cloudImportError = '';
     try {
-      const voices = await CloudTtsVoiceProvider.fetchVoices(provider, apiKey, baseUrl);
+      const voices = await CloudTtsVoiceProvider.fetchVoices(provider, apiKey, baseUrl, appId);
       if (voices.length === 0) {
         this.cloudImportError = '未获取到可用音色，请检查接口地址/模型后重试';
         return;
@@ -819,11 +940,13 @@ struct TtsSettingsPage {
       this.previewReader.stop();
     }
     this.cloudDriver.stop();
-    const apiKey = (this.ttsCloudApiKey || '').trim();
-    if (!apiKey) {
-      this.isPreviewing = false;
-      this.cloudImportError = '请先输入 API Key 再试听';
-      return;
+    if (entry.provider !== 'edge') {
+      const apiKey = (this.ttsCloudApiKey || '').trim();
+      if (!apiKey) {
+        this.isPreviewing = false;
+        this.cloudImportError = '请先输入 API Key 再试听';
+        return;
+      }
     }
     this.isPreviewing = true;
     this.cloudImportError = '';
@@ -832,7 +955,8 @@ struct TtsSettingsPage {
       provider: entry.provider,
       baseUrl: entry.baseUrl || this.ttsCloudBaseUrl,
       model: entry.model || this.ttsCloudModel,
-      apiKey: apiKey,
+      apiKey: entry.provider === 'edge' ? '' : (this.ttsCloudApiKey || '').trim(),
+      appId: (this.ttsCloudAppId || '').trim(),
       voice: entry.voice,
       speed: this.ttsSpeed,
       onFinished: () => {
@@ -909,29 +1033,76 @@ struct TtsSettingsPage {
   /** 同步云端音色列表与厂商预设：清除已失效的旧占位音色、补入新音色，并重置失效的活动音色。 */
   syncCloudVoicesWithProvider(): void {
     const provider = this.ttsCloudProvider || '';
-    if (!provider) {
-      return;
+    if (provider) {
+      const info = CloudTtsVoiceProvider.providerInfo(provider);
+      if (info.voices && info.voices.length > 0) {
+        const map: Record<string, CloudVoiceEntry> = {};
+        for (const entry of this.parsedCloudVoices()) {
+          map[entry.key] = entry;
+        }
+        const validVoices: string[] = [];
+        let changed = false;
+        for (const preset of info.voices) {
+          validVoices.push(preset.voice);
+          const key = `${provider}:${preset.voice}`;
+          if (!map[key]) {
+            map[key] = {
+              key: key,
+              provider: provider,
+              label: info.label,
+              baseUrl: info.baseUrl,
+              model: info.ttsModel,
+              voice: preset.voice,
+              name: preset.name,
+              gender: preset.gender,
+              language: preset.language
+            };
+            changed = true;
+          }
+        }
+        for (const key of Object.keys(map)) {
+          const entry = map[key];
+          if (entry.provider === provider && validVoices.indexOf(entry.voice) < 0) {
+            delete map[key];
+            changed = true;
+          }
+        }
+        let activeVoice = this.ttsCloudActiveVoice || '';
+        if (activeVoice && !map[activeVoice]) {
+          const firstKey = Object.keys(map).find((k: string) => k.startsWith(provider + ':')) || '';
+          activeVoice = firstKey;
+          changed = true;
+        }
+        if (changed) {
+          this.ttsCloudVoices = JSON.stringify(Object.values(map));
+          this.ttsCloudActiveVoice = activeVoice;
+          this.saveSettings();
+        }
+      }
     }
-    const info = CloudTtsVoiceProvider.providerInfo(provider);
-    if (!info.voices || info.voices.length === 0) {
+    this.ensureEdgeCloudVoices();
+  }
+
+  /** 微软在线（轻悦同款）免 Key 音色始终存在于列表中，无需配置即可朗读。 */
+  ensureEdgeCloudVoices(): void {
+    const edgeInfo = CloudTtsVoiceProvider.providerInfo('edge');
+    if (!edgeInfo.voices || edgeInfo.voices.length === 0) {
       return;
     }
     const map: Record<string, CloudVoiceEntry> = {};
     for (const entry of this.parsedCloudVoices()) {
       map[entry.key] = entry;
     }
-    const validVoices: string[] = [];
     let changed = false;
-    for (const preset of info.voices) {
-      validVoices.push(preset.voice);
-      const key = `${provider}:${preset.voice}`;
+    for (const preset of edgeInfo.voices) {
+      const key = `edge:${preset.voice}`;
       if (!map[key]) {
         map[key] = {
           key: key,
-          provider: provider,
-          label: info.label,
-          baseUrl: info.baseUrl,
-          model: info.ttsModel,
+          provider: 'edge',
+          label: edgeInfo.label,
+          baseUrl: edgeInfo.baseUrl,
+          model: edgeInfo.ttsModel,
           voice: preset.voice,
           name: preset.name,
           gender: preset.gender,
@@ -940,22 +1111,8 @@ struct TtsSettingsPage {
         changed = true;
       }
     }
-    for (const key of Object.keys(map)) {
-      const entry = map[key];
-      if (entry.provider === provider && validVoices.indexOf(entry.voice) < 0) {
-        delete map[key];
-        changed = true;
-      }
-    }
-    let activeVoice = this.ttsCloudActiveVoice || '';
-    if (activeVoice && !map[activeVoice]) {
-      const firstKey = Object.keys(map).find((k: string) => k.startsWith(provider + ':')) || '';
-      activeVoice = firstKey;
-      changed = true;
-    }
     if (changed) {
       this.ttsCloudVoices = JSON.stringify(Object.values(map));
-      this.ttsCloudActiveVoice = activeVoice;
       this.saveSettings();
     }
   }
@@ -977,6 +1134,7 @@ struct TtsSettingsPage {
     this.ttsCloudBaseUrl = settings.cloudTtsBaseUrl || '';
     this.ttsCloudModel = settings.cloudTtsModel || '';
     this.ttsCloudApiKey = settings.cloudTtsApiKey || '';
+    this.ttsCloudAppId = settings.cloudTtsAppId || '';
     this.ttsCloudVoices = settings.cloudTtsVoices || '[]';
     this.ttsCloudActiveVoice = settings.cloudTtsActiveVoice || '';
   }
@@ -999,6 +1157,7 @@ struct TtsSettingsPage {
     settings.cloudTtsBaseUrl = this.ttsCloudBaseUrl || '';
     settings.cloudTtsModel = this.ttsCloudModel || '';
     settings.cloudTtsApiKey = this.ttsCloudApiKey || '';
+    settings.cloudTtsAppId = this.ttsCloudAppId || '';
     settings.cloudTtsVoices = this.ttsCloudVoices || '[]';
     settings.cloudTtsActiveVoice = this.ttsCloudActiveVoice || '';
     return settings;
@@ -1777,6 +1936,243 @@ struct TtsSettingsPage {
       .borderRadius(16)
       .border({ width: 1, color: this.appDarkMode ? '#3A3A3C' : '#E5E5EA' })
       .position({ x: 12, y: this.statusBarHeight + 120 })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  cloudPromptTitle(): string {
+    return this.cloudPromptProvider === 'volcano' ? '还未配置火山引擎凭证' : '还未配置 MiMo API Key';
+  }
+
+  cloudPromptSteps(): string[] {
+    if (this.cloudPromptProvider === 'volcano') {
+      return [
+        '1. 注册并实名认证火山引擎账号',
+        '2. 开通「豆包语音」，在小模型中开通语音合成',
+        '3. 在控制台 https://console.volcengine.com/speech/new/setting/apikeys 复制 App ID 和 Access Token'
+      ];
+    }
+    return [
+      '1. 打开 https://mimo.mi.com/ 申请 API Key',
+      '2. 复制 API Key',
+      '3. 粘贴并校验导入'
+    ];
+  }
+
+  cloudPromptUrl(): string {
+    return this.cloudPromptProvider === 'volcano'
+      ? 'https://console.volcengine.com/speech/new/setting/apikeys'
+      : 'https://mimo.mi.com/';
+  }
+
+  cloudPromptPrimaryButtonText(): string {
+    return this.cloudPromptProvider === 'volcano' ? '打开控制台' : '打开官网申请 Key';
+  }
+
+  cloudPromptSecondaryButtonText(): string {
+    return this.cloudPromptProvider === 'volcano' ? '立即输入凭证' : '立即输入 Key';
+  }
+
+  openCloudProviderUrl(): void {
+    const provider = this.cloudPromptProvider;
+    this.cloudPromptProvider = '';
+    const uri = provider === 'volcano'
+      ? 'https://console.volcengine.com/speech/new/setting/apikeys'
+      : 'https://mimo.mi.com/';
+    try {
+      this.context.startAbility({
+        action: 'ohos.want.action.viewData',
+        uri: uri
+      }).catch((e: BusinessError) => {
+        console.warn('打开官网失败:', JSON.stringify(e));
+        promptAction.showToast({ message: '无法打开浏览器' });
+      });
+    } catch (e) {
+      console.warn('打开官网异常:', JSON.stringify(e));
+      promptAction.showToast({ message: '无法打开浏览器' });
+    }
+  }
+
+  /** 「立即输入 Key / 立即输入凭证」：切换厂商并弹出凭证输入对话框。 */
+  openCloudCredentialInput(): void {
+    const provider = this.cloudPromptProvider;
+    this.cloudPromptProvider = '';
+    if (!provider) {
+      return;
+    }
+    this.selectCloudProvider(provider);
+    this.cloudCredentialProvider = provider;
+    this.cloudCredentialAppId = this.ttsCloudAppId || '';
+    this.cloudCredentialApiKey = this.ttsCloudApiKey || '';
+  }
+
+  /** 确认凭证：写入存储后自动触发校验导入。 */
+  confirmCloudCredential(): void {
+    const provider = this.cloudCredentialProvider;
+    if (!provider) {
+      return;
+    }
+    if (provider === 'volcano') {
+      this.ttsCloudAppId = (this.cloudCredentialAppId || '').trim();
+    }
+    this.ttsCloudApiKey = (this.cloudCredentialApiKey || '').trim();
+    this.saveSettings();
+    this.cloudCredentialProvider = '';
+    this.cloudImportError = '';
+    this.importCloudVoices();
+  }
+
+  @Builder
+  cloudProviderPromptCard() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.appDarkMode ? '#99000000' : '#66000000')
+        .onClick(() => {
+          this.cloudPromptProvider = '';
+        })
+
+      Column({ space: 0 }) {
+        Text(this.cloudPromptTitle())
+          .fontSize(17)
+          .fontColor(this.primaryTextColor())
+          .fontWeight(FontWeight.Medium)
+          .width('100%')
+          .padding({ left: 20, right: 20, top: 18, bottom: 4 })
+        ForEach(this.cloudPromptSteps(), (step: string) => {
+          Row({ space: 8 }) {
+            Text('·')
+              .fontSize(13)
+              .fontColor(this.subTextColor())
+              .margin({ top: 2 })
+            Text(step)
+              .fontSize(13)
+              .fontColor(this.subTextColor())
+              .layoutWeight(1)
+              .lineHeight(20)
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Top)
+          .padding({ left: 20, right: 20, top: 3, bottom: 3 })
+        }, (step: string) => step)
+
+        Row({ space: 10 }) {
+          Button(this.cloudPromptPrimaryButtonText())
+            .layoutWeight(1)
+            .height(40)
+            .fontSize(14)
+            .backgroundColor(this.cardColor())
+            .fontColor(this.accentColor())
+            .onClick(() => {
+              this.openCloudProviderUrl();
+            })
+          Button(this.cloudPromptSecondaryButtonText())
+            .layoutWeight(1)
+            .height(40)
+            .fontSize(14)
+            .backgroundColor(this.buttonColor())
+            .fontColor('#FFFFFF')
+            .onClick(() => {
+              this.openCloudCredentialInput();
+            })
+        }
+        .width('100%')
+        .padding({ left: 20, right: 20, top: 14, bottom: 18 })
+      }
+      .width('calc(100% - 72vp)')
+      .constraintSize({ maxWidth: 420 })
+      .borderRadius(16)
+      .backgroundColor(this.cardColor())
+      .border({ width: 1, color: this.appDarkMode ? '#3A3A3C' : '#E5E5EA' })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  cloudCredentialDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.appDarkMode ? '#99000000' : '#66000000')
+        .onClick(() => {
+          this.cloudCredentialProvider = '';
+        })
+
+      Column({ space: 10 }) {
+        Text(this.cloudCredentialProvider === 'volcano' ? '填写火山引擎凭证' : '填写 MiMo API Key')
+          .fontSize(17)
+          .fontColor(this.primaryTextColor())
+          .fontWeight(FontWeight.Medium)
+          .width('100%')
+          .padding({ left: 20, right: 20, top: 18, bottom: 4 })
+        if (this.cloudCredentialProvider === 'volcano') {
+          Row() {
+            Text('App ID')
+              .fontSize(14)
+              .fontColor(this.primaryTextColor())
+              .width(72)
+            TextInput({ text: this.cloudCredentialAppId, placeholder: '火山引擎控制台获取的 App ID' })
+              .layoutWeight(1)
+              .height(38)
+              .fontSize(14)
+              .onChange((value: string) => {
+                this.cloudCredentialAppId = value.trim();
+              })
+          }
+          .width('100%')
+          .padding({ left: 20, right: 20 })
+        }
+        Row() {
+          Text('API Key')
+            .fontSize(14)
+            .fontColor(this.primaryTextColor())
+            .width(72)
+          TextInput({
+            text: this.cloudCredentialApiKey,
+            placeholder: this.cloudCredentialProvider === 'volcano' ? 'Access Token' : 'MiMo API Key'
+          })
+            .type(InputType.Password)
+            .layoutWeight(1)
+            .height(38)
+            .fontSize(14)
+            .onChange((value: string) => {
+              this.cloudCredentialApiKey = value.trim();
+            })
+        }
+        .width('100%')
+        .padding({ left: 20, right: 20 })
+        Row({ space: 10 }) {
+          Button('取消')
+            .layoutWeight(1)
+            .height(40)
+            .fontSize(14)
+            .backgroundColor(this.cardColor())
+            .fontColor(this.subTextColor())
+            .onClick(() => {
+              this.cloudCredentialProvider = '';
+            })
+          Button('确认并导入')
+            .layoutWeight(1)
+            .height(40)
+            .fontSize(14)
+            .backgroundColor(this.buttonColor())
+            .fontColor('#FFFFFF')
+            .onClick(() => {
+              this.confirmCloudCredential();
+            })
+        }
+        .width('100%')
+        .padding({ left: 20, right: 20, top: 6, bottom: 18 })
+      }
+      .width('calc(100% - 72vp)')
+      .constraintSize({ maxWidth: 420 })
+      .borderRadius(16)
+      .backgroundColor(this.cardColor())
+      .border({ width: 1, color: this.appDarkMode ? '#3A3A3C' : '#E5E5EA' })
     }
     .width('100%')
     .height('100%')

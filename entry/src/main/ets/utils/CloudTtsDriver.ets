@@ -16,6 +16,7 @@ export interface CloudTtsPlayOptions {
   baseUrl: string;
   model: string;
   apiKey: string;
+  appId?: string;
   voice: string;
   speed: number;
   onStart?: () => void;
@@ -53,6 +54,7 @@ export class CloudTtsDriver {
         baseUrl: options.baseUrl,
         model: options.model,
         apiKey: options.apiKey,
+        appId: options.appId,
         voice: options.voice,
         speed: options.speed
       });
