@@ -60,67 +60,87 @@ export interface CloudTtsSynthesizeOptions {
 }
 
 /** 火山豆包 TTS 请求体结构（ArkTS 严格模式显式类型标注）。 */
+interface VolcanoTtsAppPayload {
+  appid: string;
+  token: string;
+  cluster: string;
+}
+
+interface VolcanoTtsUserPayload {
+  uid: string;
+}
+
+interface VolcanoTtsAudioPayload {
+  voice_type: string;
+  encoding: string;
+  speed_ratio: number;
+  volume_ratio: number;
+  pitch_ratio: number;
+}
+
+interface VolcanoTtsRequestPayloadBody {
+  reqid: string;
+  text: string;
+  operation: string;
+}
+
 interface VolcanoTtsRequestPayload {
-  app: {
-    appid: string;
-    token: string;
-    cluster: string;
-  };
-  user: {
-    uid: string;
-  };
-  audio: {
-    voice_type: string;
-    encoding: string;
-    speed_ratio: number;
-    volume_ratio: number;
-    pitch_ratio: number;
-  };
-  request: {
-    reqid: string;
-    text: string;
-    operation: string;
-  };
+  app: VolcanoTtsAppPayload;
+  user: VolcanoTtsUserPayload;
+  audio: VolcanoTtsAudioPayload;
+  request: VolcanoTtsRequestPayloadBody;
 }
 
 /** 微软 Edge speech.config 二进制消息中的 JSON 配置结构。 */
-interface EdgeSpeechConfigPayload {
-  contexts: EdgeSpeechContextPayload[];
-  os: string;
-  app: {
-    name: string;
-  };
-  secmsgecv: string;
+interface EdgeSpeechConfigAppPayload {
+  name: string;
+}
+
+interface EdgeSpeechMetadataOptionsPayload {
+  sentenceBoundaryEnabled: string;
+  wordBoundaryEnabled: string;
+}
+
+interface EdgeSpeechAudioPayload {
+  metadataoptions: EdgeSpeechMetadataOptionsPayload;
+  outputFormat: string;
+}
+
+interface EdgeSpeechSynthesisPayload {
+  audio: EdgeSpeechAudioPayload;
+}
+
+interface EdgeSpeechTtsPayload {
+  stream: string;
 }
 
 interface EdgeSpeechContextPayload {
-  synthesis: {
-    audio: {
-      metadataoptions: {
-        sentenceBoundaryEnabled: string;
-        wordBoundaryEnabled: string;
-      };
-      outputFormat: string;
-    };
-  };
-  tts: {
-    stream: string;
-  };
+  synthesis: EdgeSpeechSynthesisPayload;
+  tts: EdgeSpeechTtsPayload;
+}
+
+interface EdgeSpeechConfigPayload {
+  contexts: EdgeSpeechContextPayload[];
+  os: string;
+  app: EdgeSpeechConfigAppPayload;
+  secmsgecv: string;
 }
 
 /** 小米 MiMo chat/completions 请求体结构。 */
-interface ChatTtsRequestPayload {
-  model: string;
-  messages: ChatTtsMessagePayload[];
-  audio: {
-    format: string;
-    voice: string;
-  };
+interface ChatTtsAudioPayload {
+  format: string;
+  voice: string;
 }
 
 interface ChatTtsMessagePayload {
   role: string;
   content: string;
+}
+
+interface ChatTtsRequestPayload {
+  model: string;
+  messages: ChatTtsMessagePayload[];
+  audio: ChatTtsAudioPayload;
 }
 
 export class CloudTtsVoiceProvider {
@@ -448,8 +468,8 @@ export class CloudTtsVoiceProvider {
         throw new Error('火山语音合成返回数据格式异常');
       }
       const json = JSON.parse(response.result) as Record<string, Object>;
-      const code = json['code'];
-      const message = json['message'] as string || '未知错误';
+      const code = json['code'] as number;
+      const message = (json['message'] as string) || '未知错误';
       if (code !== 3000) {
         throw new Error('火山语音合成失败：' + message + '（code=' + String(code) + '）');
       }
