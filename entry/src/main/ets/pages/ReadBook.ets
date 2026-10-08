@@ -33,6 +33,8 @@ import { RecentReadCardUpdater } from '../utils/RecentReadCardUpdater';
 import { SystemTtsReader, TtsChunk, TtsVoiceOption } from '../utils/SystemTtsReader';
 import { RoleTagger, RoleTagResult, RoleTaggerOptions } from '../utils/RoleTagger';
 import { RoleTtsDriver, RoleTtsPlayItem } from '../utils/RoleTtsDriver';
+import { CloudTtsDriver } from '../utils/CloudTtsDriver';
+import { CloudTtsVoiceData } from '../utils/CloudTtsVoiceProvider';
 import { ReaderTtsFloatingSession } from '../utils/ReaderTtsFloatingSession';
 import { ReaderProgressCheckpoint } from '../utils/ReaderProgressCheckpoint';
 import { ReaderSettings, ReaderSettingsStore } from '../utils/ReaderSettingsStore';
@@ -338,6 +340,9 @@ struct ReadBookPage {
   private roleTtsRunning: boolean = false;
   private roleTtsTagging: boolean = false;
   private roleTtsPanelSentence: string = '';
+  private cloudTtsDriver: CloudTtsDriver | null = null;
+  private cloudTtsRunning: boolean = false;
+  private cloudReadToken: number = -1;
   private ttsAutoContinue: boolean = false;
   private ttsReadToken: number = 0;
   private ttsChapterSwitching: boolean = false;
@@ -657,6 +662,12 @@ struct ReadBookPage {
   @StorageLink('ttsRoleModel') ttsRoleModel: string = '';
   @StorageLink('ttsRoleApiKey') ttsRoleApiKey: string = '';
   @StorageLink('ttsRoleVoiceMap') ttsRoleVoiceMap: string = '{}';
+  @StorageLink('ttsCloudProvider') ttsCloudProvider: string = '';
+  @StorageLink('ttsCloudBaseUrl') ttsCloudBaseUrl: string = '';
+  @StorageLink('ttsCloudModel') ttsCloudModel: string = '';
+  @StorageLink('ttsCloudApiKey') ttsCloudApiKey: string = '';
+  @StorageLink('ttsCloudVoices') ttsCloudVoices: string = '[]';
+  @StorageLink('ttsCloudActiveVoice') ttsCloudActiveVoice: string = '';
   @StorageLink('launchShortcutNonce') @Watch('onLaunchShortcutChanged') launchShortcutNonce: number = 0;
   @StorageLink('fullTextCacheCancelNonce') @Watch('onFullTextCacheCancelNonceChanged') fullTextCacheCancelNonce: number = 0;
   @State ttsVoices: TtsVoiceOption[] = [ReadBookPage.defaultTtsVoice()];
@@ -13484,7 +13495,13 @@ struct ReadBookPage {
       try {
         if (this.isTtsPaused || this.ttsReader.isPaused()) {
           this.isTtsPaused = false;
-          if (await this.ttsReader.resume()) {
+          if (this.isCloudTtsVoiceActive()) {
+            await this.cloudTtsDriver?.resume();
+            this.isTtsSpeaking = true;
+            this.updateTtsFloatingSession();
+            await this.updateTtsAvSessionPlaybackState(avSession.PlaybackState.PLAYBACK_STATE_PLAY);
+            promptAction.showToast({ message: '继续朗读' });
+          } else if (await this.ttsReader.resume()) {
             this.isTtsSpeaking = true;
             this.updateTtsFloatingSession();
             await this.updateTtsAvSessionPlaybackState(avSession.PlaybackState.PLAYBACK_STATE_PLAY);
@@ -13494,7 +13511,12 @@ struct ReadBookPage {
           }
         } else {
           this.isTtsPaused = true;
-          if (await this.ttsReader.pause()) {
+          if (this.isCloudTtsVoiceActive()) {
+            await this.cloudTtsDriver?.pause();
+            this.updateTtsFloatingSession();
+            await this.updateTtsAvSessionPlaybackState(avSession.PlaybackState.PLAYBACK_STATE_PAUSE);
+            promptAction.showToast({ message: '已暂停朗读' });
+          } else if (await this.ttsReader.pause()) {
             this.updateTtsFloatingSession();
             await this.updateTtsAvSessionPlaybackState(avSession.PlaybackState.PLAYBACK_STATE_PAUSE);
             promptAction.showToast({ message: '已暂停朗读' });
@@ -13616,6 +13638,10 @@ struct ReadBookPage {
         return;
       }
       this.publishTtsFloatingSession();
+      if (this.isCloudTtsVoiceActive()) {
+        await this.startCloudTtsReading(text, token, showToast);
+        return;
+      }
       if (this.ttsRoleEnabled) {
         const roleApiKey = (this.ttsRoleApiKey || '').trim();
         if (roleApiKey.length > 0) {
@@ -13689,6 +13715,124 @@ struct ReadBookPage {
       this.finishTtsReading();
       promptAction.showToast({ message: '当前系统不支持朗读或 TTS 初始化失败' });
       console.error('启动系统 TTS 失败:', error);
+    }
+  }
+
+  private isCloudTtsVoiceActive(): boolean {
+    return (this.ttsCloudActiveVoice || '').trim().length > 0 && this.currentCloudVoice() !== null;
+  }
+
+  private currentCloudVoice(): CloudTtsVoiceData | null {
+    const active = (this.ttsCloudActiveVoice || '').trim();
+    if (!active) {
+      return null;
+    }
+    try {
+      const raw = JSON.parse(this.ttsCloudVoices || '[]') as CloudTtsVoiceData[];
+      for (const item of raw) {
+        if ((item.provider + ':' + item.voice) === active) {
+          return item;
+        }
+      }
+    } catch (_) {
+    }
+    return null;
+  }
+
+  /** 按标点切分长文本为较短的语音段落，避免单次云端合成文本过长。 */
+  private splitCloudTtsSegments(text: string): string[] {
+    const parts = (text || '').split(/(?<=[。！？!?；;\n])/g);
+    const segments: string[] = [];
+    let buffer = '';
+    for (const part of parts) {
+      if ((buffer + part).length > 180) {
+        if (buffer.trim().length > 0) {
+          segments.push(buffer.trim());
+        }
+        buffer = part;
+      } else {
+        buffer += part;
+      }
+    }
+    if (buffer.trim().length > 0) {
+      segments.push(buffer.trim());
+    }
+    return segments;
+  }
+
+  /** 云端音色朗读：使用已导入的云端音色连接逐段合成并链式播放。 */
+  private async startCloudTtsReading(text: string, token: number, showToast: boolean): Promise<void> {
+    const voice = this.currentCloudVoice();
+    if (!voice) {
+      this.finishTtsReading();
+      promptAction.showToast({ message: '云端音色配置不存在，请在朗读设置中重新导入' });
+      return;
+    }
+    const apiKey = (this.ttsCloudApiKey || '').trim();
+    if (!apiKey) {
+      this.finishTtsReading();
+      promptAction.showToast({ message: '请先在朗读设置中填写云端音色 API Key' });
+      return;
+    }
+    this.isTtsSpeaking = true;
+    this.cloudTtsRunning = true;
+    this.cloudReadToken = token;
+    this.cloudTtsDriver = new CloudTtsDriver(getContext(this) as common.UIAbilityContext);
+    const segments = this.splitCloudTtsSegments(text);
+    if (segments.length === 0) {
+      this.finishTtsReading();
+      return;
+    }
+    if (showToast && token === this.ttsReadToken) {
+      promptAction.showToast({ message: '开始连续朗读（云端音色）' });
+    }
+    try {
+      for (let i = 0; i < segments.length; i++) {
+        if (!this.cloudTtsRunning || token !== this.ttsReadToken || token !== this.cloudReadToken) {
+          break;
+        }
+        await this.cloudTtsDriver.speak({
+          text: segments[i],
+          provider: voice.provider,
+          baseUrl: voice.baseUrl,
+          model: voice.model,
+          apiKey: apiKey,
+          voice: voice.voice,
+          speed: this.ttsSpeed,
+          onError: (message: string) => {
+            if (token === this.ttsReadToken) {
+              this.finishTtsReading();
+              promptAction.showToast({ message: message || '云端音色朗读失败' });
+            }
+          }
+        });
+        if (token !== this.ttsReadToken || token !== this.cloudReadToken || !this.cloudTtsRunning) {
+          break;
+        }
+      }
+      if (token === this.ttsReadToken && token === this.cloudReadToken && this.cloudTtsRunning) {
+        this.cloudTtsRunning = false;
+        this.cloudReadToken = -1;
+        this.continueTtsReading(token).catch((e: Error) => {
+          console.warn('连续朗读续播失败:', e);
+          if (token === this.ttsReadToken) {
+            this.finishTtsReading();
+          }
+        });
+      }
+    } catch (error) {
+      if (token === this.ttsReadToken) {
+        this.finishTtsReading();
+        promptAction.showToast({ message: '云端音色朗读失败' });
+      }
+    }
+  }
+
+  private stopCloudTtsReading(): void {
+    this.cloudTtsRunning = false;
+    this.cloudReadToken = -1;
+    if (this.cloudTtsDriver) {
+      this.cloudTtsDriver.stop();
     }
   }
 
@@ -13963,6 +14107,7 @@ struct ReadBookPage {
       return;
     }
     this.stopRoleTtsReading();
+    this.stopCloudTtsReading();
     this.ttsReader.stop();
     this.isTtsSpeaking = false;
     this.updateVolumeKeySubscription();
@@ -13989,6 +14134,7 @@ struct ReadBookPage {
     this.ttsChapterCompletionRetryCount = 0;
     this.ttsPageTurnSerial++;
     this.stopRoleTtsReading();
+    this.stopCloudTtsReading();
     this.ttsReader.stop();
     this.isTtsSpeaking = false;
     this.clearTtsHighlight();
@@ -14247,6 +14393,7 @@ struct ReadBookPage {
     this.updateVolumeKeySubscription();
     this.ttsMediaControlsExpanded = false;
     this.stopRoleTtsReading();
+    this.stopCloudTtsReading();
     this.ttsReader.stop();
     this.invalidateTtsFocusSession();
     this.stopTtsBackgroundRunning();

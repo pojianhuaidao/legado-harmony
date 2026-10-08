@@ -114,6 +114,12 @@ export default class EntryAbility extends UIAbility {
     PersistentStorage.persistProp('ttsRoleModel', '');
     PersistentStorage.persistProp('ttsRoleApiKey', '');
     PersistentStorage.persistProp('ttsRoleVoiceMap', '{}');
+    PersistentStorage.persistProp('ttsCloudProvider', '');
+    PersistentStorage.persistProp('ttsCloudBaseUrl', '');
+    PersistentStorage.persistProp('ttsCloudModel', '');
+    PersistentStorage.persistProp('ttsCloudApiKey', '');
+    PersistentStorage.persistProp('ttsCloudVoices', '[]');
+    PersistentStorage.persistProp('ttsCloudActiveVoice', '');
     if (!AppStorage.get<boolean>('ttsOfflineSdkModeMigrated')) {
       if (AppStorage.get<number>('ttsOnline') === 0 &&
         (AppStorage.get<number>('ttsPerson') ?? 0) === 0 &&
