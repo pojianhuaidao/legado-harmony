@@ -14084,14 +14084,28 @@ struct ReadBookPage {
     } catch (_) {
       voices = [];
     }
-    // 本地兜底：系统音色枚举超时返回空列表时，用已知本地音色（默认/聆小珊/凌飞哲）作为自动分配候选；
+    // 本地兜底：系统音色枚举失败时 listAvailableVoices 返回"非空但全不可用"列表
+    // （knownVoiceOptions 兜底，available=false），仅按 length 判断会永不触发兜底，
+    // 导致用户映射被清空、自动分配全落默认音色（全角色默认音色问题）。
+    // 改为"无任何可用音色"即触发本地兜底，用已知本地音色（默认/聆小珊/凌飞哲）作为自动分配候选；
     // 禁止把角色自动分配到云端音色（尤其免 Key 常驻的 edge），云端音色仅用户显式引用时可用。
-    if (voices.length === 0) {
+    let usingFallbackVoices = false;
+    const hasUsableVoice = voices.some((v: TtsVoiceOption) => v.available && !v.downloadable);
+    if (voices.length === 0 || !hasUsableVoice) {
       voices = this.localFallbackVoiceOptions();
+      usingFallbackVoices = true;
     }
     const cloudVoices = this.cloudVoiceDataList();
     const isLocalUsable = (person: number): boolean => {
-      return voices.some((v: TtsVoiceOption) => v.available && !v.downloadable && v.id === person);
+      if (voices.some((v: TtsVoiceOption) => v.available && !v.downloadable && v.id === person)) {
+        return true;
+      }
+      // 枚举失败/无可用音色走本地兜底时：无法确认真实可用性，对用户显式映射的本地音色
+      // 保守保留而非一律清空（清空后自动分配会全部落到系统默认音色，即"全角色默认"问题）。
+      if (usingFallbackVoices) {
+        return true;
+      }
+      return false;
     };
     const isCloudUsable = (key: string): boolean => {
       return cloudVoices.some((c: CloudTtsVoiceData) => (c.provider + ':' + c.voice) === key);
