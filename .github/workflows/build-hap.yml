@@ -51,11 +51,12 @@ jobs:
         run: |
           set -e
           KEY_DIR="$RUNNER_TEMP/harmony-key"
-          mkdir -p "$KEY_DIR/material"
+          mkdir -p "$KEY_DIR"
           echo "$LEGADO_P12_B64" | base64 -d > "$KEY_DIR/legado-harmony-release.p12"
           echo "$LEGADO_CER_B64" | base64 -d > "$KEY_DIR/阅读.cer"
           echo "$LEGADO_P7B_B64" | base64 -d > "$KEY_DIR/阅读Release.p7b"
-          echo "$LEGADO_MATERIAL_B64" | base64 -d | tar -xz -C "$KEY_DIR/material"
+          # tgz 内已含 material/ 前缀，解压到 KEY_DIR 即得 KEY_DIR/material/fd|ac|ce
+          echo "$LEGADO_MATERIAL_B64" | base64 -d | tar -xz -C "$KEY_DIR"
           ls -la "$KEY_DIR" "$KEY_DIR/material"
           # 将 build-profile.json5 中三套 signingConfigs 的绝对路径改写为 CI 路径
           python3 - <<'EOF'
