@@ -15,7 +15,7 @@
     "metadata": [
       {
         "name": "client_id",
-        "value": "6917604888286360848"
+        "value": "6917618565826924962"
       },
       {
         "name": "ohos.arkui.UIMaterial.state",
@@ -31,16 +31,6 @@
       },
       {
         "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
-      },
-      {
-        "name": "ohos.permission.CAMERA",
-        "reason": "$string:reader_eye_turn_camera_permission",
-        "usedScene": {
-          "abilities": [
-            "EntryAbility"
-          ],
-          "when": "inuse"
-        }
       },
     ],
     "abilities": [

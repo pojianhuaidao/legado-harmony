@@ -6,7 +6,7 @@
       "icon": "$media:layered_image",
       "wants": [
         {
-          "bundleName": "lagado.hm.app",
+          "bundleName": "reading.hm.o",
           "moduleName": "entry",
           "abilityName": "EntryAbility",
           "parameters": {

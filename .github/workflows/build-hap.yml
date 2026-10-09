@@ -1,4 +1,4 @@
-name: Build HAP and Release (unsigned)
+name: Build APP and Release (signed + unsigned)
 
 on:
   workflow_dispatch:
@@ -40,18 +40,36 @@ jobs:
           version: 26.0.0.821
           cache: true
 
-      # 工程 signingConfigs 指向作者本机签名文件（绝对路径+密文），CI 不可用，剥离后产 unsigned HAP
-      - name: Strip local signing config
+      # 本地签名材料（p12/cer/p7b + material 加密材料）以 base64 存于 GitHub Secrets，
+      # CI 中解码到 $RUNNER_TEMP/harmony-key 并改写 build-profile.json5 路径，实现与本地一致的 release 签名。
+      - name: Restore local signing material
+        env:
+          LEGADO_P12_B64: ${{ secrets.LEGADO_P12_B64 }}
+          LEGADO_CER_B64: ${{ secrets.LEGADO_CER_B64 }}
+          LEGADO_P7B_B64: ${{ secrets.LEGADO_P7B_B64 }}
+          LEGADO_MATERIAL_B64: ${{ secrets.LEGADO_MATERIAL_B64 }}
         run: |
+          set -e
+          KEY_DIR="$RUNNER_TEMP/harmony-key"
+          mkdir -p "$KEY_DIR/material"
+          echo "$LEGADO_P12_B64" | base64 -d > "$KEY_DIR/legado-harmony-release.p12"
+          echo "$LEGADO_CER_B64" | base64 -d > "$KEY_DIR/阅读.cer"
+          echo "$LEGADO_P7B_B64" | base64 -d > "$KEY_DIR/阅读Release.p7b"
+          echo "$LEGADO_MATERIAL_B64" | base64 -d | tar -xz -C "$KEY_DIR/material"
+          ls -la "$KEY_DIR" "$KEY_DIR/material"
+          # 将 build-profile.json5 中三套 signingConfigs 的绝对路径改写为 CI 路径
           python3 - <<'EOF'
-          import re
+          import os, re
           p = 'build-profile.json5'
           s = open(p, encoding='utf-8').read()
-          s = re.sub(r'"signingConfigs"\s*:\s*\[.*?\],', '"signingConfigs": [],', s, flags=re.S)
-          s = re.sub(r'\s*"signingConfig"\s*:\s*"[^"]*",?', '', s)
+          key_dir = os.path.join(os.environ['RUNNER_TEMP'], 'harmony-key')
+          key_dir = key_dir.replace('\\', '/')
+          s = s.replace('C:/harmony-key/', key_dir + '/')
           open(p, 'w', encoding='utf-8').write(s)
-          print('signingConfigs stripped')
+          print('signing paths rewritten to', key_dir)
           EOF
+          # 校验改写结果
+          grep -c "RUNNER_TEMP" build-profile.json5 || true
 
       - name: ohpm install
         run: |
@@ -64,9 +82,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 版本号规则 1.MMDD.NN：MMDD 取构建日期（如 2026-10-02 -> 1.1002.xx）；NN 为当日构建序号，同日依次 .01/.02/.03，跨日重置 .01。
-          # 序号依据仓库已发布 release 资产中当日同名 HAP 的最大序号 +1 得出（查询 GitHub API releases）。
-          # versionCode = "1"+MMDD+NN 视作十进制（1.1002.01 -> 1100201，同日随 NN 递增，跨日随 MMDD 递增）。
+          # 版本号规则 1.MMDD.NN：MMDD 取构建日期（如 2026-10-09 -> 1.1009.xx）；NN 为当日构建序号，同日依次 .01/.02/.03，跨日重置 .01。
+          # 序号依据仓库已发布 release 资产中当日同名 APP（signed/unsigned）的最大序号 +1 得出（查询 GitHub API releases）。
+          # versionCode = "1"+MMDD+NN 视作十进制（1.1009.01 -> 1100901，同日随 NN 递增，跨日随 MMDD 递增）。
           python3 - <<'EOF'
           import datetime, re, json, os, urllib.request, urllib.error
 
@@ -93,7 +111,7 @@ jobs:
                       break
                   if not rels:
                       break
-                  pat = re.compile(r'^lagado\.hm\.app_1\.%s\.(\d{2})\.hap$' % mmdd)
+                  pat = re.compile(r'^reading\.hm\.o_1\.%s\.(\d{2})_(signed|unsigned)\.app$' % mmdd)
                   for rel in rels:
                       for a in rel.get('assets', []):
                           m = pat.match(a.get('name', ''))
@@ -115,21 +133,15 @@ jobs:
           print('versionName=' + ver + ' versionCode=' + str(code))
           EOF
 
-      - name: Build debug HAP (unsigned)
+      - name: Build release APP (signed + unsigned)
         run: |
           export DEVECO_SDK_HOME="$HOS_SDK_HOME"
           export PATH="$HOS_SDK_HOME/../bin:$PATH"
-          hvigorw --no-daemon assembleHap --mode module -p module=entry@default -p product=default -p buildMode=debug
+          hvigorw --no-daemon --mode project -p product=release assembleApp
 
-      - name: Collect HAP
+      - name: Collect APP
         id: collect
         run: |
-          HAP=$(find entry/build -name '*.hap' | head -1)
-          if [ -z "$HAP" ]; then
-            echo "::error::No HAP found under entry/build"
-            exit 1
-          fi
-          # 出包文件名按包名：lagado.hm.app_<versionName>.hap（版本号规则 1.MMDD.NN，见 AppScope/app.json5 注释）
           VERSION=$(python3 - <<'EOF'
           import re
           s = open('AppScope/app.json5', encoding='utf-8').read()
@@ -137,21 +149,28 @@ jobs:
           print(m.group(1) if m else 'dev')
           EOF
           )
-          OUT="lagado.hm.app_${VERSION}.hap"
-          cp "$HAP" "$OUT"
-          echo "HAP=$OUT" >> "$GITHUB_ENV"
-          ls -lh "$OUT"
+          SIGNED="reading.hm.o_${VERSION}_signed.app"
+          UNSIGNED="reading.hm.o_${VERSION}_unsigned.app"
+          cp build/outputs/release/legado-harmony-release-signed.app "$SIGNED"
+          cp build/outputs/release/legado-harmony-release-unsigned.app "$UNSIGNED"
+          echo "SIGNED=$SIGNED" >> "$GITHUB_ENV"
+          echo "UNSIGNED=$UNSIGNED" >> "$GITHUB_ENV"
+          ls -lh "$SIGNED" "$UNSIGNED"
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: unsigned HAP build #${{ github.run_number }}
+          name: APP build #${{ github.run_number }}
           body: |
-            自动构建的 unsigned HAP（未签名，侧载用）。
+            自动构建的 release APP 双包：
+            - signed：正式 release 签名包（AGC 测试分发用）
+            - unsigned：未签名包
             - 提交: ${{ github.sha }}
             - 构建号: ${{ github.run_number }}
             - 触发: ${{ github.event_name }}
-          files: ${{ env.HAP }}
+          files: |
+            ${{ env.SIGNED }}
+            ${{ env.UNSIGNED }}
           draft: false
           prerelease: true
