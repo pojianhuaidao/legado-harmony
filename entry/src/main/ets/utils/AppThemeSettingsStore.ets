@@ -121,11 +121,11 @@ export class AppThemeSettingsStore {
       store, AppThemeSettingsStore.KEY_DARK_ACCENT_COLOR,
       AppStorage.get<string>(AppThemeSettingsStore.KEY_DARK_ACCENT_COLOR) || defaults.darkAccentColor),
       defaults.darkAccentColor);
-    settings.lightButtonColor = AppThemeSettingsStore.normalizeColor(await AppThemeSettingsStore.getString(
+    settings.lightButtonColor = AppThemeSettingsStore.ensureButtonTextContrast(await AppThemeSettingsStore.getString(
       store, AppThemeSettingsStore.KEY_LIGHT_BUTTON_COLOR,
       AppStorage.get<string>(AppThemeSettingsStore.KEY_LIGHT_BUTTON_COLOR) || defaults.lightButtonColor),
       defaults.lightButtonColor);
-    settings.darkButtonColor = AppThemeSettingsStore.normalizeColor(await AppThemeSettingsStore.getString(
+    settings.darkButtonColor = AppThemeSettingsStore.ensureButtonTextContrast(await AppThemeSettingsStore.getString(
       store, AppThemeSettingsStore.KEY_DARK_BUTTON_COLOR,
       AppStorage.get<string>(AppThemeSettingsStore.KEY_DARK_BUTTON_COLOR) || defaults.darkButtonColor),
       defaults.darkButtonColor);
@@ -139,11 +139,11 @@ export class AppThemeSettingsStore {
       store, AppThemeSettingsStore.KEY_CUSTOM_DARK_ACCENT_COLOR,
       AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_DARK_ACCENT_COLOR) || settings.darkAccentColor),
       settings.darkAccentColor);
-    settings.customLightButtonColor = AppThemeSettingsStore.normalizeColor(await AppThemeSettingsStore.getString(
+    settings.customLightButtonColor = AppThemeSettingsStore.ensureButtonTextContrast(await AppThemeSettingsStore.getString(
       store, AppThemeSettingsStore.KEY_CUSTOM_LIGHT_BUTTON_COLOR,
       AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_LIGHT_BUTTON_COLOR) || settings.lightButtonColor),
       settings.lightButtonColor);
-    settings.customDarkButtonColor = AppThemeSettingsStore.normalizeColor(await AppThemeSettingsStore.getString(
+    settings.customDarkButtonColor = AppThemeSettingsStore.ensureButtonTextContrast(await AppThemeSettingsStore.getString(
       store, AppThemeSettingsStore.KEY_CUSTOM_DARK_BUTTON_COLOR,
       AppStorage.get<string>(AppThemeSettingsStore.KEY_CUSTOM_DARK_BUTTON_COLOR) || settings.darkButtonColor),
       settings.darkButtonColor);
@@ -440,9 +440,9 @@ export class AppThemeSettingsStore {
       theme.light.colors.accentColor, AppThemeSettingsStore.DEFAULT_LIGHT_ACCENT_COLOR);
     settings.darkAccentColor = AppThemeSettingsStore.normalizeColor(
       theme.dark.colors.accentColor, AppThemeSettingsStore.DEFAULT_DARK_ACCENT_COLOR);
-    settings.lightButtonColor = AppThemeSettingsStore.normalizeColor(
+    settings.lightButtonColor = AppThemeSettingsStore.ensureButtonTextContrast(
       theme.light.colors.buttonColor, AppThemeSettingsStore.DEFAULT_LIGHT_BUTTON_COLOR);
-    settings.darkButtonColor = AppThemeSettingsStore.normalizeColor(
+    settings.darkButtonColor = AppThemeSettingsStore.ensureButtonTextContrast(
       theme.dark.colors.buttonColor, AppThemeSettingsStore.DEFAULT_DARK_BUTTON_COLOR);
     settings.customLightReaderBackgroundColor = theme.light.reader.backgroundColor;
     settings.customLightReaderTextColor = theme.light.reader.textColor;
@@ -472,6 +472,31 @@ export class AppThemeSettingsStore {
       return `#${text.toUpperCase()}`;
     }
     return fallback;
+  }
+
+  static ensureButtonTextContrast(value: string, fallback: string): string {
+    const normalized = AppThemeSettingsStore.normalizeColor(value, fallback);
+    const contrast = AppThemeSettingsStore.contrastRatio(normalized, '#FFFFFF');
+    return contrast >= 3.0 ? normalized : fallback;
+  }
+
+  private static contrastRatio(hexA: string, hexB: string): number {
+    const la = AppThemeSettingsStore.relativeLuminance(hexA);
+    const lb = AppThemeSettingsStore.relativeLuminance(hexB);
+    const lighter = Math.max(la, lb);
+    const darker = Math.min(la, lb);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  private static relativeLuminance(hex: string): number {
+    const toLinear = (c: number): number => {
+      const s = c / 255;
+      return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const r = toLinear(parseInt(hex.slice(1, 3), 16));
+    const g = toLinear(parseInt(hex.slice(3, 5), 16));
+    const b = toLinear(parseInt(hex.slice(5, 7), 16));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
   static sourcesForTheme(themeId: string): ThemeComponentSourceIds {

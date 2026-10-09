@@ -174,7 +174,7 @@ struct AboutPage {
         .fontWeight(FontWeight.Medium)
         .fontColor(this.primaryTextColor())
         .width('100%')
-      Text('https://github.com/pojianhuaidao/legado3-harmony/releases')
+      Text('https://github.com/pojianhuaidao/legado-harmony/releases')
         .fontSize(14)
         .fontColor(this.accentColor())
         .lineHeight(22)
@@ -197,7 +197,7 @@ struct AboutPage {
     const want: Want = {
       action: 'ohos.want.action.viewData',
       entities: ['entity.system.browsable'],
-      uri: 'https://github.com/pojianhuaidao/legado3-harmony/releases'
+      uri: 'https://github.com/pojianhuaidao/legado-harmony/releases'
     };
     ctx.startAbility(want).then(() => {
     }).catch(() => {

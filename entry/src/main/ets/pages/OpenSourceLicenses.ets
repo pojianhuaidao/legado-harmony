@@ -98,7 +98,7 @@ struct OpenSourceLicensesPage {
         '开源项目信息\n\n' +
         'Project / 项目：爱·阅读 / legado-harmony\n' +
         'Copyright (c) 2026 李其健\n' +
-        'Source / 源码：https://github.com/wip3l/legado-harmony\n' +
+        'Source / 源码：https://github.com/pojianhuaidao/legado-harmony\n' +
         'License / 许可证：GNU General Public License version 3 (GPL-3.0)\n\n';
       const gplText = util.TextDecoder.create('utf-8').decodeWithStream(gplBytes, { stream: false });
       const thirdPartyText = util.TextDecoder.create('utf-8')

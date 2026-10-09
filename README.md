@@ -294,6 +294,6 @@ node --experimental-strip-types scripts/replace-rule-import-check.mjs
 
 - 项目名称：爱·阅读 / legado-harmony
 - 版权所有：Copyright © 2026 legado-harmony contributors
-- 源码地址：https://github.com/wip3l/legado-harmony
+- 源码地址：https://github.com/pojianhuaidao/legado-harmony
 
 项目包含的 QuickJS、ohos_quickjs 及 OpenHarmony/Huawei N-API 封装代码继续适用各自的 MIT 或 Apache-2.0 许可证，详见 [第三方开源软件声明](THIRD_PARTY_NOTICES.md)。相关完整许可文本同时打包进入 HAP，并可在应用“关于 → 开源许可”中查看。

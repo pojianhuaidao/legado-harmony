@@ -4,8 +4,8 @@
   "description": "爱·阅读主模块",
   "main": "Index.ets",
   "author": "李其健",
-  "homepage": "https://github.com/wip3l/legado-harmony",
-  "repository": "https://github.com/wip3l/legado-harmony.git",
+  "homepage": "https://github.com/pojianhuaidao/legado-harmony",
+  "repository": "https://github.com/pojianhuaidao/legado-harmony.git",
   "license": "GPL-3.0",
   "dependencies": {
     "@devzeng/quickjs": "file:../quickjs"
