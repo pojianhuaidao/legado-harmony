@@ -53,6 +53,9 @@ output/
 # Local configuration
 local.properties
 
+# Signing material (private keys - DO NOT push to public repo)
+/key/
+
 # OS generated files
 .DS_Store
 .DS_Store?

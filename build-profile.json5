@@ -5,39 +5,39 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "C:/harmony-key/legado-harmony-release.p12",
+          "storeFile": "key/legado-harmony-release.p12",
           "storePassword": "00000034D7B5AA0AAE1948B362E86131DD641EC24DCC230DCB858D7D8546C4245352D13A5E8B2C13053C294CB76696CCF48463EE78952F21BE980102255566175FA35B92",
           "keyAlias": "legadoharmonyreleasekey",
           "keyPassword": "0000003442F4FF623B78D0A1B9CCA9C666B66F21044A5E5D21694272E4CB391987999158057309AB70B7FBC53B4DD3442F0E2ED8DA82F5297A3E996F8424E6C94445295C",
           "signAlg": "SHA256withECDSA",
-          "profile": "C:/harmony-key/阅读Release.p7b",
-          "certpath": "C:/harmony-key/阅读.cer"
+          "profile": "key/阅读Release.p7b",
+          "certpath": "key/阅读.cer"
         }
       },
       {
         "name": "release",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "C:/harmony-key/legado-harmony-release.p12",
+          "storeFile": "key/legado-harmony-release.p12",
           "storePassword": "00000034507F6F995F95229E34B6E7B4D53AB324770A606A3371ABD23F4A89A4037DAC05284A1035418C39A2ADE51AB6EABEE485F7C3266FEF622529B55BC3006D9448C4",
           "keyAlias": "legadoharmonyreleasekey",
           "keyPassword": "00000034C9F21D88E4FDDF5BE7DB77850AA1FF40643FA5074CFE6AECEB0700FC0A98F8257577FB0881CD65635DC2B85F19CE705FF4E6447383F41BD5F05AF4EC8C24DFE5",
           "signAlg": "SHA256withECDSA",
-          "profile": "C:/harmony-key/阅读Release.p7b",
-          "certpath": "C:/harmony-key/阅读.cer"
+          "profile": "key/阅读Release.p7b",
+          "certpath": "key/阅读.cer"
         }
       },
       {
         "name": "accountDebug",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "C:/harmony-key/legado-harmony-release.p12",
+          "storeFile": "key/legado-harmony-release.p12",
           "storePassword": "000000343965819312A3EC4F0F8353C9980C6385E6DA2B50A5ABA250303A9924826D308A418E56EA0D6638E6D81A0DE8E6319DB9506EF92CE2A24266D34703322584C843",
           "keyAlias": "legadoharmonyreleasekey",
           "keyPassword": "00000034329E1CEA2EE40485A6AB9D54CDF541CB9E8E01DCCABC417A8F5412893BC39461B869EC1B409DCB18BA6025065A1E78DF23DD26BE99C7D0E29A76DC6D3B8012B4",
           "signAlg": "SHA256withECDSA",
-          "profile": "C:/harmony-key/阅读Release.p7b",
-          "certpath": "C:/harmony-key/阅读.cer"
+          "profile": "key/阅读Release.p7b",
+          "certpath": "key/阅读.cer"
         }
       }
     ],

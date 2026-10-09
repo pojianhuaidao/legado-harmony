@@ -41,7 +41,7 @@ jobs:
           cache: true
 
       # 本地签名材料（p12/cer/p7b + material 加密材料）以 base64 存于 GitHub Secrets，
-      # CI 中解码到 $RUNNER_TEMP/harmony-key 并改写 build-profile.json5 路径，实现与本地一致的 release 签名。
+      # CI 中解码到工作区 key/（与本地 build-profile.json5 相对路径 key/ 一致），无需改写配置。
       - name: Restore local signing material
         env:
           LEGADO_P12_B64: ${{ secrets.LEGADO_P12_B64 }}
@@ -50,7 +50,7 @@ jobs:
           LEGADO_MATERIAL_B64: ${{ secrets.LEGADO_MATERIAL_B64 }}
         run: |
           set -e
-          KEY_DIR="$RUNNER_TEMP/harmony-key"
+          KEY_DIR="$GITHUB_WORKSPACE/key"
           mkdir -p "$KEY_DIR"
           echo "$LEGADO_P12_B64" | base64 -d > "$KEY_DIR/legado-harmony-release.p12"
           echo "$LEGADO_CER_B64" | base64 -d > "$KEY_DIR/阅读.cer"
@@ -58,19 +58,9 @@ jobs:
           # tgz 内已含 material/ 前缀，解压到 KEY_DIR 即得 KEY_DIR/material/fd|ac|ce
           echo "$LEGADO_MATERIAL_B64" | base64 -d | tar -xz -C "$KEY_DIR"
           ls -la "$KEY_DIR" "$KEY_DIR/material"
-          # 将 build-profile.json5 中三套 signingConfigs 的绝对路径改写为 CI 路径
-          python3 - <<'EOF'
-          import os, re
-          p = 'build-profile.json5'
-          s = open(p, encoding='utf-8').read()
-          key_dir = os.path.join(os.environ['RUNNER_TEMP'], 'harmony-key')
-          key_dir = key_dir.replace('\\', '/')
-          s = s.replace('C:/harmony-key/', key_dir + '/')
-          open(p, 'w', encoding='utf-8').write(s)
-          print('signing paths rewritten to', key_dir)
-          EOF
-          # 校验改写结果
-          grep -c "RUNNER_TEMP" build-profile.json5 || true
+          # 校验 build-profile.json5 使用相对路径 key/，且无旧绝对路径残留
+          grep -c '"key/' build-profile.json5 || true
+          grep -c 'C:/harmony-key' build-profile.json5 || true
 
       - name: ohpm install
         run: |
