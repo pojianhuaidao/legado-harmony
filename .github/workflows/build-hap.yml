@@ -112,7 +112,7 @@ jobs:
                       break
                   if not rels:
                       break
-                  pat = re.compile(r'^reading\.hm\.o_1\.%s\.(\d{2})_(signed|unsigned)\.app$' % mmdd)
+                  pat = re.compile(r'^reading\.hm\.o_1\.%s\.(\d{2})_(signed|unsigned)\.app\.zip$' % mmdd)
                   for rel in rels:
                       for a in rel.get('assets', []):
                           m = pat.match(a.get('name', ''))
@@ -152,11 +152,16 @@ jobs:
           )
           SIGNED="reading.hm.o_${VERSION}_signed.app"
           UNSIGNED="reading.hm.o_${VERSION}_unsigned.app"
+          SIGNED_ZIP="reading.hm.o_${VERSION}_signed.app.zip"
+          UNSIGNED_ZIP="reading.hm.o_${VERSION}_unsigned.app.zip"
           cp build/outputs/release/legado-harmony-release-signed.app "$SIGNED"
           cp build/outputs/release/legado-harmony-release-unsigned.app "$UNSIGNED"
-          echo "SIGNED=$SIGNED" >> "$GITHUB_ENV"
-          echo "UNSIGNED=$UNSIGNED" >> "$GITHUB_ENV"
-          ls -lh "$SIGNED" "$UNSIGNED"
+          # GitHub Release 禁止 .app 扩展名，改为 zip 封装（内含 .app）
+          zip -q "$SIGNED_ZIP" "$SIGNED"
+          zip -q "$UNSIGNED_ZIP" "$UNSIGNED"
+          echo "SIGNED_ZIP=$SIGNED_ZIP" >> "$GITHUB_ENV"
+          echo "UNSIGNED_ZIP=$UNSIGNED_ZIP" >> "$GITHUB_ENV"
+          ls -lh "$SIGNED" "$UNSIGNED" "$SIGNED_ZIP" "$UNSIGNED_ZIP"
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -171,7 +176,7 @@ jobs:
             - 构建号: ${{ github.run_number }}
             - 触发: ${{ github.event_name }}
           files: |
-            ${{ env.SIGNED }}
-            ${{ env.UNSIGNED }}
+            ${{ env.SIGNED_ZIP }}
+            ${{ env.UNSIGNED_ZIP }}
           draft: false
           prerelease: true
