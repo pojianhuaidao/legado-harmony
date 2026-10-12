@@ -29,6 +29,7 @@ import { ReaderActionData, ReaderActionMarker, ReaderActionMatch } from '../core
 import { BookSourceRuntimeSnapshotStore, BookSourceSettingValue } from '../core/book/BookSourceRuntimeSnapshot';
 import { ReaderInteractionProviderRegistry } from '../core/book/ReaderInteractionProvider';
 import { RecentReadShortcut } from '../utils/RecentReadShortcut';
+import { fullScreenTransitionDurationMs } from '../utils/TransitionDuration';
 import { RecentReadCardUpdater } from '../utils/RecentReadCardUpdater';
 import { SystemTtsReader, TtsChunk, TtsVoiceOption } from '../utils/SystemTtsReader';
 import { RoleTagger, RoleTagResult, RoleTaggerOptions } from '../utils/RoleTagger';
@@ -2534,7 +2535,7 @@ struct ReadBookPage {
 
   pageTransition() {
     if (this.openedWithShelfAnimation || AppStorage.get<boolean>('shelfReaderDirectTransition') === true) {
-      PageTransitionEnter({ type: RouteType.Push, duration: 0 })
+      PageTransitionEnter({ type: RouteType.Push, duration: fullScreenTransitionDurationMs() })
     }
   }
 
@@ -3293,7 +3294,7 @@ struct ReadBookPage {
     .height(48)
     .onClick(() => this.handleReaderDayNightClick())
     .gesture(
-      LongPressGesture({ duration: 600, repeat: false })
+      LongPressGesture({ duration: 500, repeat: false })
         .onAction(() => this.handleReaderDayNightLongPress())
     )
   }
@@ -3533,7 +3534,7 @@ struct ReadBookPage {
     .height(56)
     .onClick(() => this.handleReaderDayNightClick())
     .gesture(
-      LongPressGesture({ duration: 600, repeat: false })
+      LongPressGesture({ duration: 500, repeat: false })
         .onAction(() => this.handleReaderDayNightLongPress())
     )
   }
@@ -4336,7 +4337,7 @@ struct ReadBookPage {
         }, this.fullTextCaching || this.readerCacheRangeCaching)
         this.readerCacheActionItem('清除已缓存章节', () => {
           this.clearReaderCachedChapters();
-        }, this.fullTextCaching || this.readerCacheRangeCaching, '#E53935')
+        }, this.fullTextCaching || this.readerCacheRangeCaching, ThemeRuntime.dangerColor(this.appDarkMode))
 
         Button('取消')
           .width('100%')
@@ -5097,7 +5098,7 @@ struct ReadBookPage {
       .animation({ duration: 240, curve: Curve.Friction });
     const disappear = TransitionEffect.scale({ x: 0.9, y: 0.9, centerX: '50%', centerY: '50%' })
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 170, curve: Curve.EaseIn });
+      .animation({ duration: 200, curve: Curve.EaseIn });
     return TransitionEffect.asymmetric(appear, disappear);
   }
 
@@ -5440,7 +5441,7 @@ struct ReadBookPage {
             this.enterBookmarkMultiSelect(bookmarkId);
           }
         })
-        this.bookmarkContextActionItem($r('sys.symbol.trash'), '删除', '#E53935', () => {
+        this.bookmarkContextActionItem($r('sys.symbol.trash'), '删除', ThemeRuntime.dangerColor(this.appDarkMode), () => {
           if (this.pendingBookmarkAction) {
             const bookmark = this.pendingBookmarkAction;
             this.closeBookmarkActionMenu();
@@ -8428,7 +8429,7 @@ struct ReadBookPage {
     const disappear = TransitionEffect.translate({ y: 28 })
       .combine(TransitionEffect.scale({ x: 0.99, y: 0.99, centerX: '50%', centerY: '100%' }))
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 190, curve: Curve.EaseIn });
+      .animation({ duration: 200, curve: Curve.EaseIn });
     return TransitionEffect.asymmetric(appear, disappear);
   }
 
@@ -8439,7 +8440,7 @@ struct ReadBookPage {
       .animation({ duration: 260, curve: Curve.Friction });
     const disappear = TransitionEffect.translate({ x: horizontalOffset * 0.65 })
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 160, curve: Curve.EaseIn });
+      .animation({ duration: 200, curve: Curve.EaseIn });
     return TransitionEffect.asymmetric(appear, disappear);
   }
 
@@ -10246,7 +10247,7 @@ struct ReadBookPage {
             .onActionCancel(() => {
               this.handleReaderPanCancel();
             }),
-          LongPressGesture({ duration: 600 })
+          LongPressGesture({ duration: 500 })
             .onAction((event: GestureEvent) => {
               this.selectReaderTextAtGlobalPoint(event);
             })
@@ -10329,7 +10330,7 @@ struct ReadBookPage {
             .onActionCancel(() => {
               this.handleReaderPanCancel();
             }),
-          LongPressGesture({ duration: 600 })
+          LongPressGesture({ duration: 500 })
             .onAction((event: GestureEvent) => {
               this.selectReaderTextAtGlobalPoint(event);
             })
@@ -10367,7 +10368,7 @@ struct ReadBookPage {
               .onActionCancel(() => {
                 this.handleReaderPanCancel();
               }),
-            LongPressGesture({ duration: 600 })
+            LongPressGesture({ duration: 500 })
               .onAction((event: GestureEvent) => {
                 this.selectReaderTextAtGlobalPoint(event);
               })
@@ -11719,7 +11720,7 @@ struct ReadBookPage {
       Button(this.isTtsSpeaking ? '停止朗读' : '开始朗读')
         .width('100%')
         .height(40)
-        .backgroundColor(this.isTtsSpeaking ? '#E53935' : this.buttonColor())
+        .backgroundColor(this.isTtsSpeaking ? '#C62828' : this.buttonColor())
         .fontColor('#FFFFFF')
         .onClick(() => {
           this.toggleTtsReading();

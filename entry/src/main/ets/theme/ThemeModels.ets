@@ -68,7 +68,7 @@ export class ThemeColorTokens {
   dividerColor: string = '#E0E0E0';
   accentColor: string = '#007DFF';
   buttonColor: string = '#007DFF';
-  dangerColor: string = '#E53935';
+  dangerColor: string = '#C62828';
 }
 
 export class ThemeReaderTokens {

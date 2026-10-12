@@ -1090,7 +1090,7 @@ export struct SubscriptionTab {
       }
     })
     .gesture(
-      LongPressGesture({ repeat: false, duration: 450 })
+      LongPressGesture({ repeat: false, duration: 500 })
         .onAction(() => {
           if (!this.selectionMode) {
             this.openItemMenu(item, index);
@@ -1206,7 +1206,7 @@ export struct SubscriptionTab {
       }
     })
     .gesture(
-      LongPressGesture({ repeat: false, duration: 450 })
+      LongPressGesture({ repeat: false, duration: 500 })
         .onAction(() => {
           if (!this.selectionMode) {
             this.openItemMenu(item, index);

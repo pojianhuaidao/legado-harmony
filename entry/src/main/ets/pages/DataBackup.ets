@@ -331,7 +331,7 @@ struct DataBackupPage {
         if (this.passwordError) {
           Text(this.passwordError)
             .fontSize(12)
-            .fontColor('#E84026')
+            .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
             .width('100%')
             .margin({ top: 9 })
         }

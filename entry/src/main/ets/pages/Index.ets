@@ -21,6 +21,7 @@ import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { SubscriptionTab } from '../components/SubscriptionTab';
 import { WebBookFetchRuntimeHost } from '../components/WebBookFetchRuntimeHost';
 import { syncSystemSafeAreas } from '../utils/SystemBars';
+import { fullScreenTransitionDurationMs } from '../utils/TransitionDuration';
 import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
 import { HdsFeedback } from '../utils/HdsFeedback';
 import { RecentReadShortcut } from '../utils/RecentReadShortcut';
@@ -349,7 +350,7 @@ struct Index {
       .animation({ duration: 240, curve: Curve.Friction });
     const disappear = TransitionEffect.scale({ x: 0.9, y: 0.9, centerX: '50%', centerY: '50%' })
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 170, curve: Curve.EaseIn });
+      .animation({ duration: 200, curve: Curve.EaseIn });
     return TransitionEffect.asymmetric(appear, disappear);
   }
 
@@ -361,7 +362,7 @@ struct Index {
     const disappear = TransitionEffect.translate({ y: 28 })
       .combine(TransitionEffect.scale({ x: 0.99, y: 0.99, centerX: '50%', centerY: '100%' }))
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 190, curve: Curve.EaseIn });
+      .animation({ duration: 200, curve: Curve.EaseIn });
     return TransitionEffect.asymmetric(appear, disappear);
   }
 
@@ -378,7 +379,7 @@ struct Index {
 
   pageTransition() {
     if (AppStorage.get<boolean>('shelfReaderDirectTransition') === true) {
-      PageTransitionExit({ type: RouteType.Push, duration: 0 })
+      PageTransitionExit({ type: RouteType.Push, duration: fullScreenTransitionDurationMs() })
     }
   }
 
@@ -2604,7 +2605,7 @@ struct BookshelfPage {
                 this.enterBookMultiSelect(bookUrl);
               }
             })
-            this.contextActionItem($r('sys.symbol.trash'), '移出书架', '#E53935', () => {
+            this.contextActionItem($r('sys.symbol.trash'), '移出书架', ThemeRuntime.dangerColor(this.appDarkMode), () => {
               if (this.pendingActionBook) {
                 const book = this.pendingActionBook;
                 this.closeBookActions();
@@ -2979,7 +2980,7 @@ struct BookshelfPage {
                 }
               }
             })
-            this.actionItem('清除已缓存章节', '#E53935', () => {
+            this.actionItem('清除已缓存章节', ThemeRuntime.dangerColor(this.appDarkMode), () => {
               this.clearCachedChapters();
             })
 
@@ -3257,7 +3258,7 @@ struct BookshelfPage {
               Button('删除')
                 .width('45%')
                 .height(44)
-                .backgroundColor('#E53935')
+                .backgroundColor('#C62828')
                 .onClick(() => {
                   if (this.pendingDeleteBook) {
                     const book = this.pendingDeleteBook;
@@ -3384,7 +3385,7 @@ struct BookshelfPage {
       .animation({ duration: 210, curve: Curve.Friction });
     const disappear = TransitionEffect.translate({ y: -5 })
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 140, curve: Curve.EaseIn });
+      .animation({ duration: 200, curve: Curve.EaseIn });
     return TransitionEffect.asymmetric(appear, disappear);
   }
 
@@ -3438,7 +3439,7 @@ struct BookshelfPage {
         .height(42)
         .fontSize(14)
         .borderRadius(10)
-        .backgroundColor('#E53935')
+        .backgroundColor('#C62828')
         .fontColor('#FFFFFF')
         .enabled(this.selectedBookUrls.length > 0)
         .onClick(() => {
@@ -3567,7 +3568,7 @@ struct BookshelfPage {
             this.showBookGroupActionMenu = false;
             this.showRenameBookGroupDialog = true;
           })
-        this.contextActionItem($r('sys.symbol.trash'), '删除', '#E53935', () => {
+        this.contextActionItem($r('sys.symbol.trash'), '删除', ThemeRuntime.dangerColor(this.appDarkMode), () => {
             this.pendingDeleteBookGroup = this.pendingBookGroup;
             this.showBookGroupActionMenu = false;
             this.showDeleteBookGroupDialog = true;
@@ -3623,7 +3624,7 @@ struct BookshelfPage {
             .backgroundColor(this.glassCardColor()).fontColor(this.primaryTextColor())
             .onClick(() => this.closeDeleteBookGroupDialog())
           Button('删除', { type: ButtonType.Normal }).layoutWeight(1).height(42).borderRadius(10)
-            .backgroundColor('#E53935').fontColor('#FFFFFF').onClick(() => this.deleteShelfBookGroup())
+            .backgroundColor('#C62828').fontColor('#FFFFFF').onClick(() => this.deleteShelfBookGroup())
         }.width('100%')
       }
       .width('85%').padding(22)
@@ -3649,7 +3650,7 @@ struct BookshelfPage {
             .backgroundColor(this.glassCardColor()).fontColor(this.primaryTextColor())
             .onClick(() => this.showBatchDeleteDialog = false)
           Button('删除', { type: ButtonType.Normal }).layoutWeight(1).height(42).borderRadius(10)
-            .backgroundColor('#E53935').fontColor('#FFFFFF').onClick(() => this.deleteSelectedBooks())
+            .backgroundColor('#C62828').fontColor('#FFFFFF').onClick(() => this.deleteSelectedBooks())
         }.width('100%')
       }
       .width('85%').padding(22)
@@ -7030,11 +7031,11 @@ struct BookshelfPage {
     const appear = TransitionEffect.translate({ y: -7 })
       .combine(TransitionEffect.scale({ x: 0.96, y: 0.96, centerX: '100%', centerY: '0%' }))
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 190, curve: Curve.Friction });
+      .animation({ duration: 200, curve: Curve.Friction });
     const disappear = TransitionEffect.translate({ y: -4 })
       .combine(TransitionEffect.scale({ x: 0.98, y: 0.98, centerX: '100%', centerY: '0%' }))
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 125, curve: Curve.EaseIn });
+      .animation({ duration: 200, curve: Curve.EaseIn });
     return TransitionEffect.asymmetric(appear, disappear);
   }
 
@@ -10267,7 +10268,7 @@ struct SearchPage {
         ImmersiveBackButton({
             icon: this.isSearching ? $r('sys.symbol.xmark') : $r('sys.symbol.magnifyingglass'),
             iconOffsetX: 0,
-            iconColor: this.isSearching ? '#E53935' : this.primaryTextColor(),
+            iconColor: this.isSearching ? ThemeRuntime.dangerColor(this.appDarkMode) : this.primaryTextColor(),
             darkMode: this.appDarkMode,
             buttonSize: 40,
             containerWidth: 40,

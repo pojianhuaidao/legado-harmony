@@ -654,7 +654,7 @@ struct CustomFontManagerPage {
         .width(54)
         .height(32)
         .borderRadius(16)
-        .backgroundColor('#E53935')
+        .backgroundColor('#C62828')
         .onClick(() => {
           this.deleteCustomFont(item);
         })

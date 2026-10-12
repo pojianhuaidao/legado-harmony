@@ -241,12 +241,12 @@ struct QuickJsRegressionPage {
         Text(this.validationSnapshot.active ? '验证进行中' :
           (this.migrationMode === QuickJsRuntimeMode.CANARY ? '灰度接管中' : '未运行'))
           .fontSize(12)
-          .fontColor(this.validationSnapshot.active ? '#20A464' : this.subTextColor())
+          .fontColor(this.validationSnapshot.active ? ThemeRuntime.primaryTextColor(this.appDarkMode) : this.subTextColor())
       }.width('100%')
       Row() {
         this.statItem('待验证', this.pendingValidationCount(), '#E89725')
-        this.statItem('灰度合格', this.qualifiedValidationCount(), '#20A464')
-        this.statItem('存在问题', this.validationIssueCount(), '#E84040')
+        this.statItem('灰度合格', this.qualifiedValidationCount(), ThemeRuntime.primaryTextColor(this.appDarkMode))
+        this.statItem('存在问题', this.validationIssueCount(), ThemeRuntime.dangerColor(this.appDarkMode))
         this.statItem('仅离线', this.offlineOnlyValidationCount(), this.subTextColor())
       }.width('100%')
       Text(this.validationSnapshot.active ?
@@ -320,7 +320,7 @@ struct QuickJsRegressionPage {
           }, (item: QuickJsCategoryStat): string => item.category)
         }.width('100%')
       } else {
-        Text('已保存的问题用例均已通过复测').fontSize(12).fontColor('#20A464').width('100%')
+        Text('已保存的问题用例均已通过复测').fontSize(12).fontColor(ThemeRuntime.primaryTextColor(this.appDarkMode)).width('100%')
       }
       if (this.unresolvedArtifactsForDisplay().length > 0) {
         List({ space: 6 }) {
@@ -376,12 +376,12 @@ struct QuickJsRegressionPage {
         }
       }.width('100%')
       if (this.report.error) {
-        Text(this.report.error).fontSize(13).fontColor('#E84040').width('100%')
+        Text(this.report.error).fontSize(13).fontColor(ThemeRuntime.dangerColor(this.appDarkMode)).width('100%')
       } else {
         Row() {
-          this.statItem('一致', this.report.matchCount, '#20A464')
+          this.statItem('一致', this.report.matchCount, ThemeRuntime.primaryTextColor(this.appDarkMode))
           this.statItem('差异', this.report.mismatchCount, '#E89725')
-          this.statItem('失败', this.report.failureCount, '#E84040')
+          this.statItem('失败', this.report.failureCount, ThemeRuntime.dangerColor(this.appDarkMode))
           this.statItem('退出迁移', this.report.excludedCount, this.subTextColor())
         }.width('100%')
         if (this.report.truncatedCount > 0) {
@@ -452,7 +452,7 @@ struct QuickJsRegressionPage {
         Text(`Legacy: ${item.legacyPreview}  |  QuickJS: ${item.quickPreview}`)
           .fontSize(11).fontColor(this.subTextColor()).maxLines(2)
       } else if (item.error) {
-        Text(item.error).fontSize(11).fontColor('#E84040').maxLines(2)
+        Text(item.error).fontSize(11).fontColor(ThemeRuntime.dangerColor(this.appDarkMode)).maxLines(2)
       }
       if (item.errorCategory && item.errorCategory !== QuickJsRegressionIssueCategory.NONE) {
         Text(`分类：${QuickJsRegressionIssueCategory.label(item.errorCategory)}`)
@@ -731,7 +731,7 @@ struct QuickJsRegressionPage {
       category === QuickJsRegressionIssueCategory.MISSING_BINDING) return '#8A6BC2';
     if (category === QuickJsRegressionIssueCategory.TIMEOUT ||
       category === QuickJsRegressionIssueCategory.RESOURCE_LIMIT) return '#D44848';
-    return '#E84040';
+    return ThemeRuntime.dangerColor(this.appDarkMode);
   }
 
   private async saveRegressionForValidation(report: QuickJsRegressionReport): Promise<void> {
@@ -835,9 +835,9 @@ struct QuickJsRegressionPage {
   }
 
   private validationCandidateColor(item: QuickJsValidationCandidate): string {
-    if (item.offlineStatus !== QuickJsRegressionStatus.MATCH || this.hasValidationIssue(item)) return '#E84040';
+    if (item.offlineStatus !== QuickJsRegressionStatus.MATCH || this.hasValidationIssue(item)) return ThemeRuntime.dangerColor(this.appDarkMode);
     if (!item.routable) return this.subTextColor();
-    if (this.isValidationQualified(item)) return '#20A464';
+    if (this.isValidationQualified(item)) return ThemeRuntime.primaryTextColor(this.appDarkMode);
     return '#E89725';
   }
 
@@ -861,9 +861,9 @@ struct QuickJsRegressionPage {
   }
 
   private statusColor(status: string): string {
-    if (status === QuickJsRegressionStatus.MATCH) return '#20A464';
+    if (status === QuickJsRegressionStatus.MATCH) return ThemeRuntime.primaryTextColor(this.appDarkMode);
     if (status === QuickJsRegressionStatus.MISMATCH) return '#E89725';
-    return '#E84040';
+    return ThemeRuntime.dangerColor(this.appDarkMode);
   }
 
   private resultStatusLabel(item: QuickJsRegressionItemResult): string {

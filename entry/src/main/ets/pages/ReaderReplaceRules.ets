@@ -819,7 +819,7 @@ struct ReaderReplaceRulesPage {
       Column() {
         Text(rule.enabled ? '已启用' : '已禁用')
           .fontSize(12)
-          .fontColor(rule.enabled ? '#1E8E3E' : this.subTextColor())
+          .fontColor(rule.enabled ? ThemeRuntime.accentColor(this.appDarkMode) : this.subTextColor())
       }
       .alignItems(HorizontalAlign.End)
       .margin({ left: 12 })
@@ -865,7 +865,7 @@ struct ReaderReplaceRulesPage {
         .alignItems(HorizontalAlign.Start)
         Text(this.previewSummaryText())
           .fontSize(12)
-          .fontColor(this.previewEffectiveCount() > 0 ? '#1E8E3E' : this.subTextColor())
+          .fontColor(this.previewEffectiveCount() > 0 ? ThemeRuntime.accentColor(this.appDarkMode) : this.subTextColor())
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -937,8 +937,8 @@ struct ReaderReplaceRulesPage {
 
   ruleEffectColor(rule: ReaderReplaceRule): string {
     const state = this.ruleEffectCheck(rule).state;
-    if (state === 'effective') return '#1E8E3E';
-    if (state === 'invalid') return '#E53935';
+    if (state === 'effective') return ThemeRuntime.accentColor(this.appDarkMode);
+    if (state === 'invalid') return ThemeRuntime.dangerColor(this.appDarkMode);
     if (state === 'matched') return '#D17A00';
     return this.subTextColor();
   }
@@ -1032,7 +1032,7 @@ struct ReaderReplaceRulesPage {
         .height(42)
         .margin({ left: 8 })
         .enabled(this.selectedRuleIds.length > 0 && !this.isBatchOperating)
-        .backgroundColor('#E53935')
+        .backgroundColor('#C62828')
         .fontColor('#FFFFFF')
         .onClick(() => this.batchDeleteRules())
       Button('更多')
@@ -1448,7 +1448,7 @@ struct ReaderReplaceRulesPage {
           this.closeRuleActions();
           if (rule) this.enterRuleSelectionMode(rule.id);
         })
-        this.contextActionItem($r('sys.symbol.trash'), '删除', '#E53935', () => {
+        this.contextActionItem($r('sys.symbol.trash'), '删除', ThemeRuntime.dangerColor(this.appDarkMode), () => {
           const rule = this.actionRule();
           this.closeRuleActions();
           if (rule) this.confirmDelete(rule);
@@ -1582,7 +1582,7 @@ struct ReaderReplaceRulesPage {
     const result = await promptAction.showDialog({
       title: '删除规则',
       message: `确定删除已选择的 ${count} 条规则吗？`,
-      buttons: [{ text: '取消', color: this.secondaryTextColor() }, { text: '删除', color: '#E53935' }]
+      buttons: [{ text: '取消', color: this.secondaryTextColor() }, { text: '删除', color: ThemeRuntime.dangerColor(this.appDarkMode) }]
     });
     if (result.index !== 1) return;
     this.isBatchOperating = true;
@@ -1891,7 +1891,7 @@ struct ReaderReplaceRulesPage {
     const result = await promptAction.showDialog({
       title: '删除规则',
       message: `确定删除“${rule.name || '未命名规则'}”吗？`,
-      buttons: [{ text: '取消', color: this.secondaryTextColor() }, { text: '删除', color: '#E53935' }]
+      buttons: [{ text: '取消', color: this.secondaryTextColor() }, { text: '删除', color: ThemeRuntime.dangerColor(this.appDarkMode) }]
     });
     if (result.index !== 1) return;
     const next = this.rules.filter((item: ReaderReplaceRule) => item.id !== rule.id);

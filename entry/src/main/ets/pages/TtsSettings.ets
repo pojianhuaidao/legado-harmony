@@ -214,7 +214,7 @@ struct TtsSettingsPage {
             if (this.cloudImportError) {
               Text(this.cloudImportError)
                 .fontSize(13)
-                .fontColor('#E53935')
+                .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
                 .width('100%')
             }
 
@@ -354,7 +354,7 @@ struct TtsSettingsPage {
             Button(this.isPreviewing ? '停止试听' : '试听')
               .width('100%')
               .height(42)
-              .backgroundColor(this.isPreviewing ? '#E53935' : this.buttonColor())
+              .backgroundColor(this.isPreviewing ? '#C62828' : this.buttonColor())
               .fontColor('#FFFFFF')
               .onClick(() => {
                 this.togglePreview();
@@ -815,7 +815,7 @@ struct TtsSettingsPage {
           .height(34)
           .fontSize(13)
           .backgroundColor(this.cardColor())
-          .fontColor('#E53935')
+          .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
           .onClick(() => {
             this.deleteCloudVoice(entry);
           })
@@ -1713,7 +1713,7 @@ struct TtsSettingsPage {
       message: `确定删除角色「${name}」的音色映射吗？删除后朗读时该角色将按性别自动分配音色。`,
       buttons: [
         { text: '取消', color: this.subTextColor() },
-        { text: '删除', color: '#E53935' }
+        { text: '删除', color: ThemeRuntime.dangerColor(this.appDarkMode) }
       ]
     }).then((result: promptAction.ShowDialogSuccessResponse) => {
       if (result.index === 1) {
@@ -1907,7 +1907,7 @@ struct TtsSettingsPage {
                 .fontColor(this.subTextColor())
               Text('删除')
                 .fontSize(12)
-                .fontColor('#E53935')
+                .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
                 .margin({ left: 10, right: 2 })
                 .onClick(() => {
                   this.removeRoleFromMap(name);

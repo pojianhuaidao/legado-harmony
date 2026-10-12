@@ -751,7 +751,7 @@ struct ReaderFontSettingsPage {
           })
         Button('删除')
           .fontSize(13)
-          .fontColor('#E53935')
+          .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
           .backgroundColor(this.inputColor())
           .height(32)
           .onClick(() => {

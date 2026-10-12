@@ -1,5 +1,6 @@
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
+import { fullScreenTransitionDurationMs } from '../utils/TransitionDuration';
 import { ReaderTtsFloatingSession } from '../utils/ReaderTtsFloatingSession';
 import deviceInfo from '@ohos.deviceInfo';
 
@@ -84,7 +85,7 @@ export struct ReaderTtsPlayerPanel {
       .backdropBlur(ThemeRuntime.glassBlur('panel', 24))
       .transition(TransitionEffect.translate({ y: 520 })
         .combine(TransitionEffect.opacity(0))
-        .animation({ duration: 280, curve: Curve.Friction }))
+        .animation({ duration: fullScreenTransitionDurationMs(), curve: Curve.Friction }))
     }
     .width('100%')
     .height('100%')

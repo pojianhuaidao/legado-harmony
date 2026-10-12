@@ -1,5 +1,6 @@
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { VirtualListScrollbar } from '../utils/VirtualListScrollbar';
+import { fullScreenTransitionDurationMs } from '../utils/TransitionDuration';
 import { ImmersiveBackButton } from './ImmersiveBackButton';
 
 /**
@@ -123,7 +124,7 @@ export struct TtsCatalogSheet {
       })
       .transition(TransitionEffect.translate({ y: 520 })
         .combine(TransitionEffect.opacity(0))
-        .animation({ duration: 280, curve: Curve.Friction }))
+        .animation({ duration: fullScreenTransitionDurationMs(), curve: Curve.Friction }))
     }
     .width('100%')
     .height('100%')

@@ -146,9 +146,9 @@ export class BuiltinThemeRegistry {
       'classic'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#F7F7F7', '#FFFFFF', '#F0F0F0', '#202124', '#73777F', '#E2E2E2',
+      BuiltinThemeRegistry.colors('#F7F7F7', '#FFFFFF', '#F0F0F0', '#202124', '#6C6F77', '#E2E2E2',
         '#5B6573', '#505967', '#C93F3F'),
-      BuiltinThemeRegistry.reader('#FAFAFA', '', '#262626', '#777777', 'light'),
+      BuiltinThemeRegistry.reader('#FAFAFA', '', '#262626', '#717171', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.CAPSULE, '#E7E9EC', '#34383D')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -175,8 +175,8 @@ export class BuiltinThemeRegistry {
     );
     theme.light = BuiltinThemeRegistry.variant(
       BuiltinThemeRegistry.colors('#F5F7FA', '#FFFFFF', '#EEF2F7', '#1F2937', '#667085', '#E4E7EC',
-        '#007DFF', '#007DFF', '#E5484D'),
-      BuiltinThemeRegistry.reader('#F7F1E3', '', '#2F261D', '#7A6F63', 'light'),
+        '#007DFF', '#007DFF', '#DA1F25'),
+      BuiltinThemeRegistry.reader('#F7F1E3', '', '#2F261D', '#756A5F', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.CLASSIC_GLASS, '#70B6F2', '#1B4168')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -200,8 +200,8 @@ export class BuiltinThemeRegistry {
     );
     theme.light = BuiltinThemeRegistry.variant(
       BuiltinThemeRegistry.colors('#F6F0E5', '#FFF9EF', '#EFE4D2', '#3A2E24', '#7A6958', '#DDCFBB',
-        '#B66A3C', '#A95C32', '#C94A45'),
-      BuiltinThemeRegistry.reader('#F8EFD9', 'paper-light', '#35291E', '#806D58', 'light'),
+        '#B66A3C', '#A95C32', '#C03D38'),
+      BuiltinThemeRegistry.reader('#F8EFD9', 'paper-light', '#35291E', '#7A6854', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.WARM_SCROLL, '#C99355', '#4A3423')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -224,9 +224,9 @@ export class BuiltinThemeRegistry {
       'rounded'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#EFF5F0', '#FAFCFA', '#E2ECE4', '#20342A', '#617568', '#CDDDD0',
-        '#3F7D5B', '#36704F', '#C74A4A'),
-      BuiltinThemeRegistry.reader('#E8F2E7', 'forest-light', '#24362B', '#687D6D', 'light'),
+      BuiltinThemeRegistry.colors('#EFF5F0', '#FAFCFA', '#E2ECE4', '#20342A', '#5F7265', '#CDDDD0',
+        '#3F7D5B', '#36704F', '#C33E3E'),
+      BuiltinThemeRegistry.reader('#E8F2E7', 'forest-light', '#24362B', '#5D6F61', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.FOREST_DEW, '#75A887', '#234B35')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -249,9 +249,9 @@ export class BuiltinThemeRegistry {
       'ink'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#F2F1ED', '#FAF9F5', '#E7E5DE', '#292A2C', '#6E706F', '#D5D3CC',
+      BuiltinThemeRegistry.colors('#F2F1ED', '#FAF9F5', '#E7E5DE', '#292A2C', '#6B6C6C', '#D5D3CC',
         '#4E5D6C', '#394957', '#B74747'),
-      BuiltinThemeRegistry.reader('#EEECE4', 'ink-light', '#25282B', '#6C706F', 'light'),
+      BuiltinThemeRegistry.reader('#EEECE4', 'ink-light', '#25282B', '#666969', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.INK_BRUSH, '#687580', '#252B30')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -275,8 +275,8 @@ export class BuiltinThemeRegistry {
     );
     theme.light = BuiltinThemeRegistry.variant(
       BuiltinThemeRegistry.colors('#F3F4FF', '#FFFFFF', '#E8E9FA', '#181A2D', '#646783', '#D8DAEE',
-        '#6750FF', '#5840F4', '#E5487D'),
-      BuiltinThemeRegistry.reader('#F0F0FF', 'neon-light', '#24253E', '#747795', 'light'),
+        '#6750FF', '#5840F4', '#D31E5B'),
+      BuiltinThemeRegistry.reader('#F0F0FF', 'neon-light', '#24253E', '#676A88', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.NEON_PULSE, '#5E7BFF', '#163C67')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -299,14 +299,14 @@ export class BuiltinThemeRegistry {
       'strawberry'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#FFF7F4', '#FFFCF9', '#F8E9E7', '#593B38', '#9A706C', '#F0D5D2',
-        '#E76E77', '#DD5C67', '#D84F5A'),
-      BuiltinThemeRegistry.reader('#FFF9F2', 'strawberry-light', '#533B38', '#9B716D', 'light'),
+      BuiltinThemeRegistry.colors('#FFF7F4', '#FFFCF9', '#F8E9E7', '#593B38', '#906663', '#F0D5D2',
+        '#E5626C', '#DD5C67', '#D2323F'),
+      BuiltinThemeRegistry.reader('#FFF9F2', 'strawberry-light', '#533B38', '#906763', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.STRAWBERRY_RIBBON, '#B8D8EC', '#41657E')
     );
     theme.dark = BuiltinThemeRegistry.variant(
       BuiltinThemeRegistry.colors('#241B20', '#30242A', '#403139', '#F8E9E5', '#C49A98', '#533B45',
-        '#FF929B', '#F27D88', '#FF777F'),
+        '#FF929B', '#EF6270', '#FF777F'),
       BuiltinThemeRegistry.reader('#261D22', 'strawberry-dark', '#F2DEDA', '#BE9492', 'dark'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.STRAWBERRY_RIBBON, '#6D9BB8', '#D8EEFC')
     );
@@ -351,9 +351,9 @@ export class BuiltinThemeRegistry {
       'plum'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#F4F0E8', '#FBF8F1', '#E8E9DF', '#3C3028', '#7B7066', '#D8D1C4',
+      BuiltinThemeRegistry.colors('#F4F0E8', '#FBF8F1', '#E8E9DF', '#3C3028', '#746A60', '#D8D1C4',
         '#557A68', '#486B5B', '#A34D48'),
-      BuiltinThemeRegistry.reader('#F8F4EA', 'plum-tea-light', '#49372E', '#817268', 'light'),
+      BuiltinThemeRegistry.reader('#F8F4EA', 'plum-tea-light', '#49372E', '#7A6B62', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.CELADON_SLIP, '#9FBBAA', '#405A4D')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -377,9 +377,9 @@ export class BuiltinThemeRegistry {
       'rose'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#FAF3ED', '#FFF9F4', '#F3E3DE', '#583B3D', '#987071', '#E6CDC7',
-        '#A84550', '#963B46', '#C34E58'),
-      BuiltinThemeRegistry.reader('#FCF6EE', 'rose-letter-light', '#5B3A3C', '#936B6D', 'light'),
+      BuiltinThemeRegistry.colors('#FAF3ED', '#FFF9F4', '#F3E3DE', '#583B3D', '#8B6465', '#E6CDC7',
+        '#A84550', '#963B46', '#BF424D'),
+      BuiltinThemeRegistry.reader('#FCF6EE', 'rose-letter-light', '#5B3A3C', '#8B6667', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.ROSE_FRAME, '#C77A83', '#7E3540')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -403,14 +403,14 @@ export class BuiltinThemeRegistry {
       'crane'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#EEF3F8', '#F8FBFE', '#E3EAF2', '#25344A', '#6E7E94', '#CCD7E4',
-        '#5879A7', '#496A97', '#B74F62'),
-      BuiltinThemeRegistry.reader('#EEF3F8', 'moon-crane-light', '#30425E', '#72829A', 'light'),
+      BuiltinThemeRegistry.colors('#EEF3F8', '#F8FBFE', '#E3EAF2', '#25344A', '#606E81', '#CCD7E4',
+        '#5879A7', '#496A97', '#B3495D'),
+      BuiltinThemeRegistry.reader('#EEF3F8', 'moon-crane-light', '#30425E', '#5F6D84', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.MOON_HALO, '#8BBEFF', '#315777')
     );
     theme.dark = BuiltinThemeRegistry.variant(
       BuiltinThemeRegistry.colors('#070D17', '#0D1624', '#142033', '#DCE9FC', '#8298B6', '#22324A',
-        '#8BBEFF', '#72A7ED', '#FF748B'),
+        '#8BBEFF', '#5192E9', '#FF748B'),
       BuiltinThemeRegistry.reader('#07101C', 'moon-crane-dark', '#C8DCFA', '#7F98BA', 'dark'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.MOON_HALO, '#78B9F3', '#D5EEFF')
     );
@@ -429,9 +429,9 @@ export class BuiltinThemeRegistry {
       'sword-frost'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#EEF0EA', '#F8F6EE', '#E1E5DD', '#272B27', '#6E756E', '#CBD2C8',
+      BuiltinThemeRegistry.colors('#EEF0EA', '#F8F6EE', '#E1E5DD', '#272B27', '#666C66', '#CBD2C8',
         '#476963', '#83372F', '#B94438'),
-      BuiltinThemeRegistry.reader('#F4ECD9', 'sword-frost-light', '#3C352C', '#7C705F', 'light'),
+      BuiltinThemeRegistry.reader('#F4ECD9', 'sword-frost-light', '#3C352C', '#736758', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.SWORD_TALISMAN, '#476963', '#F8F6EE')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -455,9 +455,9 @@ export class BuiltinThemeRegistry {
       'qingluan-water'
     );
     theme.light = BuiltinThemeRegistry.variant(
-      BuiltinThemeRegistry.colors('#F2F2EC', '#FBF8F2', '#E3E9E6', '#302C31', '#756D77', '#D3D8D2',
+      BuiltinThemeRegistry.colors('#F2F2EC', '#FBF8F2', '#E3E9E6', '#302C31', '#716A73', '#D3D8D2',
         '#607F79', '#9C4F62', '#B84655'),
-      BuiltinThemeRegistry.reader('#F7F3EA', 'qingluan-water-light', '#353137', '#7A727C', 'light'),
+      BuiltinThemeRegistry.reader('#F7F3EA', 'qingluan-water-light', '#353137', '#726B74', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.QINGLUAN_JADE, '#7A9C94', '#44383F')
     );
     theme.dark = BuiltinThemeRegistry.variant(
@@ -482,13 +482,13 @@ export class BuiltinThemeRegistry {
     );
     theme.light = BuiltinThemeRegistry.variant(
       BuiltinThemeRegistry.colors('#FFF7ED', '#FFFCF7', '#F2E2D2', '#352B27', '#806E65', '#E8D7C5',
-        '#C46F45', '#587E73', '#D99086'),
+        '#C46F45', '#587E73', '#BE4A3C'),
       BuiltinThemeRegistry.reader('#FFF9F0', 'cat-pipi-light', '#3A2E29', '#806E65', 'light'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.PIPI_SOFT_PAW, '#D99086', '#4B342E')
     );
     theme.dark = BuiltinThemeRegistry.variant(
       BuiltinThemeRegistry.colors('#171310', '#241C18', '#30251F', '#F7ECE2', '#B7A397', '#49372D',
-        '#E8A06F', '#79A99B', '#E39A8F'),
+        '#E8A06F', '#649B8B', '#E39A8F'),
       BuiltinThemeRegistry.reader('#191411', 'cat-pipi-dark', '#F2E6DC', '#B7A397', 'dark'),
       BuiltinThemeRegistry.regex(ThemeBubbleStyles.PIPI_SOFT_PAW, '#D98E7E', '#FFF2E8')
     );

@@ -1,6 +1,7 @@
 import { promptAction, router } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { AppThemeSettings, AppThemeSettingsStore } from '../utils/AppThemeSettingsStore';
+import { fullScreenTransitionDurationMs } from '../utils/TransitionDuration';
 import { ReaderSettings, ReaderSettingsStore } from '../utils/ReaderSettingsStore';
 import { ReaderThemeHelper } from '../utils/ReaderThemeHelper';
 import { syncSystemBars } from '../utils/SystemBars';
@@ -536,7 +537,7 @@ struct ThemeSettingsPage {
     .backgroundColor(this.pageColor())
     .transition(TransitionEffect.translate({ y: 64 })
       .combine(TransitionEffect.opacity(0))
-      .animation({ duration: 260, curve: Curve.Friction }))
+      .animation({ duration: fullScreenTransitionDurationMs(), curve: Curve.Friction }))
   }
 
   @Builder
@@ -866,7 +867,7 @@ struct ThemeSettingsPage {
           this.showCustomThemeActionMenu = false;
           this.showRenameCustomThemeDialog = true;
         })
-        this.contextActionItem($r('sys.symbol.trash'), '删除', '#E53935', () => {
+        this.contextActionItem($r('sys.symbol.trash'), '删除', ThemeRuntime.dangerColor(this.appDarkMode), () => {
           this.showCustomThemeActionMenu = false;
           this.requestDeleteCustomTheme(this.actionCustomSchemeId);
         })
@@ -1000,7 +1001,7 @@ struct ThemeSettingsPage {
             .layoutWeight(1)
             .height(42)
             .borderRadius(10)
-            .backgroundColor('#E53935')
+            .backgroundColor('#C62828')
             .fontColor('#FFFFFF')
             .onClick(() => this.confirmDeleteCustomTheme())
         }

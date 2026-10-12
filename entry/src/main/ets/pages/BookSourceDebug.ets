@@ -229,9 +229,9 @@ struct BookSourceDebugPage {
       Text(step.name).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.primaryTextColor())
           .layoutWeight(1)
         Text(`${step.status} · ${step.elapsedMs}ms`).fontSize(12)
-          .fontColor(step.status === 'passed' ? '#20A464' : '#E84040')
+          .fontColor(step.status === 'passed' ? ThemeRuntime.primaryTextColor(this.appDarkMode) : ThemeRuntime.dangerColor(this.appDarkMode))
       }.width('100%')
-      if (step.error) Text(`错误：${step.error}`).fontSize(12).fontColor('#E84040').width('100%')
+      if (step.error) Text(`错误：${step.error}`).fontSize(12).fontColor(ThemeRuntime.dangerColor(this.appDarkMode)).width('100%')
         .textSelectable(TextSelectableMode.SELECTABLE_FOCUSABLE)
         .copyOption(CopyOptions.LocalDevice)
       ForEach(step.requests, (item: BookSourceDebugNetworkTrace) => {

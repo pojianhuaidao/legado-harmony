@@ -295,7 +295,7 @@ struct SubscriptionImportPage {
         Blank()
         Text(`已选 ${this.selectCount}/${this.parseResult.length}`)
           .fontSize(13)
-          .fontColor('#007DFF')
+          .fontColor(ThemeRuntime.primaryTextColor(this.appDarkMode))
       }
       .width('100%')
 
@@ -460,7 +460,7 @@ struct SubscriptionImportPage {
           if (this.errorInfo.length > 0) {
             Text(this.errorInfo)
               .fontSize(13)
-              .fontColor('#E53935')
+              .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
               .width('100%')
           }
 

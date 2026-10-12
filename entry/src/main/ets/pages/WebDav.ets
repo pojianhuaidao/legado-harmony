@@ -311,7 +311,7 @@ struct WebDavPage {
       Column() {
         this.entryContextActionItem($r('sys.symbol.square_and_pencil'), '重命名', this.primaryTextColor(),
           () => this.openRenameEntryDialog())
-        this.entryContextActionItem($r('sys.symbol.trash'), '删除', '#E53935',
+        this.entryContextActionItem($r('sys.symbol.trash'), '删除', ThemeRuntime.dangerColor(this.appDarkMode),
           () => this.confirmDeleteEntry())
       }
       .width(148)
@@ -429,7 +429,7 @@ struct WebDavPage {
         if (this.restorePasswordError) {
           Text(this.restorePasswordError)
             .fontSize(12)
-            .fontColor('#D9485F')
+            .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
             .width('100%')
         }
         Row({ space: 10 }) {
@@ -597,7 +597,7 @@ struct WebDavPage {
                 Button('删除')
                   .layoutWeight(1)
                   .height(34)
-                  .fontColor('#D9485F')
+                  .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
                   .backgroundColor(this.softColor())
                   .onClick(() => this.deleteBackup(entry))
               }
@@ -636,7 +636,7 @@ struct WebDavPage {
         if (/^http:\/\//i.test(this.connection.baseUrl.trim())) {
           Text('HTTP 会明文传输用户名、密码和文件内容，请仅在可信局域网或受保护的 VPN 中使用。')
             .fontSize(12)
-            .fontColor('#D9485F')
+            .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
             .width('calc(100% - 32vp)')
         }
         this.field('用户名', this.connection.username, 'WebDAV 用户名',
@@ -683,7 +683,7 @@ struct WebDavPage {
           Button('删除此连接')
             .width('calc(100% - 24vp)')
             .height(42)
-            .fontColor('#D9485F')
+            .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
             .backgroundColor(this.cardColor())
             .onClick(() => this.deleteConnection())
         }
@@ -902,7 +902,7 @@ struct WebDavPage {
     const confirmation = await promptAction.showDialog({
       title: '删除 WebDAV 连接',
       message: '只会删除本机连接配置和保存的密码，不会删除远端文件。',
-      buttons: [{ text: '取消', color: this.subTextColor() }, { text: '删除', color: '#D9485F' }]
+      buttons: [{ text: '取消', color: this.subTextColor() }, { text: '删除', color: ThemeRuntime.dangerColor(this.appDarkMode) }]
     });
     if (confirmation.index !== 1) return;
     await WebDavSecretStore.deletePassword(getContext(this), this.connection.id);
@@ -1066,7 +1066,7 @@ struct WebDavPage {
       title: entry.directory ? '删除文件夹' : '删除文件',
       message: entry.directory ? `确定删除“${entry.name}”及其中的全部内容吗？此操作无法撤销。` :
         `确定删除“${entry.name}”吗？此操作无法撤销。`,
-      buttons: [{ text: '取消', color: this.subTextColor() }, { text: '删除', color: '#E53935' }]
+      buttons: [{ text: '取消', color: this.subTextColor() }, { text: '删除', color: ThemeRuntime.dangerColor(this.appDarkMode) }]
     });
     if (confirmation.index !== 1) return;
     this.busy = true;
@@ -1335,7 +1335,7 @@ struct WebDavPage {
     const confirmation = await promptAction.showDialog({
       title: '删除远端备份',
       message: `确定删除“${entry.name}”吗？此操作无法撤销。`,
-      buttons: [{ text: '取消', color: this.subTextColor() }, { text: '删除', color: '#D9485F' }]
+      buttons: [{ text: '取消', color: this.subTextColor() }, { text: '删除', color: ThemeRuntime.dangerColor(this.appDarkMode) }]
     });
     if (confirmation.index !== 1) return;
     this.busy = true;
