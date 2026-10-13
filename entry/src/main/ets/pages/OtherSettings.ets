@@ -37,16 +37,10 @@ struct OtherSettingsPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column() {
-          this.sectionTitle('数据')
+          this.sectionTitle('备份选项')
           Column() {
-            this.menuItem('WebDAV', '浏览远程 TXT / EPUB，并管理加密备份', true, () => {
-              router.pushUrl({ url: 'pages/WebDav' });
-            })
-            this.menuItem('数据导入', '从备份文件导入书源、书架、进度、本地图书和设置', true, () => {
-              router.pushUrl({ url: 'pages/DataBackup', params: { mode: 'import' } });
-            })
-            this.menuItem('数据导出', '将书源、书架、进度、本地图书和设置导出为备份', false, () => {
-              router.pushUrl({ url: 'pages/DataBackup', params: { mode: 'export' } });
+            this.menuItem('备份选项', '华为账号登录、远端备份与恢复、WebDAV 与本地备份', true, () => {
+              router.pushUrl({ url: 'pages/BackupOptions' });
             })
           }
           .width('calc(100% - 24vp)')
@@ -91,25 +85,6 @@ struct OtherSettingsPage {
               .width('calc(100% - 32vp)')
               .margin({ left: 16, right: 16, bottom: 8 })
             }
-          }
-          .width('calc(100% - 24vp)')
-          .margin({ left: 12, right: 12 })
-          .borderRadius(16)
-          .clip(true)
-          .backgroundColor(this.cardColor())
-
-          this.sectionTitle('外观')
-          Column() {
-            this.menuItem('磨砂玻璃', '预设 / 模糊 / 透明度 / 边框 / 阴影', true, () => {
-              router.pushUrl({ url: 'pages/GlassSettings' });
-            })
-            this.immersiveLightLevelItem()
-            this.menuItem('字体设置', '全局字体 / 自定义字体', true, () => {
-              router.pushUrl({ url: 'pages/FontSettings' });
-            })
-            this.menuItem('图标设置', '桌面图标 / 候选图标', false, () => {
-              router.pushUrl({ url: 'pages/AppIconSettings' });
-            })
           }
           .width('calc(100% - 24vp)')
           .margin({ left: 12, right: 12 })
@@ -360,50 +335,6 @@ struct OtherSettingsPage {
       color: this.appDarkMode ? '#24FFFFFF' : '#14000000' })
     .alignItems(VerticalAlign.Center)
     .onClick(onClick)
-  }
-
-  @Builder
-  immersiveLightLevelItem() {
-    Row() {
-      Column() {
-        Text('沉浸光感')
-          .fontSize(16)
-          .fontColor(this.primaryTextColor())
-        Text('设置鸿蒙沉浸材质的光感强度')
-          .fontSize(12)
-          .fontColor(this.subTextColor())
-          .margin({ top: 4 })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Select(this.immersiveLightLevelOptions())
-        .selected(this.immersiveLightLevelSelectedIndex())
-        .value(this.immersiveLightLevelOptions()[this.immersiveLightLevelSelectedIndex()].value)
-        .font({ size: 14 })
-        .fontColor(this.subTextColor())
-        .backgroundColor(Color.Transparent)
-        .arrowPosition(ArrowPosition.END)
-        .padding({ left: 0, right: 0 })
-        .borderRadius(16)
-        .border({ width: 0 })
-        .divider(null)
-        .optionBgColor(Color.Transparent)
-        .optionFontColor(this.primaryTextColor())
-        .selectedOptionFontColor(this.accentColor())
-        .selectedOptionBgColor(ThemeRuntime.accentSurfaceColor(this.appDarkMode))
-        .menuBackgroundColor(ThemeRuntime.dropdownPanelColor(this.appDarkMode))
-        .menuBackgroundBlurStyle(BlurStyle.NONE)
-        .menuSystemMaterial(ImmersiveMaterialRuntime.selectMenuMaterial())
-        .onSelect((index: number) => this.setImmersiveLightLevel(index))
-    }
-    .width('calc(100% - 32vp)')
-    .constraintSize({ minHeight: 64 })
-    .padding({ left: 0, right: 0, top: 10, bottom: 10 })
-    .margin({ left: 16, right: 16 })
-    .backgroundColor(Color.Transparent)
-    .border({ width: { bottom: 0.5 }, color: this.appDarkMode ? '#24FFFFFF' : '#14000000' })
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder

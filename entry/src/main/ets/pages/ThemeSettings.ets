@@ -1,6 +1,9 @@
 import { promptAction, router } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { AppThemeSettings, AppThemeSettingsStore } from '../utils/AppThemeSettingsStore';
+import { AppIconManager } from '../utils/AppIconManager';
+import { AppIconSettings, AppIconSettingsStore } from '../utils/AppIconSettingsStore';
+import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
 import { fullScreenTransitionDurationMs } from '../utils/TransitionDuration';
 import { ReaderSettings, ReaderSettingsStore } from '../utils/ReaderSettingsStore';
 import { ReaderThemeHelper } from '../utils/ReaderThemeHelper';
@@ -46,6 +49,10 @@ struct ThemeSettingsPage {
   @StorageLink('appDarkMode') appDarkMode: boolean = false;
   @StorageLink('appThemeId') appThemeId: string = AppThemeSettingsStore.DEFAULT_THEME_ID;
   @StorageLink('appThemeBookCoverEnabled') themeBookCoverEnabled: boolean = false;
+  // 二开改造（第三版）：每个主题项内部小开关的持久化状态（JSON 字符串，键=主题id，值=是否跟随图标）
+  @StorageLink('appIconThemeFollowMap') themeIconFollowMapJson: string = '{}';
+  // 二开改造：外观设置中的「沉浸光感」随外观搬迁到主题页
+  @StorageLink('immersiveLightLevel') immersiveLightLevel: string = 'adaptive';
   @StorageLink('themeRevision') themeRevision: number = 0;
   @StorageLink('appCustomBaseThemeId') customBaseThemeId: string = AppThemeSettingsStore.DEFAULT_THEME_ID;
   @StorageLink('appCustomLightAccentColor') customLightAccentColor: string = '#007DFF';
@@ -110,6 +117,13 @@ struct ThemeSettingsPage {
     this.refreshCustomSchemes();
     this.refreshThemeCatalog();
     this.syncBars();
+    // 二开改造：加载图标跟随主题开关状态（含图标设置页返回后的最新值）
+    AppIconSettingsStore.load(getContext(this)).then((settings: AppIconSettings) => {
+      AppIconSettingsStore.applyToStorage(settings);
+    }).catch(() => {
+      AppStorage.setOrCreate(AppIconSettingsStore.KEY_ICON_ID, AppIconSettingsStore.DEFAULT_ICON_ID);
+      AppStorage.setOrCreate(AppIconSettingsStore.KEY_FOLLOW_THEME, true);
+    });
   }
 
   onPageShow(): void {
@@ -174,6 +188,13 @@ struct ThemeSettingsPage {
             .width('100%')
           }
         }, (row: ThemePack[]) => `grid_theme_row_${row.map((t: ThemePack) => t.id).join('_')}_${this.accountEntitlementsRevision}`)
+        // 二开改造：「外观设置」整体搬迁至「全部主题」下方，作为独立设置项
+        ListItem() {
+          this.sectionTitle('外观设置')
+        }
+        ListItem() {
+          this.appearanceCard()
+        }
         ListItem() {
           Row() {
           }
@@ -336,6 +357,12 @@ struct ThemeSettingsPage {
       await this.applyThemeFontWhenAvailable();
       this.refreshRecentReadCard();
       this.syncBars();
+      // 二开改造（第三版）：按该主题项内部小开关决策图标。
+      // 开=切换主题时联动切换同名图标（无同名则默认图标）；关=切换主题但使用默认图标。
+      const themeIconFollow = this.themeIconFollow(settings.themeId);
+      AppIconManager.applyThemeIconDecision(getContext(this), settings.themeId, themeIconFollow).catch((e: Error) => {
+        console.warn('切换主题图标失败:', e);
+      });
       promptAction.showToast({
         message: choice.applyLayout ? `已应用「${theme.name}」主题` :
           `已应用「${theme.name}」主题，排版保持不变`
@@ -516,6 +543,164 @@ struct ThemeSettingsPage {
       .fontColor(this.subTextColor())
       .width('100%')
       .padding({ left: 2, top: 6, bottom: 0 })
+  }
+
+  // ===== 二开改造（第三版）：每个主题项内部小开关 =====
+  themeIconFollow(themeId: string): boolean {
+    try {
+      const map = JSON.parse(this.themeIconFollowMapJson) as Record<string, boolean>;
+      const value = map[themeId];
+      return value === undefined ? true : value;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  setThemeIconFollow(themeId: string, enabled: boolean): void {
+    let map: Record<string, boolean> = {};
+    try {
+      map = JSON.parse(this.themeIconFollowMapJson) as Record<string, boolean>;
+    } catch (e) {
+      map = {};
+    }
+    map[themeId] = enabled;
+    this.themeIconFollowMapJson = JSON.stringify(map);
+    const context = getContext(this);
+    AppIconSettingsStore.setThemeFollow(context, themeId, enabled).catch((e: Error) => {
+      console.error('保存主题图标跟随设置失败:', e);
+      promptAction.showToast({ message: '保存设置失败' });
+    });
+    if (enabled && this.appThemeId === themeId) {
+      // 当前正在使用的主题：开启后立即联动切换同名图标
+      AppIconManager.applyThemeIconDecision(context, themeId, true).catch((e: Error) => {
+        console.warn('切换主题图标失败:', e);
+      });
+    }
+    promptAction.showToast({ message: enabled ? '已开启：应用该主题时联动切换同名图标' : '已关闭：应用该主题时使用默认图标' });
+  }
+
+  // ===== 二开改造：外观设置（从「其他设置」整体搬迁至「全部主题」下方） =====
+  @Builder
+  appearanceCard() {
+    Column() {
+      this.menuItem('磨砂玻璃', '预设 / 模糊 / 透明度 / 边框 / 阴影', true, () => {
+        router.pushUrl({ url: 'pages/GlassSettings' });
+      })
+      this.immersiveLightLevelItem()
+      this.menuItem('字体设置', '全局字体 / 自定义字体 / 在线下载', true, () => {
+        router.pushUrl({ url: 'pages/FontSettings' });
+      })
+      this.menuItem('图标设置', '桌面图标 / 候选图标', false, () => {
+        router.pushUrl({ url: 'pages/AppIconSettings' });
+      })
+    }
+    .width('100%')
+    .backgroundColor(this.cardColor())
+    .borderRadius(16)
+    .clip(true)
+  }
+
+  @Builder
+  menuItem(title: string, desc: string, showDivider: boolean, onClick: () => void) {
+    Row() {
+      Column() {
+        Text(title)
+          .fontSize(16)
+          .fontColor(this.primaryTextColor())
+        Text(desc)
+          .fontSize(12)
+          .fontColor(this.subTextColor())
+          .margin({ top: 4 })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([this.subTextColor()])
+    }
+    .width('calc(100% - 32vp)')
+    .height(64)
+    .padding({ left: 0, right: 0 })
+    .margin({ left: 16, right: 16 })
+    .backgroundColor(Color.Transparent)
+    .border({ width: { bottom: showDivider ? 0.5 : 0 },
+      color: this.appDarkMode ? '#24FFFFFF' : '#14000000' })
+    .alignItems(VerticalAlign.Center)
+    .onClick(onClick)
+  }
+
+  @Builder
+  immersiveLightLevelItem() {
+    Row() {
+      Column() {
+        Text('沉浸光感')
+          .fontSize(16)
+          .fontColor(this.primaryTextColor())
+        Text('设置鸿蒙沉浸材质的光感强度')
+          .fontSize(12)
+          .fontColor(this.subTextColor())
+          .margin({ top: 4 })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Select(this.immersiveLightLevelOptions())
+        .selected(this.immersiveLightLevelSelectedIndex())
+        .value(this.immersiveLightLevelOptions()[this.immersiveLightLevelSelectedIndex()].value)
+        .font({ size: 14 })
+        .fontColor(this.subTextColor())
+        .backgroundColor(Color.Transparent)
+        .arrowPosition(ArrowPosition.END)
+        .padding({ left: 0, right: 0 })
+        .borderRadius(16)
+        .border({ width: 0 })
+        .divider(null)
+        .optionBgColor(Color.Transparent)
+        .optionFontColor(this.primaryTextColor())
+        .selectedOptionFontColor(this.accentColor())
+        .selectedOptionBgColor(ThemeRuntime.accentSurfaceColor(this.appDarkMode))
+        .menuBackgroundColor(ThemeRuntime.dropdownPanelColor(this.appDarkMode))
+        .menuBackgroundBlurStyle(BlurStyle.NONE)
+        .menuSystemMaterial(ImmersiveMaterialRuntime.selectMenuMaterial())
+        .onSelect((index: number) => this.setImmersiveLightLevel(index))
+    }
+    .width('calc(100% - 32vp)')
+    .constraintSize({ minHeight: 64 })
+    .padding({ left: 0, right: 0, top: 10, bottom: 10 })
+    .margin({ left: 16, right: 16 })
+    .backgroundColor(Color.Transparent)
+    .border({ width: { bottom: 0.5 }, color: this.appDarkMode ? '#24FFFFFF' : '#14000000' })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  immersiveLightLevelOptions(): SelectOption[] {
+    return [
+      { value: '跟随系统' },
+      { value: '高' },
+      { value: '均衡' },
+      { value: '弱' }
+    ];
+  }
+
+  immersiveLightLevelValues(): string[] {
+    return ['adaptive', 'high', 'balanced', 'weak'];
+  }
+
+  immersiveLightLevelSelectedIndex(): number {
+    const index = this.immersiveLightLevelValues().indexOf(this.immersiveLightLevel);
+    return index >= 0 ? index : 0;
+  }
+
+  setImmersiveLightLevel(index: number): void {
+    const values = this.immersiveLightLevelValues();
+    const next = index >= 0 && index < values.length ? values[index] : values[0];
+    if (this.immersiveLightLevel === next) {
+      return;
+    }
+    this.immersiveLightLevel = next;
+    const revision = AppStorage.get<number>('themeRevision') ?? 0;
+    AppStorage.setOrCreate('themeRevision', revision + 1);
   }
 
   /** Full-screen store: one themed showcase page per swipe. */
@@ -1477,6 +1662,26 @@ struct ThemeSettingsPage {
           .borderRadius(9)
           .backgroundColor(this.activeVariant(theme).colors.inputColor)
       }
+
+      // 二开改造（第三版）：每个主题项内部小开关（图标跟随）
+      Row({ space: 4 }) {
+        Text(this.themeIconFollow(customSchemeId || theme.id) ? '图标跟随' : '默认图标')
+          .fontSize(10)
+          .fontColor(this.themeIconFollow(customSchemeId || theme.id) ?
+            this.activeVariant(theme).colors.accentColor : this.activeVariant(theme).colors.subTextColor)
+        Toggle({ type: ToggleType.Switch, isOn: this.themeIconFollow(customSchemeId || theme.id) })
+          .selectedColor(this.activeVariant(theme).colors.accentColor)
+          .width(32)
+          .height(18)
+          .onChange((checked: boolean) => this.setThemeIconFollow(customSchemeId || theme.id, checked))
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .onTouch((event: TouchEvent) => {
+        if (event.type === TouchType.Down) {
+          event.stopPropagation();
+        }
+      })
     }
     .layoutWeight(1)
     .padding(12)
@@ -1592,6 +1797,23 @@ struct ThemeSettingsPage {
       }
         .width('100%')
         .alignItems(VerticalAlign.Center)
+      // 二开改造（第三版）：每个主题项内部小开关（图标跟随）
+      Row({ space: 8 }) {
+        Text(this.themeIconFollow(customSchemeId || theme.id) ? '图标跟随' : '默认图标')
+          .fontSize(11)
+          .fontColor(this.themeIconFollow(customSchemeId || theme.id) ?
+            this.activeVariant(theme).colors.accentColor : this.activeVariant(theme).colors.subTextColor)
+        Toggle({ type: ToggleType.Switch, isOn: this.themeIconFollow(customSchemeId || theme.id) })
+          .selectedColor(this.activeVariant(theme).colors.accentColor)
+          .onChange((checked: boolean) => this.setThemeIconFollow(customSchemeId || theme.id, checked))
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .onTouch((event: TouchEvent) => {
+        if (event.type === TouchType.Down) {
+          event.stopPropagation();
+        }
+      })
       if (theme.id === ThemeIds.CUSTOM) {
         Row() {
           Text('浅色 / 深色可分别组合全部主题部件')

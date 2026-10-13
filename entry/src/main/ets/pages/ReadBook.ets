@@ -35,6 +35,7 @@ import { SystemTtsReader, TtsChunk, TtsVoiceOption } from '../utils/SystemTtsRea
 import { RoleTagger, RoleTagResult, RoleTaggerOptions } from '../utils/RoleTagger';
 import { RoleTtsDriver, RoleTtsPlayItem } from '../utils/RoleTtsDriver';
 import { CloudTtsDriver } from '../utils/CloudTtsDriver';
+import { OfflineTtsDriver } from '../utils/OfflineTtsDriver';
 import { CloudTtsVoiceData } from '../utils/CloudTtsVoiceProvider';
 import { ReaderTtsFloatingSession } from '../utils/ReaderTtsFloatingSession';
 import { ReaderProgressCheckpoint } from '../utils/ReaderProgressCheckpoint';
@@ -345,6 +346,7 @@ struct ReadBookPage {
   private roleTtsTaggingText: string = '';
   private roleTtsPanelSentence: string = '';
   private cloudTtsDriver: CloudTtsDriver | null = null;
+  private offlineTtsDriver: OfflineTtsDriver | null = null;
   private cloudTtsRunning: boolean = false;
   private cloudReadToken: number = -1;
   private ttsAutoContinue: boolean = false;
@@ -673,6 +675,8 @@ struct ReadBookPage {
   @StorageLink('ttsCloudAppId') ttsCloudAppId: string = '';
   @StorageLink('ttsCloudVoices') ttsCloudVoices: string = '[]';
   @StorageLink('ttsCloudActiveVoice') ttsCloudActiveVoice: string = '';
+  @StorageLink('ttsOfflineEnabled') ttsOfflineEnabled: boolean = false;
+  @StorageLink('ttsOfflineEngine') ttsOfflineEngine: string = 'piper';
   @StorageLink('launchShortcutNonce') @Watch('onLaunchShortcutChanged') launchShortcutNonce: number = 0;
   @StorageLink('fullTextCacheCancelNonce') @Watch('onFullTextCacheCancelNonceChanged') fullTextCacheCancelNonce: number = 0;
   @State ttsVoices: TtsVoiceOption[] = [ReadBookPage.defaultTtsVoice()];
@@ -13647,6 +13651,11 @@ struct ReadBookPage {
         return;
       }
       this.publishTtsFloatingSession();
+      if (this.isOfflineTtsVoiceActive()) {
+        await this.startOfflineTtsReading(text, token, showToast, focusGeneration,
+          focusChapterIndex, focusSourceIdentity);
+        return;
+      }
       if (this.isCloudTtsVoiceActive()) {
         await this.startCloudTtsReading(text, token, showToast);
         return;
@@ -13662,57 +13671,8 @@ struct ReadBookPage {
         }
         return;
       }
-      await this.ttsReader.start(text, {
-        onFinished: () => {
-          this.continueTtsReading(token).catch((e: Error) => {
-            console.warn('连续朗读续播失败:', e);
-            if (token === this.ttsReadToken) {
-              this.finishTtsReading();
-            }
-          });
-        },
-        onSpeechless: () => {
-          if (token !== this.ttsReadToken) {
-            return;
-          }
-          // The remaining page/chapter has no audible content (punctuation or
-          // whitespace only), so no chunk will ever confirm the tail. Clear the
-          // expected end before onFinished fires; otherwise continueTtsReading
-          // sees zero focus chunks and retries the same speechless range until
-          // it stops the whole read with "chapter tail not confirmed".
-          this.ttsReadingExpectedSourceEnd = -1;
-          this.ttsChapterCompletionRetryCount = 0;
-        },
-        onError: (message: string) => {
-          if (token !== this.ttsReadToken) {
-            return;
-          }
-          this.finishTtsReading();
-          promptAction.showToast({ message: message || '系统朗读失败' });
-        },
-        onChunkStart: (chunk: TtsChunk) => {
-          if (!this.isCurrentTtsFocusSession(token, focusGeneration,
-            focusChapterIndex, focusSourceIdentity)) {
-            return;
-          }
-          this.followTtsChunk(chunk, token, focusGeneration, focusChapterIndex, focusSourceIdentity);
-        },
-        onAudioStart: () => {
-          if (token !== this.ttsReadToken) {
-            return;
-          }
-          this.onTtsAudioStarted();
-        },
-        person: this.ttsPerson,
-        online: this.ttsOnline,
-        style: this.ttsStyle,
-        language: this.ttsLanguage,
-        speed: this.ttsSpeed,
-        focusBreakOffsets: this.getTtsFocusBreakOffsets(text.length),
-        // Continuous reading should keep one renderer/audio route across
-        // chapter boundaries; explicit stop/pause paths still release it.
-        keepAudioOutputOnFinish: true
-      });
+      await this.startSystemTtsReading(text, token, showToast, focusGeneration,
+        focusChapterIndex, focusSourceIdentity);
       if (showToast && token === this.ttsReadToken) {
         promptAction.showToast({ message: '开始连续朗读' });
       }
@@ -13725,6 +13685,106 @@ struct ReadBookPage {
       promptAction.showToast({ message: '当前系统不支持朗读或 TTS 初始化失败' });
       console.error('启动系统 TTS 失败:', error);
     }
+  }
+
+  private isOfflineTtsVoiceActive(): boolean {
+    return this.ttsOfflineEnabled === true;
+  }
+
+  private async startOfflineTtsReading(text: string, token: number, showToast: boolean,
+    focusGeneration: number, focusChapterIndex: number, focusSourceIdentity: string): Promise<void> {
+    const engine = (this.ttsOfflineEngine || 'piper').trim();
+    const self = this;
+    if (!this.offlineTtsDriver) {
+      this.offlineTtsDriver = new OfflineTtsDriver(getContext(this) as common.UIAbilityContext);
+    }
+    await this.offlineTtsDriver.speak({
+      text: text,
+      engine: engine,
+      speed: this.ttsSpeed,
+      onStart: () => {
+        if (token === self.ttsReadToken) {
+          self.onTtsAudioStarted();
+        }
+      },
+      onFinished: () => {
+        self.continueTtsReading(token).catch((e: Error) => {
+          console.warn('离线连续朗读续播失败:', e);
+          if (token === self.ttsReadToken) {
+            self.finishTtsReading();
+          }
+        });
+      },
+      onFallback: () => {
+        self.startSystemTtsReading(text, token, showToast, focusGeneration,
+          focusChapterIndex, focusSourceIdentity);
+      },
+      onError: (message: string) => {
+        if (token !== self.ttsReadToken) {
+          return;
+        }
+        self.finishTtsReading();
+        promptAction.showToast({ message: message || '离线朗读失败' });
+      }
+    });
+    if (showToast && token === this.ttsReadToken) {
+      promptAction.showToast({ message: '开始离线连续朗读' });
+    }
+  }
+
+  private async startSystemTtsReading(text: string, token: number, showToast: boolean,
+    focusGeneration: number, focusChapterIndex: number, focusSourceIdentity: string): Promise<void> {
+    await this.ttsReader.start(text, {
+      onFinished: () => {
+        this.continueTtsReading(token).catch((e: Error) => {
+          console.warn('连续朗读续播失败:', e);
+          if (token === this.ttsReadToken) {
+            this.finishTtsReading();
+          }
+        });
+      },
+      onSpeechless: () => {
+        if (token !== this.ttsReadToken) {
+          return;
+        }
+        // The remaining page/chapter has no audible content (punctuation or
+        // whitespace only), so no chunk will ever confirm the tail. Clear the
+        // expected end before onFinished fires; otherwise continueTtsReading
+        // sees zero focus chunks and retries the same speechless range until
+        // it stops the whole read with "chapter tail not confirmed".
+        this.ttsReadingExpectedSourceEnd = -1;
+        this.ttsChapterCompletionRetryCount = 0;
+      },
+      onError: (message: string) => {
+        if (token !== this.ttsReadToken) {
+          return;
+        }
+        this.finishTtsReading();
+        promptAction.showToast({ message: message || '系统朗读失败' });
+      },
+      onChunkStart: (chunk: TtsChunk) => {
+        if (!this.isCurrentTtsFocusSession(token, focusGeneration,
+          focusChapterIndex, focusSourceIdentity)) {
+          return;
+        }
+        this.followTtsChunk(chunk, token, focusGeneration, focusChapterIndex, focusSourceIdentity);
+      },
+      onAudioStart: () => {
+        if (token !== this.ttsReadToken) {
+          return;
+        }
+        this.onTtsAudioStarted();
+      },
+      person: this.ttsPerson,
+      online: this.ttsOnline,
+      style: this.ttsStyle,
+      language: this.ttsLanguage,
+      speed: this.ttsSpeed,
+      focusBreakOffsets: this.getTtsFocusBreakOffsets(text.length),
+      // Continuous reading should keep one renderer/audio route across
+      // chapter boundaries; explicit stop/pause paths still release it.
+      keepAudioOutputOnFinish: true
+    });
   }
 
   private isCloudTtsVoiceActive(): boolean {
@@ -13788,7 +13848,7 @@ struct ReadBookPage {
     }
     const apiKey = (this.ttsCloudApiKey || '').trim();
     const appId = (this.ttsCloudAppId || '').trim();
-    if (voice.provider !== 'edge' && !apiKey) {
+    if (!apiKey) {
       this.finishTtsReading();
       promptAction.showToast({ message: '请先在朗读设置中填写云端音色 API Key' });
       return;
@@ -13820,7 +13880,7 @@ struct ReadBookPage {
           provider: voice.provider,
           baseUrl: voice.baseUrl,
           model: voice.model,
-          apiKey: voice.provider === 'edge' ? '' : apiKey,
+          apiKey: apiKey,
           appId: appId,
           voice: voice.voice,
           speed: this.ttsSpeed,
@@ -14012,7 +14072,7 @@ struct ReadBookPage {
       provider: target.provider,
       baseUrl: target.baseUrl,
       model: target.model,
-      apiKey: target.provider === 'edge' ? '' : apiKey,
+      apiKey: apiKey,
       appId: appId,
       voice: target.voice,
       speed: this.ttsSpeed,
@@ -14089,7 +14149,7 @@ struct ReadBookPage {
     // （knownVoiceOptions 兜底，available=false），仅按 length 判断会永不触发兜底，
     // 导致用户映射被清空、自动分配全落默认音色（全角色默认音色问题）。
     // 改为"无任何可用音色"即触发本地兜底，用已知本地音色（默认/聆小珊/凌飞哲）作为自动分配候选；
-    // 禁止把角色自动分配到云端音色（尤其免 Key 常驻的 edge），云端音色仅用户显式引用时可用。
+    // 禁止把角色自动分配到云端音色，云端音色仅用户显式引用时可用。
     let usingFallbackVoices = false;
     const hasUsableVoice = voices.some((v: TtsVoiceOption) => v.available && !v.downloadable);
     if (voices.length === 0 || !hasUsableVoice) {
@@ -14146,7 +14206,7 @@ struct ReadBookPage {
       const roleDef = result.roles.find((r) => r.name === name);
       const gender = roleDef ? (roleDef.gender || 'unknown').toLowerCase() : 'unknown';
       // 自动分配只允许本地音色；云端音色仅由用户显式映射/当前音色引用（sanitized 已保留），
-      // 自动分配绝不静默选用云端音色（尤其免 Key 常驻的 edge）。
+      // 自动分配绝不静默选用云端音色。
       let chosen: TtsVoiceOption | null = null;
       if (gender.indexOf('female') === 0) {
         chosen = candidates.find((v) => {
@@ -14232,6 +14292,12 @@ struct ReadBookPage {
     this.roleTtsPanelSentence = '';
   }
 
+  private stopOfflineTtsReading(): void {
+    if (this.offlineTtsDriver) {
+      this.offlineTtsDriver.stop();
+    }
+  }
+
   /** 分角色段开始：把当前段映射到整章绝对偏移，同步高亮/进度/持久化定位。 */
   private applyRoleTtsSegmentFocus(item: RoleTtsPlayItem): void {
     // item.sourceStart 相对整章文本；直接叠加章节起点得到整章绝对偏移。
@@ -14292,6 +14358,7 @@ struct ReadBookPage {
     }
     this.stopRoleTtsReading();
     this.stopCloudTtsReading();
+    this.stopOfflineTtsReading();
     this.ttsReader.stop();
     this.isTtsSpeaking = false;
     this.updateVolumeKeySubscription();
@@ -14319,6 +14386,7 @@ struct ReadBookPage {
     this.ttsPageTurnSerial++;
     this.stopRoleTtsReading();
     this.stopCloudTtsReading();
+    this.stopOfflineTtsReading();
     this.ttsReader.stop();
     this.isTtsSpeaking = false;
     this.clearTtsHighlight();

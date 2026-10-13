@@ -97,10 +97,13 @@ struct AppIconSettingsPage {
     }
     const alternateName = AppIconManager.alternateIconName(option.id);
     try {
-      bundleManager.setAlternateIcon(alternateName).then(() => {
+      bundleManager.setAlternateIcon(alternateName).then(async () => {
         // 切换成功后再持久化，保证桌面图标与设置页勾选一致
+        const current = await AppIconSettingsStore.load(getContext(this));
         const settings = new AppIconSettings();
         settings.iconId = option.id;
+        // 二开改造：单独切换图标时保留「跟随主题图标」开关原值，避免覆盖主题页设置
+        settings.followTheme = current.followTheme;
         AppIconSettingsStore.applyToStorage(settings);
         AppIconSettingsStore.save(getContext(this), settings).catch((e: Error) => {
           hilog.warn(0x0000, 'appIcon', 'Save app icon selection failed err=%{public}s', JSON.stringify(e));

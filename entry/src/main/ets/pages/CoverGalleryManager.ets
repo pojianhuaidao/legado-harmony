@@ -8,6 +8,7 @@ import { syncSystemBars } from '../utils/SystemBars';
 import { CoverAlbum, CoverGallerySettings } from '../utils/CoverGallerySettings';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { CoverGalleryStore, CoverGallerySnapshot } from '../utils/CoverGalleryStore';
+import { AppDataPaths } from '../utils/AppDataPaths';
 import { RecentReadCardUpdater } from '../utils/RecentReadCardUpdater';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 
@@ -382,7 +383,7 @@ struct CoverGalleryManagerPage {
 
   async addCoversToAlbum(albumId: string, sourceUris: string[]): Promise<void> {
     const context = getContext(this);
-    const dir = `${context.filesDir}/cover_albums/${albumId}`;
+    const dir = `${AppDataPaths.dir('cover_albums')}/${albumId}`;
     await this.ensureDir(dir);
     const savedUris: string[] = [];
     for (let i = 0; i < sourceUris.length; i++) {

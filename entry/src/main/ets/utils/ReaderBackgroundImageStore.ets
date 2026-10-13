@@ -2,6 +2,7 @@ import { Context } from '@kit.AbilityKit';
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
 import fileUri from '@ohos.file.fileuri';
+import { AppDataPaths } from './AppDataPaths';
 
 export class ReaderBackgroundImageStore {
   static async pickAndSave(context: Context, schemeId: string): Promise<string> {
@@ -13,7 +14,7 @@ export class ReaderBackgroundImageStore {
       return '';
     }
     const source = result.photoUris[0];
-    const dir = `${context.filesDir}/reader_backgrounds`;
+    const dir = AppDataPaths.dir('reader_backgrounds');
     try {
       await fs.mkdir(dir, true);
     } catch (e) {
@@ -31,7 +32,7 @@ export class ReaderBackgroundImageStore {
     }
     try {
       const path: string = uri.startsWith('file://') ? decodeURIComponent(uri.substring(7)) : uri;
-      if (path.startsWith(`${context.filesDir}/reader_backgrounds/`) && fs.accessSync(path)) {
+      if (path.startsWith(`${AppDataPaths.dir('reader_backgrounds')}/`) && fs.accessSync(path)) {
         fs.unlinkSync(path);
       }
     } catch (e) {

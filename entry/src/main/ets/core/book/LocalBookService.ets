@@ -8,6 +8,7 @@ import zlib from '@ohos.zlib';
 import xml from '@ohos.xml';
 import { appDb } from '../../model/data/AppDatabase';
 import { Book, BookChapter } from '../../model/data/Book';
+import { AppDataPaths } from '../../utils/AppDataPaths';
 import { ReaderImageMarker } from './ReaderImageMarker';
 import { LocalChapterContentLoader } from './LocalChapterContentLoader';
 
@@ -280,7 +281,7 @@ export class LocalBookService {
     const sourceStat = await fs.stat(sourceUri);
     const oldBook = await appDb.getBook(bookUrl);
     const oldChapterCount = oldBook ? await appDb.getBookChapterCount(bookUrl) : 0;
-    const root = `${context.filesDir}/local_books`;
+    const root = AppDataPaths.dir('local_books');
     LocalBookService.ensureDir(root);
     const localPath = `${root}/${id}.${extension}`;
     const oldParserVersion = oldBook?.getVariable('localParserVersion') || '';
@@ -795,7 +796,7 @@ export class LocalBookService {
 
   private static async parseEpub(context: Context, epubPath: string, id: string): Promise<EpubPackageData> {
     const stat = await fs.stat(epubPath);
-    const extractRoot = `${context.filesDir}/local_books/${id}_${stat.mtime}`;
+    const extractRoot = `${AppDataPaths.dir('local_books')}/${id}_${stat.mtime}`;
     if (!LocalBookService.exists(extractRoot)) {
       LocalBookService.ensureDir(extractRoot);
       await zlib.decompressFile(epubPath, extractRoot);
@@ -1388,7 +1389,7 @@ export class LocalBookService {
   }
 
   private static deleteLocalPath(context: Context, path: string): void {
-    const root = `${context.filesDir}/local_books`;
+    const root = AppDataPaths.dir('local_books');
     if (!path || !path.startsWith(root) || !LocalBookService.exists(path)) return;
     try {
       const stat = fs.statSync(path);

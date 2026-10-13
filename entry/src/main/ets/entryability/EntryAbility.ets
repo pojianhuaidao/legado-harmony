@@ -24,6 +24,8 @@ import fs from '@ohos.file.fs';
 import { util } from '@kit.ArkTS';
 import { FullTextCacheCancelCoordinator } from '../utils/FullTextCacheCancelCoordinator';
 import { lanReaderServer } from '../core/lan/LanReaderServer';
+import { AppDataPaths } from '../utils/AppDataPaths';
+import { HuaweiCloudService } from '../utils/HuaweiCloudService';
 
 export default class EntryAbility extends UIAbility {
   private appliedColorMode: number = -1;
@@ -38,6 +40,7 @@ export default class EntryAbility extends UIAbility {
     AppStorage.setOrCreate('startupT0', Date.now());
     AppStorage.setOrCreate('appCacheDir', this.context.cacheDir);
     AppStorage.setOrCreate('appFilesDir', this.context.filesDir);
+    AppDataPaths.initStorage(this.context.filesDir);
     AppStorage.setOrCreate('pendingBookSourceImportUri', '');
     AppStorage.setOrCreate('pendingBookSourceImportUrl', '');
     AppStorage.setOrCreate('pendingBookSourceImportNonce', 0);
@@ -55,6 +58,21 @@ export default class EntryAbility extends UIAbility {
     AppStorage.setOrCreate('globalTtsTextAfter', '');
     TlsTrustStore.load(this.context).catch((e: Error) => {
       hilog.warn(0x0000, 'testTag', 'Load TLS trust settings failed: %{public}s', JSON.stringify(e));
+    });
+    // 数据目录迁移：恢复已迁移根目录；未迁移则尝试自动迁移到公共 Download。
+    AppDataPaths.loadPersistedRoot(this.context).catch((e: Error) => {
+      hilog.warn(0x0000, 'testTag', 'Load data root failed: %{public}s', JSON.stringify(e));
+    });
+    AppDataPaths.migrateToDownload(this.context).then((migrated: boolean) => {
+      if (migrated) {
+        hilog.info(0x0000, 'testTag', 'App data root migrated to download dir');
+      }
+    }).catch((e: Error) => {
+      hilog.warn(0x0000, 'testTag', 'Auto migrate data root failed: %{public}s', JSON.stringify(e));
+    });
+    // AGC Auth / Cloud Storage 初始化（agconnect-services.json 缺失时静默标记未配置）。
+    HuaweiCloudService.bootstrap(this.context).catch((e: Error) => {
+      hilog.warn(0x0000, 'testTag', 'Huawei cloud bootstrap failed: %{public}s', JSON.stringify(e));
     });
     hilog.info(0x0000, 'testTag', 'StartupTrace onCreate %{public}d', Date.now());
     PersistentStorage.persistProp('appThemeMode', 'system');

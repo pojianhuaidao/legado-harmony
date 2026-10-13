@@ -8,6 +8,8 @@
   "repository": "https://github.com/pojianhuaidao/legado-harmony.git",
   "license": "GPL-3.0",
   "dependencies": {
-    "@devzeng/quickjs": "file:../quickjs"
+    "@devzeng/quickjs": "file:../quickjs",
+    "@hw-agconnect/auth": "^1.0.5",
+    "@hw-agconnect/hmcore": "^1.0.1"
   }
 }

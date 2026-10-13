@@ -3,6 +3,7 @@ import fs from '@ohos.file.fs';
 import fileUri from '@ohos.file.fileuri';
 import http from '@ohos.net.http';
 import { CoverUrlNormalizer } from './CoverUrlNormalizer';
+import { AppDataPaths } from './AppDataPaths';
 
 export class BookCoverCache {
   private static resolvedCoverUris: Map<string, string> = new Map();
@@ -238,7 +239,7 @@ export class BookCoverCache {
   }
 
   private static isAppOwnedPath(context: Context, path: string): boolean {
-    return path.startsWith(`${context.filesDir}/covers/`) || path.startsWith(`${context.cacheDir}/book_covers/`);
+    return path.startsWith(`${AppDataPaths.dir('covers')}/`) || path.startsWith(`${context.cacheDir}/book_covers/`);
   }
 
   private static deletePath(path: string): void {

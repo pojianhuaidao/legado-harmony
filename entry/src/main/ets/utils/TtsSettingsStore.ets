@@ -23,6 +23,8 @@ export class TtsSettings {
   cloudTtsAppId: string = '';
   cloudTtsVoices: string = '[]';
   cloudTtsActiveVoice: string = '';
+  offlineTtsEnabled: boolean = false;
+  offlineTtsEngine: string = 'piper';
 }
 
 export class TtsSettingsStore {
@@ -47,6 +49,8 @@ export class TtsSettingsStore {
   static readonly KEY_CLOUD_TTS_APP_ID: string = 'ttsCloudAppId';
   static readonly KEY_CLOUD_TTS_VOICES: string = 'ttsCloudVoices';
   static readonly KEY_CLOUD_TTS_ACTIVE_VOICE: string = 'ttsCloudActiveVoice';
+  static readonly KEY_OFFLINE_TTS_ENABLED: string = 'ttsOfflineEnabled';
+  static readonly KEY_OFFLINE_TTS_ENGINE: string = 'ttsOfflineEngine';
   private static readonly STORE_NAME: string = 'tts_settings';
   private static cachedSettings: TtsSettings | null = null;
 
@@ -98,6 +102,10 @@ export class TtsSettingsStore {
       store, TtsSettingsStore.KEY_CLOUD_TTS_VOICES, storageSettings.cloudTtsVoices);
     settings.cloudTtsActiveVoice = await TtsSettingsStore.getString(
       store, TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE, storageSettings.cloudTtsActiveVoice);
+    settings.offlineTtsEnabled = await TtsSettingsStore.getBoolean(
+      store, TtsSettingsStore.KEY_OFFLINE_TTS_ENABLED, storageSettings.offlineTtsEnabled);
+    settings.offlineTtsEngine = await TtsSettingsStore.getString(
+      store, TtsSettingsStore.KEY_OFFLINE_TTS_ENGINE, storageSettings.offlineTtsEngine);
     TtsSettingsStore.cachedSettings = TtsSettingsStore.clone(settings);
     return settings;
   }
@@ -128,6 +136,8 @@ export class TtsSettingsStore {
     await store.put(TtsSettingsStore.KEY_CLOUD_TTS_APP_ID, normalized.cloudTtsAppId);
     await store.put(TtsSettingsStore.KEY_CLOUD_TTS_VOICES, normalized.cloudTtsVoices);
     await store.put(TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE, normalized.cloudTtsActiveVoice);
+    await store.put(TtsSettingsStore.KEY_OFFLINE_TTS_ENABLED, normalized.offlineTtsEnabled);
+    await store.put(TtsSettingsStore.KEY_OFFLINE_TTS_ENGINE, normalized.offlineTtsEngine);
     await store.flush();
   }
 
@@ -155,6 +165,8 @@ export class TtsSettingsStore {
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_APP_ID, normalized.cloudTtsAppId);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_VOICES, normalized.cloudTtsVoices);
     AppStorage.setOrCreate(TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE, normalized.cloudTtsActiveVoice);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_OFFLINE_TTS_ENABLED, normalized.offlineTtsEnabled);
+    AppStorage.setOrCreate(TtsSettingsStore.KEY_OFFLINE_TTS_ENGINE, normalized.offlineTtsEngine);
   }
 
   static fromStorage(): TtsSettings {
@@ -180,6 +192,8 @@ export class TtsSettingsStore {
     settings.cloudTtsAppId = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_APP_ID) || '';
     settings.cloudTtsVoices = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_VOICES) || '[]';
     settings.cloudTtsActiveVoice = AppStorage.get<string>(TtsSettingsStore.KEY_CLOUD_TTS_ACTIVE_VOICE) || '';
+    settings.offlineTtsEnabled = AppStorage.get<boolean>(TtsSettingsStore.KEY_OFFLINE_TTS_ENABLED) ?? false;
+    settings.offlineTtsEngine = AppStorage.get<string>(TtsSettingsStore.KEY_OFFLINE_TTS_ENGINE) || 'piper';
     return TtsSettingsStore.clone(settings);
   }
 
@@ -282,6 +296,9 @@ export class TtsSettingsStore {
     settings.cloudTtsAppId = source.cloudTtsAppId || '';
     settings.cloudTtsVoices = source.cloudTtsVoices || '[]';
     settings.cloudTtsActiveVoice = source.cloudTtsActiveVoice || '';
+    settings.offlineTtsEnabled = source.offlineTtsEnabled === true;
+    settings.offlineTtsEngine = source.offlineTtsEngine === 'kokoro' ? 'kokoro'
+      : (source.offlineTtsEngine === 'sherpa-vits' ? 'sherpa-vits' : 'piper');
     return settings;
   }
 }

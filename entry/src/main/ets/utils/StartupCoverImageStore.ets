@@ -2,6 +2,7 @@ import { Context } from '@kit.AbilityKit';
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
 import fileUri from '@ohos.file.fileuri';
+import { AppDataPaths } from './AppDataPaths';
 
 export class StartupCoverImageStore {
   static async pickAndSave(context: Context, schemeId: string, darkMode: boolean): Promise<string> {
@@ -11,7 +12,7 @@ export class StartupCoverImageStore {
     const result = await new picker.PhotoViewPicker(context).select(options);
     if (!result || result.photoUris.length === 0) return '';
     const source = result.photoUris[0];
-    const dir = `${context.filesDir}/theme_startups`;
+    const dir = AppDataPaths.dir('theme_startups');
     try {
       await fs.mkdir(dir, true);
     } catch (_) {
@@ -28,7 +29,7 @@ export class StartupCoverImageStore {
     if (!uri) return;
     try {
       const path = uri.startsWith('file://') ? decodeURIComponent(uri.substring(7)) : uri;
-      if (path.startsWith(`${context.filesDir}/theme_startups/`) && fs.accessSync(path)) {
+      if (path.startsWith(`${AppDataPaths.dir('theme_startups')}/`) && fs.accessSync(path)) {
         fs.unlinkSync(path);
       }
     } catch (e) {

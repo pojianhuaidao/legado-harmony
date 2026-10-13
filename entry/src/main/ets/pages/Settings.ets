@@ -10,10 +10,12 @@ import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { AdaptiveSwitch } from '../components/AdaptiveSwitch';
 import { ReaderFontHelper, ReaderFontItem } from '../utils/ReaderFontHelper';
 import { ReaderSystemFontHelper } from '../utils/ReaderSystemFontHelper';
+import { AppDataPaths } from '../utils/AppDataPaths';
 import { AdaptiveColorPicker } from '../components/AdaptiveColorPicker';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { EyeTurnController } from '../core/reader/EyeTurnController';
 import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
+import { HuaweiCloudService } from '../utils/HuaweiCloudService';
 import fs from '@ohos.file.fs';
 class ReaderCustomFontItem {
   familyName: string = '';
@@ -90,6 +92,9 @@ struct SettingsPage {
   @StorageLink('readerQuickBookmarkEnabled') readerQuickBookmarkEnabled: boolean = true;
   @StorageLink('appLightAccentColor') appLightAccentColor: string = '#007DFF';
   @StorageLink('appDarkAccentColor') appDarkAccentColor: string = '#4E9BFF';
+  @StorageLink('huaweiCloudUid') huaweiCloudUid: string = '';
+  @StorageLink('huaweiCloudName') huaweiCloudName: string = '';
+  @StorageLink('huaweiCloudConfigured') huaweiCloudConfigured: boolean = false;
   @StorageLink('appLightButtonColor') appLightButtonColor: string = '#007DFF';
   @StorageLink('appDarkButtonColor') appDarkButtonColor: string = '#3F8CFF';
   @State customFonts: ReaderCustomFontItem[] = [];
@@ -143,6 +148,8 @@ struct SettingsPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column() {
+          this.huaweiAccountEntry()
+
           this.sectionTitle('App 配色')
           Column() {
             this.appThemeOptions()
@@ -411,7 +418,7 @@ struct SettingsPage {
   }
 
   async scanCustomFontDir(): Promise<void> {
-    const dir = `${getContext(this).filesDir}/reader_fonts`;
+    const dir = AppDataPaths.dir('reader_fonts');
     let names: string[] = [];
     try {
       names = await fs.listFile(dir);
@@ -1852,6 +1859,53 @@ struct SettingsPage {
       .fontColor(this.subTextColor())
       .width('100%')
       .padding({ left: 16, right: 16, top: 20, bottom: 8 })
+  }
+
+  @Builder
+  huaweiAccountEntry() {
+    Row() {
+      Text('华')
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .width(44)
+        .height(44)
+        .borderRadius(22)
+        .textAlign(TextAlign.Center)
+        .backgroundColor(this.huaweiCloudUid.length > 0 ? '#C7000B' : '#5A6472')
+      Column() {
+        Text(this.huaweiCloudUid.length > 0 ?
+          (this.huaweiCloudName || '华为账号') : (this.huaweiCloudConfigured ? '登录华为账号' : '华为云端备份'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.primaryTextColor())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.huaweiCloudUid.length > 0 ?
+          '点击管理云端备份与恢复' : (this.huaweiCloudConfigured ? '登录后可将书架、书源、进度与设置备份到华为云端' : '需要配置 AGC 后才能启用华为云端备份'))
+          .fontSize(12)
+          .fontColor(this.subTextColor())
+          .margin({ top: 4 })
+          .maxLines(2)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 12 })
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(18)
+        .fontColor([this.subTextColor()])
+    }
+    .width('calc(100% - 24vp)')
+    .height(76)
+    .margin({ left: 12, right: 12 })
+    .padding({ left: 16, right: 16 })
+    .borderRadius(16)
+    .backgroundColor(this.cardColor())
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      router.pushUrl({ url: 'pages/BackupOptions' });
+    })
   }
 
   @Builder

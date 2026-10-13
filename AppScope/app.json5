@@ -6,8 +6,8 @@
   "app": {
     "bundleName": "reading.hm.o",
     "vendor": "legado",
-    "versionCode": 1101201,
-    "versionName": "1.1012.01",
+    "versionCode": 1101202,
+    "versionName": "1.1012.02",
     "bundleType": "app",
     "debug": false,
     "icon": "$media:layered_image",

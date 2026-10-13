@@ -90,6 +90,8 @@ struct Index {
   @State bookshelfMultiSelectActive: boolean = false;
   @State bookshelfActiveGroupId: number = 0;
   @State tabBarCollapsed: boolean = false;
+  // 二开改造：展开保底 1s（展开后至少保持 1s 才允许收起）
+  private lastTabBarExpandTime: number = 0;
   @StorageLink('themeRevision') @Watch('onThemeRevisionChanged') themeRevision: number = 0;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navBarHeight') navBarHeight: number = 0;
@@ -589,7 +591,12 @@ struct Index {
   }
 
   immersiveTabsBarBackgroundColor(): ResourceColor {
-    return Color.Transparent;
+    // 二开改造：展开态底色改为半透明毛玻璃（收起后不再呈现纯色背景）
+    return this.tabBarFloatingColor();
+  }
+
+  tabBarFloatingColor(): ResourceColor {
+    return this.appDarkMode ? '#66000000' : '#66FFFFFF';
   }
 
   @Builder
@@ -739,7 +746,8 @@ struct Index {
     }
     .barMode(BarMode.Fixed)
     .barHeight(this.tabBarCollapsedBarHeight())
-    .barBackgroundColor(ThemeRuntime.cardColor(this.appDarkMode))
+    // 二开改造：兼容分支底色也改为半透明毛玻璃色，收起后无纯色背景
+    .barBackgroundColor(this.tabBarFloatingColor())
     .scrollable(false)
     .onChange((index: number) => {
       this.currentIndex = index;
@@ -844,10 +852,19 @@ struct Index {
   }
 
   collapseTabBar(): void {
+    // 二开改造：展开后至少保持 1s 才允许收起
+    const elapsed = Date.now() - this.lastTabBarExpandTime;
+    if (elapsed < 1000) {
+      setTimeout(() => {
+        this.collapseTabBar();
+      }, 1000 - elapsed);
+      return;
+    }
     this.tabBarCollapsed = true;
   }
 
   expandTabBar(): void {
+    this.lastTabBarExpandTime = Date.now();
     this.tabBarCollapsed = false;
   }
 

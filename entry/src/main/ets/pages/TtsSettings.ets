@@ -13,7 +13,7 @@ import { CloudTtsVoiceProvider, CloudTtsVoiceData, CloudTtsPresetVoice } from '.
 import { CloudTtsDriver } from '../utils/CloudTtsDriver';
 
 /** 角色音色映射条目（与 ReadBook.ets 内定义一致）：p 为系统 TTS 音色 person id，n 为音色显示名。
- * cloud 为云端音色 key（provider:voice，如 edge:zh-CN-XiaoxiaoNeural），存在时表示该角色使用云端在线音色。 */
+ * cloud 为云端音色 key（provider:voice，如 volcano:zh_female_wanwanx_moon_bigtts），存在时表示该角色使用云端在线音色。 */
 interface RoleTtsVoiceEntry {
   p: number;
   n: string;
@@ -604,10 +604,6 @@ struct TtsSettingsPage {
               this.systemVoiceDropdownOption(voice)
             }, (voice: TtsVoiceOption) => this.voiceKey(voice))
 
-            this.voiceDropdownSectionTitle('在线音色（微软·轻悦同款）')
-            ForEach(this.edgeVoiceEntries(), (entry: CloudVoiceEntry) => {
-              this.edgeVoiceDropdownOption(entry)
-            }, (entry: CloudVoiceEntry) => entry.key)
           }
           .width('100%')
         }
@@ -675,59 +671,6 @@ struct TtsSettingsPage {
       }
       this.showVoiceDropdown = false;
       this.selectVoice(voice);
-    })
-  }
-
-  /** 微软在线音色条目：优先取已同步的 edge 音色，未同步时回退厂商预设。 */
-  edgeVoiceEntries(): CloudVoiceEntry[] {
-    const existing = this.parsedCloudVoices().filter((entry: CloudVoiceEntry) => entry.provider === 'edge');
-    if (existing.length > 0) {
-      return existing;
-    }
-    const info = CloudTtsVoiceProvider.providerInfo('edge');
-    return info.voices.map((preset: CloudTtsPresetVoice): CloudVoiceEntry => {
-      const key = `edge:${preset.voice}`;
-      return {
-        key: key,
-        provider: 'edge',
-        label: info.label,
-        baseUrl: info.baseUrl,
-        model: info.ttsModel,
-        voice: preset.voice,
-        name: preset.name,
-        gender: preset.gender,
-        language: preset.language
-      };
-    });
-  }
-
-  @Builder
-  edgeVoiceDropdownOption(entry: CloudVoiceEntry) {
-    Row() {
-      Text(entry.name)
-        .fontSize(15)
-        .fontColor(this.primaryTextColor())
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(`${entry.gender} · ${entry.voice}`)
-        .fontSize(12)
-        .fontColor(this.subTextColor())
-        .margin({ right: 10 })
-      if (this.ttsCloudActiveVoice === entry.key) {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(18)
-          .fontColor([this.accentColor()])
-      }
-    }
-    .width('100%')
-    .height(46)
-    .padding({ left: 14, right: 14 })
-    .onClick(() => {
-      this.showVoiceDropdown = false;
-      this.ttsCloudActiveVoice = entry.key;
-      this.saveSettings();
-      promptAction.showToast({ message: '已选择轻悦同款在线音色，无需配置，朗读时自动联网合成' });
     })
   }
 
@@ -872,12 +815,9 @@ struct TtsSettingsPage {
     this.saveSettings();
   }
 
-  /** 导入按钮可用性：edge 免 Key 始终可导入；volcano 需 App ID + Access Token；其余需 API Key。 */
+  /** 导入按钮可用性：volcano 需 App ID + Access Token；其余需 API Key。 */
   canImportCloudVoices(): boolean {
     const provider = this.ttsCloudProvider || 'aliyun';
-    if (provider === 'edge') {
-      return !this.cloudImporting;
-    }
     const apiKeyReady = (this.ttsCloudApiKey || '').trim().length > 0;
     if (provider === 'volcano') {
       return apiKeyReady && (this.ttsCloudAppId || '').trim().length > 0;
@@ -889,7 +829,7 @@ struct TtsSettingsPage {
     const provider = this.ttsCloudProvider || 'aliyun';
     const apiKey = (this.ttsCloudApiKey || '').trim();
     const appId = (this.ttsCloudAppId || '').trim();
-    if (provider !== 'edge' && !apiKey) {
+    if (!apiKey) {
       this.cloudImportError = '请先输入 API Key';
       return;
     }
@@ -951,13 +891,11 @@ struct TtsSettingsPage {
       this.previewReader.stop();
     }
     this.cloudDriver.stop();
-    if (entry.provider !== 'edge') {
-      const apiKey = (this.ttsCloudApiKey || '').trim();
-      if (!apiKey) {
-        this.isPreviewing = false;
-        this.cloudImportError = '请先输入 API Key 再试听';
-        return;
-      }
+    const apiKey = (this.ttsCloudApiKey || '').trim();
+    if (!apiKey) {
+      this.isPreviewing = false;
+      this.cloudImportError = '请先输入 API Key 再试听';
+      return;
     }
     this.isPreviewing = true;
     this.cloudImportError = '';
@@ -966,7 +904,7 @@ struct TtsSettingsPage {
       provider: entry.provider,
       baseUrl: entry.baseUrl || this.ttsCloudBaseUrl,
       model: entry.model || this.ttsCloudModel,
-      apiKey: entry.provider === 'edge' ? '' : (this.ttsCloudApiKey || '').trim(),
+      apiKey: (this.ttsCloudApiKey || '').trim(),
       appId: (this.ttsCloudAppId || '').trim(),
       voice: entry.voice,
       speed: this.ttsSpeed,
@@ -1093,41 +1031,6 @@ struct TtsSettingsPage {
           this.saveSettings();
         }
       }
-    }
-    this.ensureEdgeCloudVoices();
-  }
-
-  /** 微软在线（轻悦同款）免 Key 音色始终存在于列表中，无需配置即可朗读。 */
-  ensureEdgeCloudVoices(): void {
-    const edgeInfo = CloudTtsVoiceProvider.providerInfo('edge');
-    if (!edgeInfo.voices || edgeInfo.voices.length === 0) {
-      return;
-    }
-    const map: Record<string, CloudVoiceEntry> = {};
-    for (const entry of this.parsedCloudVoices()) {
-      map[entry.key] = entry;
-    }
-    let changed = false;
-    for (const preset of edgeInfo.voices) {
-      const key = `edge:${preset.voice}`;
-      if (!map[key]) {
-        map[key] = {
-          key: key,
-          provider: 'edge',
-          label: edgeInfo.label,
-          baseUrl: edgeInfo.baseUrl,
-          model: edgeInfo.ttsModel,
-          voice: preset.voice,
-          name: preset.name,
-          gender: preset.gender,
-          language: preset.language
-        };
-        changed = true;
-      }
-    }
-    if (changed) {
-      this.ttsCloudVoices = JSON.stringify(Object.values(map));
-      this.saveSettings();
     }
   }
 
@@ -1752,7 +1655,15 @@ struct TtsSettingsPage {
   }
 
   roleMapRoleNames(): string[] {
-    return Object.keys(this.parseRoleVoiceMap());
+    // 旁白为默认角色：无论用户是否手动添加，都默认列出在首位，只需为其指定音色。
+    const names: string[] = [];
+    for (const key of Object.keys(this.parseRoleVoiceMap())) {
+      if (key !== '旁白') {
+        names.push(key);
+      }
+    }
+    names.unshift('旁白');
+    return names;
   }
 
   roleVoiceTitle(entry: RoleTtsVoiceEntry | undefined): string {
@@ -1842,20 +1753,30 @@ struct TtsSettingsPage {
 
   @Builder
   roleMapSheetBuilder() {
+    // 独立角色映射窗口：全屏弹窗，可随时从朗读设置进入修改角色与音色映射。
     Stack({ alignContent: Alignment.TopStart }) {
       Column()
         .width('100%')
         .height('100%')
+        .backgroundColor(this.appDarkMode ? '#99000000' : '#66000000')
         .onClick(() => {
           this.closeRoleMapSheet();
         })
 
       Column() {
         Row() {
+          Text('关闭')
+            .fontSize(14)
+            .fontColor(this.subTextColor())
+            .onClick(() => {
+              this.closeRoleMapSheet();
+            })
           Text('角色音色映射')
             .fontSize(16)
             .fontColor(this.primaryTextColor())
             .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+            .margin({ left: 8, right: 8 })
           Text('完成')
             .fontSize(14)
             .fontColor(this.accentColor())
@@ -1864,75 +1785,91 @@ struct TtsSettingsPage {
             })
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 14, bottom: 8 })
+        .height(48)
+        .padding({ left: 16, right: 16 })
+        .backgroundColor(this.cardColor())
 
-        Row({ space: 8 }) {
-          TextInput({ placeholder: '新增角色名，如：旁白、小明', text: this.newRoleName })
-            .layoutWeight(1)
-            .height(36)
-            .fontSize(14)
-            .fontColor(this.primaryTextColor())
-            .backgroundColor(this.inputColor())
-            .borderRadius(8)
-            .onChange((value: string) => {
-              this.newRoleName = value;
-            })
-          Button('添加')
-            .height(36)
-            .fontSize(14)
-            .backgroundColor(this.accentColor())
-            .fontColor('#FFFFFF')
-            .onClick(() => {
-              this.addRoleToMap();
-            })
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 2, bottom: 6 })
-
-        if (this.roleMapRoleNames().length === 0) {
-          Text('暂无角色。可先朗读一次自动生成，或在上方输入角色名添加（含旁白）并指定音色')
-            .fontSize(13)
-            .fontColor(this.subTextColor())
-            .padding({ left: 16, right: 16, bottom: 16 })
-        } else {
-          ForEach(this.roleMapRoleNames(), (name: string) => {
-            Row() {
-              Text(name)
-                .fontSize(15)
-                .fontColor(this.primaryTextColor())
+        Scroll() {
+          Column() {
+            Row({ space: 8 }) {
+              TextInput({ placeholder: '新增角色名，如：小明、旁白', text: this.newRoleName })
                 .layoutWeight(1)
-              Text(this.roleVoiceTitle(this.parseRoleVoiceMap()[name]) +
-                (this.roleVoiceUsable(this.parseRoleVoiceMap()[name]) ? '' : '（需重新选择）'))
-                .fontSize(13)
-                .fontColor(this.subTextColor())
-              Text('删除')
-                .fontSize(12)
-                .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
-                .margin({ left: 10, right: 2 })
-                .onClick(() => {
-                  this.removeRoleFromMap(name);
+                .height(36)
+                .fontSize(14)
+                .fontColor(this.primaryTextColor())
+                .backgroundColor(this.inputColor())
+                .borderRadius(8)
+                .onChange((value: string) => {
+                  this.newRoleName = value;
                 })
-              SymbolGlyph($r('sys.symbol.chevron_right'))
-                .fontSize(13)
-                .fontColor([this.subTextColor()])
-                .width(13)
+              Button('添加')
+                .height(36)
+                .fontSize(14)
+                .backgroundColor(this.accentColor())
+                .fontColor('#FFFFFF')
+                .onClick(() => {
+                  this.addRoleToMap();
+                })
             }
             .width('100%')
-            .height(44)
-            .padding({ left: 16, right: 16 })
-            .onClick(() => {
-              this.rolePickTarget = name;
-            })
-          }, (name: string) => name)
+            .padding({ left: 16, right: 16, top: 12, bottom: 6 })
+
+            Text('旁白为默认角色，已直接列出，只需为其指定音色；其余角色可自动生成或手动添加。')
+              .fontSize(12)
+              .fontColor(this.subTextColor())
+              .width('100%')
+              .padding({ left: 16, right: 16, bottom: 6 })
+
+            ForEach(this.roleMapRoleNames(), (name: string) => {
+              Row() {
+                Text(name)
+                  .fontSize(15)
+                  .fontColor(this.primaryTextColor())
+                  .layoutWeight(1)
+                if (name === '旁白') {
+                  Text('默认')
+                    .fontSize(10)
+                    .fontColor(this.subTextColor())
+                    .backgroundColor(this.appDarkMode ? '#3A3A3C' : '#F0F0F3')
+                    .borderRadius(4)
+                    .padding({ left: 4, right: 4, top: 1, bottom: 1 })
+                    .margin({ right: 6 })
+                }
+                Text(this.roleVoiceTitle(this.parseRoleVoiceMap()[name]) +
+                  (this.roleVoiceUsable(this.parseRoleVoiceMap()[name]) ? '' : '（需重新选择）'))
+                  .fontSize(13)
+                  .fontColor(this.subTextColor())
+                if (name !== '旁白') {
+                  Text('删除')
+                    .fontSize(12)
+                    .fontColor(ThemeRuntime.dangerColor(this.appDarkMode))
+                    .margin({ left: 10, right: 2 })
+                    .onClick(() => {
+                      this.removeRoleFromMap(name);
+                    })
+                }
+                SymbolGlyph($r('sys.symbol.chevron_right'))
+                  .fontSize(13)
+                  .fontColor([this.subTextColor()])
+                  .width(13)
+              }
+              .width('100%')
+              .height(48)
+              .padding({ left: 16, right: 16 })
+              .onClick(() => {
+                this.rolePickTarget = name;
+              })
+            }, (name: string) => name)
+          }
+          .width('100%')
         }
+        .width('100%')
+        .layoutWeight(1)
+        .backgroundColor(this.cardColor())
       }
-      .width('calc(100% - 24vp)')
-      .constraintSize({ maxWidth: 560 })
-      .padding({ top: 6, bottom: 12 })
-      .backgroundColor(this.cardColor())
-      .borderRadius(16)
-      .border({ width: 1, color: this.appDarkMode ? '#3A3A3C' : '#E5E5EA' })
-      .position({ x: 12, y: this.statusBarHeight + 120 })
+      .width('100%')
+      .height('100%')
+      .align(Alignment.TopStart)
     }
     .width('100%')
     .height('100%')

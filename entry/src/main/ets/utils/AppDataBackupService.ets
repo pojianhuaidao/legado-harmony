@@ -6,6 +6,7 @@ import preferences from '@ohos.data.preferences';
 import { Context } from '@kit.AbilityKit';
 import { statfs } from '@kit.CoreFileKit';
 import { AppDatabase } from '../model/data/AppDatabase';
+import { AppDataPaths } from './AppDataPaths';
 import {
   Book,
   BookGroup,
@@ -196,7 +197,7 @@ export class AppDataBackupService {
     const archivePath = `${root}/legado_backup.zip`;
     const manifest = new AppDataBackupManifest();
     manifest.createdAt = Date.now();
-    manifest.sourceFilesDir = context.filesDir;
+    manifest.sourceFilesDir = AppDataPaths.contentRoot();
     let archiveReady = false;
     try {
 
@@ -279,7 +280,7 @@ export class AppDataBackupService {
       const assetsRoot = `${payloadRoot}/assets`;
       for (let index = 0; index < AppDataBackupService.ASSET_DIRS.length; index++) {
         const dirName = AppDataBackupService.ASSET_DIRS[index];
-        const source = `${context.filesDir}/${dirName}`;
+        const source = `${AppDataPaths.contentRoot()}/${dirName}`;
         if (AppDataBackupService.exists(source)) {
           await AppDataBackupService.copyDirectory(source, `${assetsRoot}/${dirName}`);
         }
@@ -498,7 +499,7 @@ export class AppDataBackupService {
 
     if (selection.bookshelf && AppDataBackupService.hasCategory(manifest, AppDataBackupService.CATEGORY_BOOKSHELF)) {
       for (const raw of manifest.books || []) {
-        const book = AppDataBackupService.hydrateBook(raw, manifest.sourceFilesDir, context.filesDir);
+        const book = AppDataBackupService.hydrateBook(raw, manifest.sourceFilesDir, AppDataPaths.contentRoot());
         await AppDataBackupService.restoreBookWithoutUnexpectedProgress(db, book, selection.progress);
         result.books++;
       }
@@ -508,13 +509,13 @@ export class AppDataBackupService {
     }
 
     if (selection.localBooks && AppDataBackupService.hasCategory(manifest, AppDataBackupService.CATEGORY_LOCAL_BOOKS)) {
-      const targetRoot = `${context.filesDir}/local_books`;
+      const targetRoot = `${AppDataPaths.contentRoot()}/local_books`;
       await AppDataBackupService.ensureDir(targetRoot);
       for (const raw of manifest.localBooks || []) {
         const archiveName = (manifest.localFiles || {})[raw.bookUrl] || '';
         const archivePath = archiveName ? `${session.rootPath}/local_books/${archiveName}` : '';
         if (!archivePath || !AppDataBackupService.exists(archivePath)) continue;
-        const book = AppDataBackupService.hydrateBook(raw, manifest.sourceFilesDir, context.filesDir);
+        const book = AppDataBackupService.hydrateBook(raw, manifest.sourceFilesDir, AppDataPaths.contentRoot());
         const id = book.bookUrl.startsWith('local://') ? book.bookUrl.substring('local://'.length) :
           `${Math.abs(AppDataBackupService.hashText(book.bookUrl))}`;
         const format = book.getVariable('localFormat') || (book.type === LocalBookService.TYPE_EPUB ? 'epub' : 'txt');
@@ -557,7 +558,7 @@ export class AppDataBackupService {
       for (const dirName of AppDataBackupService.ASSET_DIRS) {
         const source = `${assetsRoot}/${dirName}`;
         if (AppDataBackupService.exists(source)) {
-          await AppDataBackupService.copyDirectory(source, `${context.filesDir}/${dirName}`);
+          await AppDataBackupService.copyDirectory(source, `${AppDataPaths.contentRoot()}/${dirName}`);
         }
       }
       const stores = manifest.preferenceStores || {};
@@ -1360,7 +1361,7 @@ export class AppDataBackupService {
     if (storeName === AppDataBackupService.READER_SETTINGS_STORE) {
       localValues = await store.getAll() as Record<string, preferences.ValueType>;
     }
-    const values = JSON.parse(AppDataBackupService.replaceRoot(raw || '{}', oldRoot, context.filesDir)) as
+    const values = JSON.parse(AppDataBackupService.replaceRoot(raw || '{}', oldRoot, AppDataPaths.contentRoot())) as
       Record<string, preferences.ValueType>;
     if (storeName === AppDataBackupService.READER_SETTINGS_STORE) {
       AppDataBackupService.preserveLocalGlobalFontSettings(values, localValues);
@@ -1480,7 +1481,7 @@ export class AppDataBackupService {
     }
     if (selection.settings) {
       for (const dirName of AppDataBackupService.ASSET_DIRS) {
-        const path = `${context.filesDir}/${dirName}`;
+        const path = `${AppDataPaths.contentRoot()}/${dirName}`;
         if (AppDataBackupService.exists(path)) sourceBytes += await AppDataBackupService.pathSize(path);
       }
     }
@@ -1530,7 +1531,7 @@ export class AppDataBackupService {
     }
   }
 
-  private static async copyFile(source: string, target: string): Promise<void> {
+  static async copyFile(source: string, target: string): Promise<void> {
     await AppDataBackupService.ensureDir(AppDataBackupService.parentPath(target));
     let sourceFile: fs.File | null = null;
     let targetFile: fs.File | null = null;
@@ -1564,7 +1565,7 @@ export class AppDataBackupService {
     try { await fs.rmdir(path); } catch (_) {}
   }
 
-  private static async removeFile(path: string): Promise<void> {
+  static async removeFile(path: string): Promise<void> {
     try {
       if (AppDataBackupService.exists(path)) await fs.unlink(path);
     } catch (_) {}

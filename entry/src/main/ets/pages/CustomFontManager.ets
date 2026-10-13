@@ -3,6 +3,7 @@ import { syncSystemBars } from '../utils/SystemBars';
 import { ReaderSettingsStore } from '../utils/ReaderSettingsStore';
 import { ReaderFontHelper, ReaderFontItem } from '../utils/ReaderFontHelper';
 import { ReaderSystemFontHelper } from '../utils/ReaderSystemFontHelper';
+import { AppDataPaths } from '../utils/AppDataPaths';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
@@ -144,7 +145,7 @@ struct CustomFontManagerPage {
   }
 
   async scanCustomFontDir(): Promise<void> {
-    const dir = `${getContext(this).filesDir}/reader_fonts`;
+    const dir = AppDataPaths.dir('reader_fonts');
     let names: string[] = [];
     try {
       names = await fs.listFile(dir);
@@ -212,7 +213,7 @@ struct CustomFontManagerPage {
       }
       const sourceUri = result[0];
       const context = getContext(this);
-      const dir = `${context.filesDir}/reader_fonts`;
+      const dir = AppDataPaths.dir('reader_fonts');
       await this.ensureDir(dir);
       const sourceName = await this.resolvePickedFontName(sourceUri);
       const destName = await this.uniqueFontFileName(dir, this.asciiStoredFontName(sourceName, Date.now()));

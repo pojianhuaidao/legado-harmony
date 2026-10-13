@@ -18,6 +18,7 @@
     "pages/SearchExploreSettings",
     "pages/ExploreSourceSort",
     "pages/OtherSettings",
+    "pages/BackupOptions",
     "pages/QuickJsDiagnostics",
     "pages/QuickJsRegression",
     "pages/DataBackup",

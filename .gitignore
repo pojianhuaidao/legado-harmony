@@ -69,3 +69,12 @@ Thumbs.db
 !/.github/
 !/.github/**
 /_bridge_test/
+
+# 构建日志与临时文件
+build_app_log.txt
+build_log.txt
+tasks_log.txt
+temp_hvigor_out.txt
+
+# AGC 凭据（含 client_secret/api_key，禁止入库）
+entry/src/main/resources/rawfile/agconnect-services.json
