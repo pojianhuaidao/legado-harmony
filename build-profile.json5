@@ -80,7 +80,12 @@
     "capabilities": [
       {
         "bundleName": "io.legado.read",
-        "config": []
+        "config": [
+          {
+            "name": "ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY",
+            "capability": "ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY"
+          }
+        ]
       }
     ]
   },

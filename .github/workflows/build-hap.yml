@@ -2,6 +2,11 @@ name: Build APP and Release (signed + unsigned)
 
 on:
   workflow_dispatch:
+    inputs:
+      force_version:
+        description: '强制使用指定版本号（如 1.1013.01），留空则按日期自动生成'
+        required: false
+        type: string
   push:
     branches: [ main ]
     paths-ignore:
@@ -69,53 +74,65 @@ jobs:
           ohpm config set registry https://ohpm.openharmony.cn/ohpm/
           ohpm install --all
 
-      - name: Set dynamic version by date
+      - name: Set dynamic version by date (or forced input)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_VERSION: ${{ inputs.force_version }}
         run: |
           # 版本号规则 1.MMDD.NN：MMDD 取构建日期（如 2026-10-09 -> 1.1009.xx）；NN 为当日构建序号，同日依次 .01/.02/.03，跨日重置 .01。
           # 序号依据仓库已发布 release 资产中当日同名 APP（signed/unsigned）的最大序号 +1 得出（查询 GitHub API releases）。
           # versionCode = "1"+MMDD+NN 视作十进制（1.1009.01 -> 1100901，同日随 NN 递增，跨日随 MMDD 递增）。
+          # 手动触发时可传 force_version（如 1.1013.01）强制使用该版本号，跳过自动递增（版本号规则不变：1.MMDD.NN）。
           python3 - <<'EOF'
           import datetime, re, json, os, urllib.request, urllib.error
 
-          d = datetime.datetime.now()
-          mmdd = d.strftime('%m%d')
-          token = os.environ.get('GH_TOKEN', '')
-          repo = os.environ.get('GITHUB_REPOSITORY', '')
-
-          max_nn = 0
-          if repo and token:
-              page = 1
-              while True:
-                  url = 'https://api.github.com/repos/%s/releases?per_page=100&page=%d' % (repo, page)
-                  req = urllib.request.Request(url, headers={
-                      'Authorization': 'token ' + token,
-                      'User-Agent': 'legado3-harmony-ci',
-                      'Accept': 'application/vnd.github+json',
-                  })
-                  try:
-                      with urllib.request.urlopen(req, timeout=30) as resp:
-                          rels = json.load(resp)
-                  except urllib.error.HTTPError as e:
-                      print('release query failed status=%s, fallback nn=01' % e.code)
-                      break
-                  if not rels:
-                      break
-                  pat = re.compile(r'^reading\.hm\.o_1\.%s\.(\d{2})_(signed|unsigned)\.app\.zip$' % mmdd)
-                  for rel in rels:
-                      for a in rel.get('assets', []):
-                          m = pat.match(a.get('name', ''))
-                          if m:
-                              max_nn = max(max_nn, int(m.group(1)))
-                  if len(rels) < 100:
-                      break
-                  page += 1
-
-          nn = max_nn + 1
-          ver = "1." + mmdd + ".%02d" % nn
-          code = int("1" + mmdd + "%02d" % nn)
+          force = os.environ.get('FORCE_VERSION', '').strip()
           p = 'AppScope/app.json5'
+
+          if force:
+              m = re.match(r'^1\.(\d{4})\.(\d{2})$', force)
+              if not m:
+                  raise SystemExit('invalid force_version: ' + force)
+              ver = force
+              code = int('1' + m.group(1) + m.group(2))
+          else:
+              d = datetime.datetime.now()
+              mmdd = d.strftime('%m%d')
+              token = os.environ.get('GH_TOKEN', '')
+              repo = os.environ.get('GITHUB_REPOSITORY', '')
+
+              max_nn = 0
+              if repo and token:
+                  page = 1
+                  while True:
+                      url = 'https://api.github.com/repos/%s/releases?per_page=100&page=%d' % (repo, page)
+                      req = urllib.request.Request(url, headers={
+                          'Authorization': 'token ' + token,
+                          'User-Agent': 'legado3-harmony-ci',
+                          'Accept': 'application/vnd.github+json',
+                      })
+                      try:
+                          with urllib.request.urlopen(req, timeout=30) as resp:
+                              rels = json.load(resp)
+                      except urllib.error.HTTPError as e:
+                          print('release query failed status=%s, fallback nn=01' % e.code)
+                          break
+                      if not rels:
+                          break
+                      pat = re.compile(r'^reading\.hm\.o_1\.%s\.(\d{2})_(signed|unsigned)\.app\.zip$' % mmdd)
+                      for rel in rels:
+                          for a in rel.get('assets', []):
+                              m = pat.match(a.get('name', ''))
+                              if m:
+                                  max_nn = max(max_nn, int(m.group(1)))
+                      if len(rels) < 100:
+                          break
+                      page += 1
+
+              nn = max_nn + 1
+              ver = "1." + mmdd + ".%02d" % nn
+              code = int("1" + mmdd + "%02d" % nn)
+
           s = open(p, encoding='utf-8').read()
           s = re.sub(r'"versionCode"\s*:\s*\d+', '"versionCode": %d' % code, s)
           s = re.sub(r'"versionName"\s*:\s*"[^"]+"', '"versionName": "%s"' % ver, s)
