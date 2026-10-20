@@ -1,18 +1,19 @@
 // 版本号规则（CI 构建时按日期动态生成，见 .github/workflows/build-hap.yml Set dynamic version）：
 //   versionName = 1.MMDD.NN （MMDD=构建月份日期，NN=当日构建序号，同日依次 .01/.02/.03，跨日重置 .01）
 //   versionCode = MMDDNN 前补一位 1 后整体视作十进制（1.1002.01 -> 1100201，同日随 NN 递增，跨日随 MMDD 递增）
-// 出包文件名统一按包名：reading.hm.o_<versionName>.hap
+// 出包文件名统一按包名：reading.hm.op_<versionName>.hap
 {
   "app": {
-    "bundleName": "reading.hm.o",
+    "bundleName": "reading.hm.op",
     "vendor": "legado",
-    "versionCode": 1101301,
-    "versionName": "1.1013.01",
+    "versionCode": 1102001,
+    "versionName": "1.1020.01",
     "bundleType": "app",
     "debug": false,
     "icon": "$media:layered_image",
     "label": "$string:app_name",
-    "buildVersion": "1101301",
+    "buildVersion": "1102001",
+    "cloudFileSyncEnabled": true,
     "distributedNotificationEnabled": true,
     "keepAlive": false,
     "minAPIVersion": 12,

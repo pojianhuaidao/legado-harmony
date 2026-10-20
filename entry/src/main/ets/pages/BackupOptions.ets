@@ -4,7 +4,6 @@ import { syncSystemBars } from '../utils/SystemBars';
 import { ThemeRuntime } from '../theme/ThemeRuntime';
 import { ImmersiveBackButton } from '../components/ImmersiveBackButton';
 import { ImmersiveMaterialRuntime } from '../utils/ImmersiveMaterialRuntime';
-import { AppDataPaths } from '../utils/AppDataPaths';
 import { CloudBackupItem, HuaweiCloudService } from '../utils/HuaweiCloudService';
 
 @Entry
@@ -23,14 +22,9 @@ struct BackupOptionsPage {
   @State backupsLoaded: boolean = false;
   @State busy: boolean = false;
   @State busyText: string = '';
-  @State contentRoot: string = '';
-  @State downloadMigrated: boolean = false;
-  @State downloadMigrateFailed: boolean = false;
+  @State traceText: string = '';
 
   aboutToAppear(): void {
-    this.contentRoot = AppDataPaths.contentRoot();
-    this.downloadMigrateFailed = AppStorage.get<boolean>(AppDataPaths.MIGRATE_FAILED_KEY) === true;
-    this.refreshMigrateStatus();
     if (this.huaweiCloudConfigured && this.huaweiCloudUid) {
       this.refreshBackups();
     }
@@ -72,7 +66,7 @@ struct BackupOptionsPage {
                 .fontColor(this.primaryTextColor())
                 .placeholderColor(this.subTextColor())
                 .onChange((value: string) => this.backupPasswordDraft = value)
-              Button(this.busy && this.busyText === '备份' ? '正在备份...' : '备份到华为云端')
+              Button(this.busy ? (this.busyText === '备份' || this.busyText === '' ? '正在备份...' : this.busyText) : '备份到华为云端')
                 .width('calc(100% - 32vp)')
                 .margin({ left: 16, right: 16, top: 12, bottom: 14 })
                 .fontSize(15)
@@ -87,12 +81,38 @@ struct BackupOptionsPage {
                 .fontColor(this.primaryTextColor())
                 .placeholderColor(this.subTextColor())
                 .onChange((value: string) => this.restorePasswordDraft = value)
+              Button(this.busy && this.busyText === '恢复' ? '正在恢复...' : '从云端恢复')
+                .width('calc(100% - 32vp)')
+                .margin({ left: 16, right: 16, top: 8, bottom: 14 })
+                .fontSize(15)
+                .fontColor(this.buttonColor())
+                .backgroundColor(Color.Transparent)
+                .border({ width: 1, color: this.buttonColor() })
+                .enabled(!this.busy)
+                .onClick(() => this.startRestore())
               if (this.backupsLoaded) {
                 Text(this.backups.length > 0 ? `云端已有 ${this.backups.length} 份备份` : '云端还没有备份')
                   .fontSize(12)
                   .fontColor(this.subTextColor())
                   .width('calc(100% - 32vp)')
                   .margin({ left: 16, right: 16, bottom: 8 })
+              }
+              Text('查看备份诊断日志')
+                .fontSize(12)
+                .fontColor(this.accentColor())
+                .width('calc(100% - 32vp)')
+                .margin({ left: 16, right: 16, bottom: 8 })
+                .onClick(() => {
+                  this.traceText = HuaweiCloudService.readTrace(getContext(this) as common.UIAbilityContext);
+                })
+              if (this.traceText.length > 0) {
+                Text(this.traceText)
+                  .fontSize(11)
+                  .fontFamily('monospace')
+                  .fontColor(this.subTextColor())
+                  .width('calc(100% - 32vp)')
+                  .margin({ left: 16, right: 16, bottom: 12 })
+                  .maxLines(200)
               }
             }
             .width('calc(100% - 24vp)')
@@ -127,45 +147,6 @@ struct BackupOptionsPage {
             this.menuItem('数据导出', '将书源、书架、进度、本地图书和设置导出为备份', false, () => {
               router.pushUrl({ url: 'pages/DataBackup', params: { mode: 'export' } });
             })
-          }
-          .width('calc(100% - 24vp)')
-          .margin({ left: 12, right: 12 })
-          .borderRadius(16)
-          .clip(true)
-          .backgroundColor(this.cardColor())
-
-          this.sectionTitle('应用数据目录')
-          Column() {
-            Text(this.contentRoot ? this.contentRoot : '正在初始化...')
-              .fontSize(12)
-              .fontColor(this.subTextColor())
-              .width('calc(100% - 32vp)')
-              .margin({ left: 16, right: 16, top: 14 })
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .maxLines(2)
-            Text(this.downloadMigrated ? '已迁移至公共 Download 目录' :
-              this.downloadMigrateFailed ? '自动迁移失败，可尝试手动迁移' : '当前位于应用沙箱，可迁移至公共 Download 目录')
-              .fontSize(13)
-              .fontColor(this.primaryTextColor())
-              .width('calc(100% - 32vp)')
-              .margin({ left: 16, right: 16, top: 6 })
-            Text('迁移内容：本地图书、自定义字体、阅读背景、启动图、封面相册等；数据库与偏好设置因系统限制仍保留在沙箱。')
-              .fontSize(12)
-              .fontColor(this.subTextColor())
-              .width('calc(100% - 32vp)')
-              .margin({ left: 16, right: 16, top: 4 })
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .maxLines(3)
-            if (!this.downloadMigrated) {
-              Button(this.busy ? '迁移中...' : '迁移到 Download 目录')
-                .width('calc(100% - 32vp)')
-                .margin({ left: 16, right: 16, top: 12, bottom: 14 })
-                .fontSize(15)
-                .fontColor(Color.White)
-                .backgroundColor(this.buttonColor())
-                .enabled(!this.busy)
-                .onClick(() => this.migrateData())
-            }
           }
           .width('calc(100% - 24vp)')
           .margin({ left: 12, right: 12 })
@@ -371,13 +352,63 @@ struct BackupOptionsPage {
     try {
       const cloudPath = await HuaweiCloudService.backupToCloud(getContext(this) as common.UIAbilityContext, this.backupPasswordDraft.trim(),
         (message: string, percent: number) => {
-          this.busyText = '备份';
+          this.busyText = message.length > 0 ? message : '备份';
           this.busy = true;
         });
       promptAction.showToast({ message: `备份成功：${cloudPath}` });
       this.refreshBackups();
     } catch (e) {
       promptAction.showToast({ message: (e as Error).message || '备份失败' });
+    } finally {
+      this.busy = false;
+      this.busyText = '';
+    }
+  }
+
+  /** 从云端恢复：与「备份到华为云端」对称的主入口。列出云端备份并恢复最新一份（更精细的按条恢复见备份列表行内「恢复」按钮）。 */
+  async startRestore(): Promise<void> {
+    // 备份列表未加载时先刷新
+    if (!this.backupsLoaded && !this.busy) {
+      this.backupsLoaded = false;
+      try {
+        this.backups = await HuaweiCloudService.listBackups();
+        this.backupsLoaded = true;
+      } catch (e) {
+        this.backupsLoaded = true;
+        promptAction.showToast({ message: '读取云端备份失败，请稍后重试' });
+        return;
+      }
+    }
+    if (this.backups.length === 0) {
+      promptAction.showToast({ message: '云端还没有备份，无法恢复' });
+      return;
+    }
+    // 列表按修改时间倒序，最新一份排最前
+    const target = this.backups[0];
+    // 恢复会覆盖本地数据，先确认
+    try {
+      const confirm = await promptAction.showDialog({
+        title: '从云端恢复',
+        message: `将使用最新备份 ${target.name} 恢复书架、书源、进度、设置等数据，当前本地数据会被覆盖。是否继续？`,
+        buttons: [
+          { text: '取消', color: this.subTextColor() },
+          { text: '恢复', color: this.dangerColor() }
+        ]
+      });
+      if (confirm.index !== 1) {
+        return;
+      }
+    } catch (e) {
+      return;
+    }
+    this.busy = true;
+    this.busyText = '恢复';
+    try {
+      const result = await HuaweiCloudService.restoreFromCloud(getContext(this) as common.UIAbilityContext, target.cloudPath,
+        this.restorePasswordDraft.trim());
+      promptAction.showToast({ message: `恢复完成：${result.summary()}` });
+    } catch (e) {
+      promptAction.showToast({ message: (e as Error).message || '恢复失败' });
     } finally {
       this.busy = false;
       this.busyText = '';
@@ -440,42 +471,6 @@ struct BackupOptionsPage {
     } catch (e) {
       this.backupsLoaded = true;
       console.warn('[BackupOptions] list backups failed', JSON.stringify(e));
-    }
-  }
-
-  async migrateData(): Promise<void> {
-    this.busy = true;
-    this.busyText = '迁移';
-    try {
-      const ok = await AppDataPaths.manualMigrate(getContext(this) as common.UIAbilityContext);
-      if (ok) {
-        this.downloadMigrated = true;
-        this.downloadMigrateFailed = false;
-        this.contentRoot = AppDataPaths.contentRoot();
-        promptAction.showToast({ message: '数据已迁移到公共 Download 目录' });
-      } else {
-        this.downloadMigrateFailed = true;
-        const reason = AppStorage.get<string>(AppDataPaths.MIGRATE_FAILED_REASON_KEY);
-        if (reason && reason.length > 0) {
-          promptAction.showDialog({
-            title: '迁移失败',
-            message: reason,
-            buttons: [{ text: '知道了', color: this.accentColor() }]
-          });
-        } else {
-          promptAction.showToast({ message: '迁移失败，请检查存储权限后重试' });
-        }
-      }
-    } finally {
-      this.busy = false;
-      this.busyText = '';
-    }
-  }
-
-  async refreshMigrateStatus(): Promise<void> {
-    this.downloadMigrated = await AppDataPaths.wasMigrated(getContext(this) as common.UIAbilityContext);
-    if (this.downloadMigrated) {
-      this.contentRoot = AppDataPaths.contentRoot();
     }
   }
 
