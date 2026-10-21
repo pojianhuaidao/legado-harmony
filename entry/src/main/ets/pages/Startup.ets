@@ -109,7 +109,8 @@ struct StartupPage {
   }
 
   hasPendingBookSourceImport(): boolean {
-    return !!AppStorage.get<string>('pendingBookSourceImportUri');
+    return !!AppStorage.get<string>('pendingBookSourceImportUri') ||
+      !!AppStorage.get<string>('pendingBookSourceImportUrl');
   }
 
   hasPendingLocalBookImport(): boolean {

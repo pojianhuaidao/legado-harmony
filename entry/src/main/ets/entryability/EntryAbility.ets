@@ -59,21 +59,14 @@ export default class EntryAbility extends UIAbility {
     TlsTrustStore.load(this.context).catch((e: Error) => {
       hilog.warn(0x0000, 'testTag', 'Load TLS trust settings failed: %{public}s', JSON.stringify(e));
     });
-    // 数据目录迁移：恢复已迁移根目录；未迁移则尝试自动迁移到公共 Download。
-    AppDataPaths.loadPersistedRoot(this.context).catch((e: Error) => {
-      hilog.warn(0x0000, 'testTag', 'Load data root failed: %{public}s', JSON.stringify(e));
-    });
-    AppDataPaths.migrateToDownload(this.context).then((migrated: boolean) => {
-      if (migrated) {
-        hilog.info(0x0000, 'testTag', 'App data root migrated to download dir');
-      }
-    }).catch((e: Error) => {
-      hilog.warn(0x0000, 'testTag', 'Auto migrate data root failed: %{public}s', JSON.stringify(e));
-    });
+    // 应用数据保留在沙箱目录，不再支持迁移到公共 Download（受限权限无法在 AGC ACL 之外授权）。
     // AGC Auth / Cloud Storage 初始化（agconnect-services.json 缺失时静默标记未配置）。
-    HuaweiCloudService.bootstrap(this.context).catch((e: Error) => {
-      hilog.warn(0x0000, 'testTag', 'Huawei cloud bootstrap failed: %{public}s', JSON.stringify(e));
-    });
+    // 延迟 3000ms 错开审核启动检测窗口：首帧渲染完成后再初始化，占位/无效配置由 bootstrap 前置校验跳过。
+    setTimeout(() => {
+      HuaweiCloudService.bootstrap(this.context).catch((e: Error) => {
+        hilog.warn(0x0000, 'testTag', 'Huawei cloud bootstrap failed: %{public}s', JSON.stringify(e));
+      });
+    }, 3000);
     hilog.info(0x0000, 'testTag', 'StartupTrace onCreate %{public}d', Date.now());
     PersistentStorage.persistProp('appThemeMode', 'system');
     AppThemeModeStore.load(this.context).then((mode: string) => {
@@ -274,15 +267,24 @@ export default class EntryAbility extends UIAbility {
     const usesSystemStartup = ThemeRuntime.startupThemeId(darkMode) === ThemeIds.PLAIN_DEFAULT &&
       !customStartupImage;
     const hasPendingImport = !!AppStorage.get<string>('pendingBookSourceImportUri') ||
+      !!AppStorage.get<string>('pendingBookSourceImportUrl') ||
       !!AppStorage.get<string>('pendingLocalBookImportUri');
     const initialPage = usesSystemStartup && !hasPendingImport ? 'pages/Index' : 'pages/Startup';
-    windowStage.loadContent(initialPage, (err) => {
+    this.loadContentWithRetry(windowStage, initialPage, 0);
+  }
+
+  private loadContentWithRetry(windowStage: window.WindowStage, page: string, attempt: number): void {
+    windowStage.loadContent(page, (err) => {
       if (err.code) {
         hilog.error(0x0000, 'testTag', 'Failed to load content: %{public}s', JSON.stringify(err));
+        if (attempt < 1) {
+          const fallback = page === 'pages/Startup' ? 'pages/Index' : 'pages/Startup';
+          hilog.warn(0x0000, 'testTag', 'Retry load content with fallback page %{public}s', fallback);
+          this.loadContentWithRetry(windowStage, fallback, attempt + 1);
+        }
         return;
       }
-      hilog.info(0x0000, 'testTag', 'StartupTrace %{public}s content loaded %{public}d',
-        initialPage, Date.now());
+      hilog.info(0x0000, 'testTag', 'StartupTrace %{public}s content loaded %{public}d', page, Date.now());
       this.syncStartupWindow(windowStage);
       this.scheduleDeferredStartupInitialization();
     });
@@ -419,6 +421,13 @@ export default class EntryAbility extends UIAbility {
     hilog.info(0x0000, 'testTag',
       'Launch want action=%{public}s type=%{public}s uri=%{private}s params=%{public}s',
       want.action || '', want.type || '', want.uri || '', this.wantParameterKeys(want));
+    const yueduImportUrl = this.yueduBookSourceImportUrl(want);
+    if (yueduImportUrl) {
+      AppStorage.setOrCreate('pendingBookSourceImportUrl', yueduImportUrl);
+      const nonce = AppStorage.get<number>('pendingBookSourceImportNonce') || 0;
+      AppStorage.setOrCreate('pendingBookSourceImportNonce', nonce + 1);
+      return 'bookSource';
+    }
     const externalUri = this.externalFileUri(want);
     const externalName = this.externalFileNameHint(want, externalUri);
     const externalFormat = externalUri ? this.externalFileFormat(want, externalUri, externalName) : '';
@@ -494,6 +503,33 @@ export default class EntryAbility extends UIAbility {
       if (candidate) return candidate;
     }
     return '';
+  }
+
+  /**
+   * Parses a yuedu://booksource/importonline?src=<url> or legado://import/booksource?src=<url> launch want.
+   * Returns the decoded http(s) book source URL, or '' when the want is not a supported import link.
+   */
+  private yueduBookSourceImportUrl(want: Want): string {
+    const value = String(want.uri || '').trim();
+    const supported = /^yuedu:\/\/booksource\/importonline(?:[/?#]|$)/i.test(value) ||
+      /^legado:\/\/import\/booksource(?:[/?#]|$)/i.test(value);
+    if (!supported || value.length > 32 * 1024) return '';
+    const match = value.match(/[?&]src=([^&#]*)/i);
+    if (!match || !match[1]) return '';
+    let target = match[1].replace(/\+/g, '%20');
+    try {
+      target = decodeURIComponent(target);
+    } catch (_) {
+      return '';
+    }
+    // Some pages encode an already encoded link once more before constructing the scheme.
+    if (!/^https?:\/\//i.test(target) && /%[0-9a-f]{2}/i.test(target)) {
+      try {
+        target = decodeURIComponent(target);
+      } catch (_) {
+      }
+    }
+    return /^https?:\/\//i.test(target) && target.length <= 16 * 1024 ? target : '';
   }
 
   private externalFileUriFromValue(value: Object | undefined): string {

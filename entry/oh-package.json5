@@ -10,6 +10,9 @@
   "dependencies": {
     "@devzeng/quickjs": "file:../quickjs",
     "@hw-agconnect/auth": "^1.0.5",
-    "@hw-agconnect/hmcore": "^1.0.1"
-  }
+    "@hw-agconnect/hmcore": "^1.0.1",
+    "@ohos/zxing": "^2.1.2"
+  },
+  "devDependencies": {},
+  "dynamicDependencies": {}
 }

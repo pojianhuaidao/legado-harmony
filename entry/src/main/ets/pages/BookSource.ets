@@ -46,6 +46,20 @@ import {
   ExploreReadingValidationResult,
   ExploreReadingValidator
 } from '../core/book/ExploreReadingValidator';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { scanBarcode, scanCore } from '@kit.ScanKit';
+import { image } from '@kit.ImageKit';
+import {
+  MultiFormatWriter,
+  BarcodeFormat,
+  BitMatrix,
+  MultiFormatReader,
+  RGBLuminanceSource,
+  BinaryBitmap,
+  HybridBinarizer,
+  DecodeHintType,
+  EncodeHintType
+} from '@ohos/zxing';
 
 const BOOK_SOURCE_IMPORT_FILE_LIMIT_BYTES = 25 * 1024 * 1024;
 const BOOK_SOURCE_IMPORT_TIMEOUT_MS = 20000;
@@ -158,6 +172,11 @@ struct BookSourcePage {
   @State groupActionSourceUrl: string = '';
   @State draggingSourceUrl: string = '';
   @State importUrl: string = '';
+  @State showQrImportDialog: boolean = false;
+  @State qrTabIndex: number = 0;
+  @State qrEncodeText: string = '';
+  @State qrPixelMap: image.PixelMap | null = null;
+  @State qrImportBusy: boolean = false;
   @State isImporting: boolean = false;
   @State isBatchOperating: boolean = false;
   @State batchOperationText: string = '正在操作书源...';
@@ -828,6 +847,130 @@ struct BookSourcePage {
         })
       }
 
+      if (this.showQrImportDialog) {
+        Column() {
+          Column() {
+            Text('二维码导入')
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.primaryTextColor())
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .margin({ bottom: 16 })
+
+            Row() {
+              Button(this.qrTabIndex === 0 ? '生成二维码' : '生成二维码')
+                .layoutWeight(1)
+                .height(40)
+                .backgroundColor(this.qrTabIndex === 0 ? this.buttonColor() : this.inputColor())
+                .fontColor(this.qrTabIndex === 0 ? '#FFFFFF' : this.primaryTextColor())
+                .onClick(() => {
+                  this.qrTabIndex = 0;
+                  this.qrPixelMap = null;
+                })
+              Button(this.qrTabIndex === 1 ? '扫码/识别导入' : '扫码/识别导入')
+                .layoutWeight(1)
+                .height(40)
+                .margin({ left: 12 })
+                .backgroundColor(this.qrTabIndex === 1 ? this.buttonColor() : this.inputColor())
+                .fontColor(this.qrTabIndex === 1 ? '#FFFFFF' : this.primaryTextColor())
+                .onClick(() => {
+                  this.qrTabIndex = 1;
+                })
+            }
+            .width('100%')
+            .margin({ bottom: 16 })
+
+            if (this.qrTabIndex === 0) {
+              TextArea({
+                placeholder: '粘贴书源JSON文本或书源URL，生成二维码',
+                text: this.qrEncodeText
+              })
+                .width('100%')
+                .height(96)
+                .borderRadius(8)
+                .backgroundColor(this.inputColor())
+                .fontColor(this.primaryTextColor())
+                .placeholderColor(this.placeholderTextColor())
+                .padding(12)
+                .margin({ bottom: 12 })
+                .onChange((value: string) => {
+                  this.qrEncodeText = value;
+                })
+
+              Button(this.qrImportBusy ? '生成中...' : '生成二维码')
+                .width('100%')
+                .height(44)
+                .backgroundColor(this.buttonColor())
+                .fontColor('#FFFFFF')
+                .enabled(!this.qrImportBusy)
+                .onClick(() => {
+                  this.generateQrCode();
+                })
+
+              if (this.qrPixelMap) {
+                Column() {
+                  Image(this.qrPixelMap)
+                    .width(232)
+                    .height(232)
+                    .objectFit(ImageFit.Contain)
+                  Text('其他设备扫码可导入此书源')
+                    .fontSize(13)
+                    .fontColor(this.secondaryTextColor())
+                    .margin({ top: 10 })
+                }
+                .width('100%')
+                .alignItems(HorizontalAlign.Center)
+                .margin({ top: 16 })
+              }
+            } else {
+              Column() {
+                Button(this.qrImportBusy ? '处理中...' : '扫码导入')
+                  .width('100%')
+                  .height(46)
+                  .backgroundColor(this.buttonColor())
+                  .fontColor('#FFFFFF')
+                  .enabled(!this.qrImportBusy)
+                  .onClick(() => {
+                    this.startQrScan();
+                  })
+                Button(this.qrImportBusy ? '处理中...' : '从图片识别')
+                  .width('100%')
+                  .height(46)
+                  .margin({ top: 12 })
+                  .backgroundColor(this.inputColor())
+                  .fontColor(this.primaryTextColor())
+                  .enabled(!this.qrImportBusy)
+                  .onClick(() => {
+                    this.pickQrImage();
+                  })
+                Text('扫码导入需相机；从图片识别可从相册选取二维码图片')
+                  .fontSize(12)
+                  .fontColor(this.placeholderTextColor())
+                  .width('100%')
+                  .textAlign(TextAlign.Center)
+                  .margin({ top: 10 })
+              }
+              .width('100%')
+            }
+          }
+          .width('90%')
+          .padding(24)
+          .backgroundColor(ThemeRuntime.dropdownPanelColor(this.appDarkMode, '', 'overlay'))
+          .borderRadius(ThemeRuntime.glassCornerRadius(16, 'overlay'))
+          .backdropBlur(ThemeRuntime.glassBlur('overlay', 28))
+          .border({ width: ThemeRuntime.glassBorderWidth('overlay'), color: ThemeRuntime.glassBorderColor(this.appDarkMode, 'overlay') })
+          .shadow({ radius: ThemeRuntime.glassShadowRadius('overlay'), color: ThemeRuntime.glassShadowColor(this.appDarkMode, 'overlay'), offsetX: ThemeRuntime.glassShadowOffsetX('overlay'), offsetY: ThemeRuntime.glassShadowOffsetY('overlay') })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#80000000')
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          this.closeQrImportDialog();
+        })
+      }
+
       if (this.showImportSourceSelectionDialog) {
         this.importSourceSelectionDialog()
       }
@@ -1451,6 +1594,10 @@ struct BookSourcePage {
         this.popupActionItem($r('sys.symbol.arrow_right_up_and_square'), '从 URL 导入', this.primaryTextColor(), () => {
           this.showAddDialog = false;
           this.showImportUrlDialog = true;
+        })
+        this.popupActionItem($r('sys.symbol.qrcode'), '二维码导入', this.primaryTextColor(), () => {
+          this.showAddDialog = false;
+          this.openQrImportDialog();
         })
         this.popupActionItem($r('sys.symbol.download'), '从文件导入', this.primaryTextColor(), () => {
           this.showAddDialog = false;
@@ -6676,6 +6823,175 @@ struct BookSourcePage {
     } finally {
       this.isImporting = false;
     }
+  }
+
+  openQrImportDialog(): void {
+    this.showQrImportDialog = true;
+    this.qrTabIndex = 0;
+    this.qrEncodeText = '';
+    this.qrPixelMap = null;
+    this.qrImportBusy = false;
+  }
+
+  closeQrImportDialog(): void {
+    this.showQrImportDialog = false;
+    this.qrPixelMap = null;
+  }
+
+  async generateQrCode(): Promise<void> {
+    const text = this.qrEncodeText.trim();
+    if (!text) {
+      promptAction.showToast({ message: '请输入书源JSON或URL' });
+      return;
+    }
+    if (text.length > 8 * 1024) {
+      promptAction.showToast({ message: '内容过长，请改用URL导入' });
+      return;
+    }
+    try {
+      this.qrImportBusy = true;
+      const hints = new Map<EncodeHintType, Object>();
+      hints.set(EncodeHintType.MARGIN, 1);
+      hints.set(EncodeHintType.ERROR_CORRECTION, 'M');
+      const writer = new MultiFormatWriter();
+      const size = 480;
+      const matrix: BitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size, hints);
+      const width = matrix.getWidth();
+      const height = matrix.getHeight();
+      const buffer = new ArrayBuffer(width * height * 4);
+      const pixels = new Uint8Array(buffer);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const dark = matrix.get(x, y);
+          const offset = (y * width + x) * 4;
+          if (dark) {
+            pixels[offset] = 0;
+            pixels[offset + 1] = 0;
+            pixels[offset + 2] = 0;
+          } else {
+            pixels[offset] = 255;
+            pixels[offset + 1] = 255;
+            pixels[offset + 2] = 255;
+          }
+          pixels[offset + 3] = 255;
+        }
+      }
+      const options: image.InitializationOptions = {
+        size: { width: width, height: height },
+        pixelFormat: image.PixelMapFormat.RGBA_8888
+      };
+      this.qrPixelMap = await image.createPixelMap(buffer, options);
+      promptAction.showToast({ message: '二维码已生成' });
+    } catch (e) {
+      console.error('生成二维码失败:', e);
+      promptAction.showToast({ message: `生成失败: ${this.importErrorMessage(e as Object)}` });
+    } finally {
+      this.qrImportBusy = false;
+    }
+  }
+
+  startQrScan(): void {
+    if (this.qrImportBusy) return;
+    this.qrImportBusy = true;
+    try {
+      scanBarcode.startScanForResult(getContext(this), {
+        scanTypes: [scanCore.ScanType.QR_CODE],
+        enableAlbum: true
+      }, (err: BusinessError, data: scanBarcode.ScanResult) => {
+        this.qrImportBusy = false;
+        if (err || !data) {
+          return;
+        }
+        const text = (data.originalValue || '').trim();
+        if (!text) {
+          promptAction.showToast({ message: '未识别到内容' });
+          return;
+        }
+        this.importByQrText(text).catch((e: Object) => {
+          promptAction.showToast({ message: `导入失败: ${this.importErrorMessage(e)}` });
+        });
+      });
+    } catch (e) {
+      this.qrImportBusy = false;
+      promptAction.showToast({ message: `扫码不可用: ${this.importErrorMessage(e as Object)}` });
+    }
+  }
+
+  async pickQrImage(): Promise<void> {
+    if (this.qrImportBusy) return;
+    try {
+      const options = new picker.PhotoViewPicker();
+      const result = await options.select({
+        MIMEType: picker.PhotoViewMIMETypes.IMAGE_TYPE,
+        maxSelectNumber: 1
+      });
+      if (!result.photoUris || result.photoUris.length === 0) return;
+      this.qrImportBusy = true;
+      const uri = result.photoUris[0];
+      const text = await this.decodeQrFromImage(uri);
+      this.qrImportBusy = false;
+      if (!text.trim()) {
+        promptAction.showToast({ message: '未识别到二维码' });
+        return;
+      }
+      await this.importByQrText(text);
+    } catch (e) {
+      this.qrImportBusy = false;
+      console.error('从图片识别二维码失败:', e);
+      promptAction.showToast({ message: `识别失败: ${this.importErrorMessage(e as Object)}` });
+    }
+  }
+
+  async decodeQrFromImage(uri: string): Promise<string> {
+    const source = image.createImageSource(uri);
+    const pixelMap = await source.createPixelMap();
+    try {
+      const info: image.ImageInfo = await pixelMap.getImageInfo();
+      const width = info.size.width;
+      const height = info.size.height;
+      if (width <= 0 || height <= 0) throw new Error('图片尺寸无效');
+      const buffer = new ArrayBuffer(pixelMap.getPixelBytesNumber());
+      await pixelMap.readPixelsToBuffer(buffer);
+      const rgba = new Uint8ClampedArray(buffer);
+      const luminances = new Uint8ClampedArray(width * height);
+      for (let i = 0; i < width * height; i++) {
+        const r = rgba[i * 4];
+        const g = rgba[i * 4 + 1];
+        const b = rgba[i * 4 + 2];
+        luminances[i] = Math.floor((r * 299 + g * 587 + b * 114) / 1000);
+      }
+      const luminanceSource = new RGBLuminanceSource(luminances, width, height);
+      const bitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource));
+      const hints = new Map<DecodeHintType, Object>();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
+      const reader = new MultiFormatReader();
+      reader.setHints(hints);
+      const result = reader.decode(bitmap);
+      if (!result) throw new Error('未识别到二维码');
+      return result.getText();
+    } finally {
+      pixelMap.release();
+      source.release();
+    }
+  }
+
+  async importByQrText(text: string): Promise<void> {
+    const value = text.trim();
+    if (!value) {
+      promptAction.showToast({ message: '书源内容为空' });
+      return;
+    }
+    let content = value;
+    if (/^https?:\/\//i.test(value)) {
+      content = await this.fetchImportUrlBody(value);
+    }
+    if (!content.trim()) {
+      promptAction.showToast({ message: '书源内容为空' });
+      return;
+    }
+    await this.importSourcesFromJson(content);
+    this.showQrImportDialog = false;
+    this.qrPixelMap = null;
   }
 
   async fetchImportUrlBody(url: string): Promise<string> {

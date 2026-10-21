@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "putTheQRCodeToScan",
+      "value": "将二维码放入框中,即可扫描"
+    },
+    {
+      "name": "scanCodeNotRecognized",
+      "value": "未识别到二维码"
+    }
+  ]
+}

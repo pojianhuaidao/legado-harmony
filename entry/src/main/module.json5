@@ -15,7 +15,7 @@
     "metadata": [
       {
         "name": "client_id",
-        "value": "6917618565826924962"
+        "value": "6917619029443608252"
       },
       {
         "name": "ohos.arkui.UIMaterial.state",
@@ -31,17 +31,7 @@
       },
       {
         "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
-      },
-      {
-        "name": "ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY",
-        "reason": "$string:download_dir_permission_reason",
-        "usedScene": {
-          "abilities": [
-            "EntryAbility"
-          ],
-          "when": "inuse"
-        }
-      },
+      }
     ],
     "abilities": [
       {
@@ -118,6 +108,25 @@
                 "scheme": "file",
                 "type": "application/x-epub+zip",
                 "linkFeature": "FileOpen"
+              }
+            ]
+          },
+          {
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "yuedu",
+                "host": "booksource",
+                "path": "/importonline",
+                "linkFeature": "BookSourceImport"
+              },
+              {
+                "scheme": "yuedu"
+              },
+              {
+                "scheme": "legado"
               }
             ]
           }
