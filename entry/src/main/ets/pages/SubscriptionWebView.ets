@@ -192,6 +192,7 @@ struct SubscriptionWebViewPage {
   private pendingMainFrameError: string = '';
   private lastErrorNotifiedUrl: string = '';
   private controller: webview.WebviewController = new webview.WebviewController();
+  private cssRetryTimers: number[] = [];
 
   webMenuDialog: CustomDialogController | null = new CustomDialogController({
     builder: WebMenuDialog({
@@ -254,6 +255,10 @@ struct SubscriptionWebViewPage {
     });
   }
 
+  aboutToDisappear(): void {
+    this.clearCssRetryTimers();
+  }
+
   onPageShow(): void {
     syncSystemBars(getContext(this), this.appDarkMode);
   }
@@ -304,6 +309,74 @@ struct SubscriptionWebViewPage {
     }).catch(() => {
       promptAction.showToast({ message: '打开系统浏览器失败' });
     });
+  }
+
+  /**
+   * 拦截自定义 scheme 导航（yuedu:// / legado://）。
+   * 书源站「3.x一键导入」按钮 href 形如
+   * yuedu://booksource/importonline?src=<json地址>，ArkWeb 默认只在页面内导航并报
+   * ERR_UNKNOWN_URL_SCHEME(-302)，必须由应用接管：解析 src 后写入待导入状态并跳转书源管理页，
+   * 由 BookSource.handlePendingBookSourceImport 拉取 JSON 并入库；非导入类链接交回系统分发。
+   */
+  interceptCustomScheme(event?: OnLoadInterceptEvent): boolean {
+    let raw = '';
+    try {
+      raw = event && event.data ? event.data.getRequestUrl() : '';
+    } catch (_) {
+      return false;
+    }
+    const link = String(raw || '').trim();
+    if (!/^(yuedu|legado):\/\//i.test(link)) {
+      return false;
+    }
+    const importSrc = this.parseBookSourceImportSrc(link);
+    if (importSrc.length > 0) {
+      AppStorage.setOrCreate('pendingBookSourceImportUrl', importSrc);
+      const nonce = AppStorage.get<number>('pendingBookSourceImportNonce') || 0;
+      AppStorage.setOrCreate('pendingBookSourceImportNonce', nonce + 1);
+      router.pushUrl({ url: 'pages/BookSource' }).catch(() => {
+        promptAction.showToast({ message: '书源管理页打开失败' });
+      });
+      return true;
+    }
+    this.dispatchCustomScheme(link);
+    return true;
+  }
+
+  private dispatchCustomScheme(link: string): void {
+    const ctx = getContext(this) as common.UIAbilityContext;
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      uri: link
+    };
+    ctx.startAbility(want).catch(() => {
+      promptAction.showToast({ message: '暂不支持该链接类型' });
+    });
+  }
+
+  private parseBookSourceImportSrc(link: string): string {
+    const supported = /^yuedu:\/\/booksource\/importonline(?:[/?#]|$)/i.test(link) ||
+      /^legado:\/\/import\/booksource(?:[/?#]|$)/i.test(link);
+    if (!supported || link.length > 32 * 1024) {
+      return '';
+    }
+    const match = link.match(/[?&]src=([^&#]*)/i);
+    if (!match || !match[1]) {
+      return '';
+    }
+    let target = match[1].replace(/\+/g, '%20');
+    try {
+      target = decodeURIComponent(target);
+    } catch (_) {
+      return '';
+    }
+    if (!/^https?:\/\//i.test(target) && /%[0-9a-f]{2}/i.test(target)) {
+      try {
+        target = decodeURIComponent(target);
+      } catch (_) {
+      }
+    }
+    return /^https?:\/\//i.test(target) && target.length <= 16 * 1024 ? target : '';
   }
 
   refreshCollectedState(): void {
@@ -408,6 +481,11 @@ struct SubscriptionWebViewPage {
     });
   }
 
+  /**
+   * 注入 CSS 隐藏脚本（P0-2：静态兜底 + 动态规则合并，MutationObserver 持续清理，定时重注入）。
+   * 脚本内部自带 MutationObserver：新增节点含广告特征即移除；每次注入前先断开旧观察器避免泄漏。
+   * 延迟弹窗常在页面加载后数秒出现，2s / 5s / 10s 各重注入一次兜底。
+   */
   injectCssHideScript(url: string): void {
     if (!this.adBlockEnabled) {
       return;
@@ -416,11 +494,30 @@ struct SubscriptionWebViewPage {
     if (script.length === 0) {
       return;
     }
+    this.clearCssRetryTimers();
+    this.runCssInjection(script);
+    const delays: number[] = [2000, 5000, 10000];
+    for (let i = 0; i < delays.length; i++) {
+      const timer = setTimeout(() => {
+        this.runCssInjection(script);
+      }, delays[i]);
+      this.cssRetryTimers.push(timer);
+    }
+  }
+
+  private runCssInjection(script: string): void {
     try {
       this.controller.runJavaScript(script).catch((error: Object): void => {
       });
     } catch (e) {
     }
+  }
+
+  private clearCssRetryTimers(): void {
+    for (let i = 0; i < this.cssRetryTimers.length; i++) {
+      clearTimeout(this.cssRetryTimers[i]);
+    }
+    this.cssRetryTimers = [];
   }
 
   pageColor(): string {
@@ -530,6 +627,12 @@ struct SubscriptionWebViewPage {
         .onlineImageAccess(true)
         .imageAccess(true)
         .mixedMode(MixedMode.All)
+        .onLoadIntercept((event?: OnLoadInterceptEvent): boolean => {
+          // ArkWeb 不会把自定义 scheme 转交系统：页面内导航 yuedu:// 只会抛
+          // ERR_UNKNOWN_URL_SCHEME(-302)，书源站「3.x一键导入」点了就像没反应。
+          // 这里显式接管，改为走应用内的书源导入链路。
+          return this.interceptCustomScheme(event);
+        })
         .onPageBegin((event?: OnPageBeginEvent) => {
           if (event && event.url) {
             this.currentUrl = event.url;
@@ -537,6 +640,8 @@ struct SubscriptionWebViewPage {
           this.mainFrameLoaded = false;
           this.pendingMainFrameError = '';
           this.lastErrorNotifiedUrl = '';
+          // 页面切换：清理上一页遗留的 CSS 定时重注入，避免向新页面注入错脚本
+          this.clearCssRetryTimers();
           this.applyUserAgent();
         })
         .onPageEnd((event?: OnPageEndEvent) => {
@@ -556,14 +661,15 @@ struct SubscriptionWebViewPage {
           }
         })
         .onInterceptRequest((event?: OnInterceptRequestEvent): WebResourceResponse | null => {
-          // 去广告开关开启时，拦截命中黑名单的广告请求（主框架请求放行，避免误伤整页）
+          // 去广告开关开启时，拦截命中黑名单的广告请求（P2-1：主框架导航也执行判定，
+          // 命中广告特征时用空白页拦截；子资源命中直接返回空响应）
           if (this.adBlockEnabled && event && event.request) {
             const requestUrl = event.request.getRequestUrl();
-            if (requestUrl && !event.request.isMainFrame() && AdBlocker.shouldBlockRequest(requestUrl)) {
+            if (requestUrl && AdBlocker.shouldBlockRequest(requestUrl)) {
               const blocked = new WebResourceResponse();
               blocked.setResponseMimeType('text/html');
               blocked.setResponseEncoding('UTF-8');
-              blocked.setResponseData('');
+              blocked.setResponseData(event.request.isMainFrame() ? '<html><body></body></html>' : '');
               return blocked;
             }
           }
@@ -576,6 +682,41 @@ struct SubscriptionWebViewPage {
             return true;
           }
           return false;
+        })
+        .onConfirm((event?: OnConfirmEvent): boolean => {
+          // 与 onAlert 同一套 shouldBlockAlert 判定，命中广告话术的确认框直接取消
+          if (this.adBlockEnabled && event && AdBlocker.shouldBlockAlert(event.url, event.message)) {
+            if (event.result) {
+              event.result.handleCancel();
+            }
+            return true;
+          }
+          return false;
+        })
+        .onPrompt((event?: OnPromptEvent): boolean => {
+          // 与 onAlert 同一套 shouldBlockAlert 判定，命中广告话术的输入弹窗直接取消
+          if (this.adBlockEnabled && event && AdBlocker.shouldBlockAlert(event.url, event.message)) {
+            if (event.result) {
+              event.result.handleCancel();
+            }
+            return true;
+          }
+          return false;
+        })
+        .onWindowNew((event?: OnWindowNewEvent): void => {
+          // P1-3：新窗口目标 URL 命中黑名单 / 路径关键词时拒绝创建。
+          // 命中时不调用 handler.setWebController，ArkWeb 将取消该新窗口；
+          // 未命中则把新窗口绑定到当前 Web 实例（当前页打开）。
+          if (event) {
+            const target = event.targetUrl;
+            if (this.adBlockEnabled && target && AdBlocker.shouldBlockRequest(target)) {
+              return;
+            }
+            try {
+              event.handler.setWebController(this.controller);
+            } catch (e) {
+            }
+          }
         })
         .onErrorReceive((event?: OnErrorReceiveEvent) => {
           const code = event ? event.error.getErrorCode() : -1;
